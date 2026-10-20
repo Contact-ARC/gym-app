@@ -1,72 +1,82 @@
 <template>
-  <div class="page" v-if="session">
-    <div class="text-center py-4">
-      <v-icon size="56" color="primary">mdi-trophy-outline</v-icon>
-      <div class="page-title mt-2">Workout done</div>
-      <div class="text-body-2 muted">{{ session.dayName }} · {{ fmtDate(session.startedAt) }}</div>
+  <div class="page no-nav" v-if="session" :style="plateStyle(session.dayIndex ?? -1)">
+    <div class="topbar">
+      <button class="icon-btn" aria-label="Close" @click="router.replace('/')"><Icon name="close" /></button>
     </div>
 
-    <div class="d-flex ga-2 mb-4">
-      <v-card variant="tonal" class="flex-1 pa-3 text-center">
-        <div class="text-caption muted">Time</div>
-        <div class="text-h6 tabular">{{ sum.minutes ?? '—' }} min</div>
-      </v-card>
-      <v-card variant="tonal" class="flex-1 pa-3 text-center">
-        <div class="text-caption muted">Sets</div>
-        <div class="text-h6 tabular">{{ sum.sets }}</div>
-      </v-card>
-      <v-card variant="tonal" class="flex-1 pa-3 text-center">
-        <div class="text-caption muted">Volume</div>
-        <div class="text-h6 tabular">{{ fmtNum(sum.volume, 0) }}<span class="text-caption"> {{ sum.unit }}</span></div>
-      </v-card>
+    <div class="done-head">
+      <PlateBadge :index="session.dayIndex ?? -1" :label="session.dayId === 'free' ? '+' : session.dayId" size="lg" />
+      <h1 class="t-title">{{ justFinished ? 'Workout done' : dayTitle(session.dayName, session.dayId) }}</h1>
+      <p class="t-small t-muted">{{ justFinished ? dayTitle(session.dayName, session.dayId) + ', ' : '' }}{{ fmtDate(session.startedAt) }}</p>
     </div>
 
-    <template v-if="sum.prs.length">
-      <div class="section-label">Personal records 🎉</div>
-      <v-card v-for="g in prGroups" :key="g.id" variant="tonal" color="success" class="mb-2">
-        <v-card-text class="py-2">
-          <div class="font-weight-bold">{{ name(g.id) }}</div>
-          <div v-for="p in g.prs" :key="p.type" class="text-body-2 tabular">
-            {{ p.type === 'e1rm' ? 'Est. 1RM' : 'Heaviest' }}: {{ fmtLoad(p.value, unitOf(g.id)) }}
-            <span class="muted">(was {{ fmtLoad(p.prev, unitOf(g.id)) }})</span>
+    <div class="stats">
+      <div class="stat"><div class="t-num v">{{ sum.minutes ?? '–' }}</div><div class="t-tiny t-muted">minutes</div></div>
+      <div class="stat"><div class="t-num v">{{ sum.sets }}</div><div class="t-tiny t-muted">sets</div></div>
+      <div class="stat"><div class="t-num v">{{ fmtNum(sum.volume, 0) }}</div><div class="t-tiny t-muted">{{ sum.unit }} lifted</div></div>
+    </div>
+
+    <section v-if="prGroups.length">
+      <h2 class="section-h">New personal records</h2>
+      <div class="group">
+        <div v-for="g in prGroups" :key="g.id" class="group-row pr">
+          <span class="pr-icon"><Icon name="trophy" :size="20" /></span>
+          <div class="grow">
+            <div class="t-h3">{{ name(g.id) }}</div>
+            <div v-for="p in g.prs" :key="p.type" class="t-small t-num">
+              {{ p.type === 'e1rm' ? 'Estimated max' : 'Heaviest set' }} {{ fmtLoad(p.value, unitOf(g.id)) }}
+              <span class="t-muted">, was {{ fmtLoad(p.prev, unitOf(g.id)) }}</span>
+            </div>
           </div>
-        </v-card-text>
-      </v-card>
-    </template>
+        </div>
+      </div>
+    </section>
 
-    <div class="section-label">What you did</div>
-    <div v-for="id in sum.exercises" :key="id" class="mb-2">
-      <div class="font-weight-bold text-body-2">{{ name(id) }}</div>
-      <div class="text-body-2 muted tabular">{{ setsFor(id) }}</div>
+    <section>
+      <h2 class="section-h">What you did</h2>
+      <div class="group">
+        <RouterLink v-for="id in sum.exercises" :key="id" :to="`/exercise/${id}`" class="group-row">
+          <div class="grow">
+            <div class="t-h3">{{ name(id) }}</div>
+            <div class="t-num sets-line">{{ setsFor(id) }}</div>
+          </div>
+        </RouterLink>
+      </div>
+      <p v-if="session.notes" class="card card-pad t-small notes"><Icon name="note" :size="18" />{{ session.notes }}</p>
+    </section>
+
+    <div class="row actions">
+      <button class="btn btn-lg btn-soft grow" @click="share"><Icon name="share" />Share</button>
+      <button class="btn btn-lg btn-primary grow" @click="router.replace('/')">Done</button>
     </div>
-    <div v-if="session.notes" class="text-body-2 mt-3"><v-icon size="16">mdi-note-text-outline</v-icon> {{ session.notes }}</div>
+    <button class="btn btn-ghost btn-block t-err del" @click="confirmDelete = true"><Icon name="trash" />Delete this workout</button>
 
-    <div class="d-flex ga-2 mt-6">
-      <v-btn variant="tonal" class="flex-1" prepend-icon="mdi-share-variant" @click="share">Share</v-btn>
-      <v-btn color="primary" variant="flat" class="flex-1" to="/">Done</v-btn>
-    </div>
-    <div v-if="shareMsg" class="text-caption text-center mt-2 muted">{{ shareMsg }}</div>
-    <v-btn variant="text" color="error" size="small" class="mt-6" @click="confirmDelete = true">Delete this session</v-btn>
-
-    <v-dialog v-model="confirmDelete" max-width="420">
-      <v-card title="Delete session?">
-        <v-card-text>This removes it from your history and charts.</v-card-text>
-        <v-card-actions>
-          <v-spacer /><v-btn @click="confirmDelete = false">Cancel</v-btn>
-          <v-btn color="error" variant="flat" @click="del">Delete</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <Sheet v-model="confirmDelete" title="Delete this workout?">
+      <p class="t-body">It will be removed from your history and charts. This can't be undone.</p>
+      <template #actions>
+        <button class="btn btn-soft btn-lg" @click="confirmDelete = false">Keep it</button>
+        <button class="btn btn-danger btn-lg" @click="del">Delete</button>
+      </template>
+    </Sheet>
   </div>
-  <div v-else class="page"><p>Session not found.</p><v-btn class="mt-3" to="/">Home</v-btn></div>
+
+  <div v-else class="page no-nav">
+    <p class="t-h2">This workout no longer exists</p>
+    <RouterLink to="/" class="btn btn-primary btn-lg btn-block" style="margin-top: 20px">Go home</RouterLink>
+  </div>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import Icon from '../ui/Icon.vue'
+import Sheet from '../ui/Sheet.vue'
+import PlateBadge from '../ui/PlateBadge.vue'
+import { plateStyle } from '../ui/plates.js'
+import { toast } from '../ui/toast.js'
 import { state, getSession, sessionSummary, exercisesById, deleteSession } from '../store.js'
 import { fmtLoad, unitFor } from '../lib/training.js'
-import { fmtDate, fmtNum } from '../lib/format.js'
+import { fmtDate, fmtNum, dayTitle } from '../lib/format.js'
 import { shareText } from '../lib/native.js'
 
 const route = useRoute()
@@ -74,35 +84,51 @@ const router = useRouter()
 const session = computed(() => getSession(route.params.id))
 const sum = computed(() => sessionSummary(session.value))
 const name = (id) => exercisesById.value[id]?.name || id
+const unitOf = (id) => unitFor(exercisesById.value[id], state.data.profile)
+const justFinished = computed(() => session.value?.finishedAt && Date.now() - new Date(session.value.finishedAt) < 30 * 60000)
+
 const prGroups = computed(() => {
   const m = new Map()
   for (const p of sum.value.prs) { if (!m.has(p.exerciseId)) m.set(p.exerciseId, []); m.get(p.exerciseId).push(p) }
   return [...m].map(([id, prs]) => ({ id, prs }))
 })
-const unitOf = (id) => unitFor(exercisesById.value[id], state.data.profile)
 
 function setsFor (id) {
   return session.value.sets.filter(s => s.exerciseId === id).map(s => {
-    if (s.seconds) return `${s.load ? fmtLoad(s.load, s.unit) + ' ' : ''}${s.seconds}s`
-    return `${s.load ? fmtLoad(s.load, s.unit) : 'BW'}×${s.reps}`
-  }).join(' · ')
+    if (s.seconds) return s.load ? `${fmtLoad(s.load, s.unit)} for ${s.seconds}s` : `${s.seconds}s`
+    return `${s.load ? fmtLoad(s.load, s.unit) : 'BW'} × ${s.reps}`
+  }).join(',  ')
 }
 
-const shareMsg = ref('')
 async function share () {
   const lines = [
-    `💪 ${session.value.dayName} — ${sum.value.minutes ?? '?'} min, ${sum.value.sets} sets, ${fmtNum(sum.value.volume, 0)} ${sum.value.unit} moved`
+    `${dayTitle(session.value.dayName, session.value.dayId)}: ${sum.value.minutes ?? '?'} min, ${sum.value.sets} sets, ${fmtNum(sum.value.volume, 0)} ${sum.value.unit} lifted`
   ]
-  for (const p of sum.value.prs) lines.push(`🏆 PR ${name(p.exerciseId)}: ${fmtLoad(p.value, unitOf(p.exerciseId))} ${p.type === 'e1rm' ? 'est. 1RM' : 'top set'}`)
-  for (const id of sum.value.exercises) lines.push(`• ${name(id)}: ${setsFor(id)}`)
+  for (const g of prGroups.value) lines.push(`🏆 ${name(g.id)}: new record ${fmtLoad(g.prs[0].value, unitOf(g.id))}`)
+  for (const id of sum.value.exercises) lines.push(`${name(id)}: ${setsFor(id)}`)
   const r = await shareText('Workout', lines.join('\n'))
-  shareMsg.value = r === 'copied' ? 'Copied to clipboard' : ''
+  if (r === 'copied') toast('Copied to clipboard')
 }
 
 const confirmDelete = ref(false)
-function del () { deleteSession(session.value.id); router.replace('/') }
+function del () {
+  deleteSession(session.value.id)
+  confirmDelete.value = false
+  router.replace('/')
+  toast('Workout deleted')
+}
 </script>
 
 <style scoped>
-.flex-1 { flex: 1 1 0; }
+.done-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; margin: 4px 0 22px; }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--card); border-radius: var(--r-card); }
+.stat { padding: 16px 8px; text-align: center; }
+.stat + .stat { border-left: 1px solid var(--line); }
+.v { font-size: 34px; font-weight: 700; line-height: 1.05; }
+.pr { align-items: flex-start; }
+.pr-icon { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--warn-soft); color: var(--warn); flex: 0 0 auto; }
+.sets-line { font-size: 18px; color: var(--ink-2); margin-top: 2px; }
+.notes { display: flex; gap: 8px; margin-top: 10px; }
+.actions { margin-top: 28px; gap: 10px; }
+.del { margin-top: 12px; }
 </style>

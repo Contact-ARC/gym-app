@@ -1,92 +1,146 @@
 <template>
   <div class="page">
-    <div class="page-title mb-2">Settings</div>
+    <h1 class="t-title head">Settings</h1>
 
-    <div class="section-label">You</div>
-    <v-text-field v-model="p.name" label="Name" class="mb-3" @blur="persist" />
-    <div class="d-flex ga-2 mb-3">
-      <v-select v-model="p.unit" :items="['kg', 'lb']" label="Units" @update:model-value="onUnit" />
-      <v-select v-model="p.theme" :items="themeItems" label="Theme" @update:model-value="persist" />
-    </div>
-
-    <div class="section-label">Smallest weight jumps</div>
-    <p class="text-caption muted mb-2">Used to round suggestions to weights you can actually load at your gym.</p>
-    <div class="d-flex ga-2 mb-2">
-      <v-text-field v-model.number="p.increments.upper" type="number" inputmode="decimal" :label="`Upper barbell (${p.unit})`" @blur="persist" />
-      <v-text-field v-model.number="p.increments.lower" type="number" inputmode="decimal" :label="`Lower barbell (${p.unit})`" @blur="persist" />
-    </div>
-    <div class="d-flex ga-2 mb-2">
-      <v-text-field v-model.number="p.increments.dumbbell" type="number" inputmode="decimal" :label="`Dumbbell (${p.unit})`" @blur="persist" />
-      <v-text-field v-model.number="p.increments.pin" type="number" inputmode="decimal" label="Machine pins" @blur="persist" />
-    </div>
-    <v-text-field v-model.number="p.bar" type="number" inputmode="decimal" :label="`Barbell weight (${p.unit})`" @blur="persist" />
-
-    <div class="section-label">Rest timer</div>
-    <v-switch v-model="s.restVibrate" label="Vibrate when rest is over" color="primary" hide-details density="compact" @update:model-value="persist" />
-    <v-switch v-model="s.restNotify" label="Notify when the app is in the background" color="primary" hide-details density="compact" @update:model-value="persist" />
-
-    <div class="section-label">Backup</div>
-    <p class="text-body-2 mb-2">
-      Your history lives only on this phone. Export a backup now and then — save it to Drive or send it to yourself.
-      <span class="muted d-block mt-1">Last backup: {{ state.data.lastBackupAt ? relativeDay(state.data.lastBackupAt) : 'never' }}</span>
-    </p>
-    <div class="d-flex ga-2">
-      <v-btn color="primary" variant="flat" class="flex-1" prepend-icon="mdi-export" :loading="exporting" @click="doExport">Export</v-btn>
-      <v-btn variant="tonal" class="flex-1" prepend-icon="mdi-import" @click="fileInput.click()">Import</v-btn>
-    </div>
-    <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFile" />
-    <div v-if="backupMsg" class="text-caption mt-2" :class="backupError ? 'text-error' : 'text-success'">{{ backupMsg }}</div>
-
-    <div class="section-label">Routine</div>
-    <div class="text-body-2">
-      <div>{{ routine ? `${routine.title || routine.month}` : 'No routine loaded' }}</div>
-      <div class="muted text-caption">
-        Updated {{ state.data.cache.fetchedAt ? relativeDay(state.data.cache.fetchedAt) : 'never' }}
-        <span v-if="state.routineStatus.error" class="text-error"> · {{ state.routineStatus.error }}</span>
+    <h2 class="section-h">You</h2>
+    <div class="group">
+      <div class="group-row">
+        <label class="grow" for="s-name">Name</label>
+        <input id="s-name" v-model="p.name" class="inline-input" type="text" placeholder="Add your name" autocomplete="given-name" @blur="persist">
+      </div>
+      <div class="group-row col">
+        <span>Units</span>
+        <Segmented v-model="p.unit" :options="[{ label: 'Kilograms', value: 'kg' }, { label: 'Pounds', value: 'lb' }]" label="Units" @update:model-value="onUnit" />
+      </div>
+      <div class="group-row col">
+        <span>Theme</span>
+        <Segmented v-model="p.theme" :options="themeItems" label="Theme" @update:model-value="persist" />
       </div>
     </div>
-    <v-btn variant="tonal" class="mt-2" prepend-icon="mdi-refresh" :loading="state.routineStatus.loading" @click="refreshRoutines">Check for new routine</v-btn>
 
-    <v-expansion-panels class="mt-3" variant="accordion">
-      <v-expansion-panel title="Advanced: routine source">
-        <v-expansion-panel-text>
-          <v-text-field v-model="urlDraft" label="Routines URL" placeholder="https://raw.githubusercontent.com/…/gym-routines/main/" />
-          <div class="d-flex ga-2 mt-2">
-            <v-btn variant="flat" color="primary" size="small" @click="saveUrl">Save & reload</v-btn>
-            <v-btn variant="text" size="small" @click="resetUrl">Use default</v-btn>
-          </div>
-          <div class="text-caption muted mt-2">Current: {{ routinesUrl }}</div>
-        </v-expansion-panel-text>
-      </v-expansion-panel>
-    </v-expansion-panels>
-
-    <div class="section-label">About</div>
-    <div class="text-body-2">Gym Crew {{ APP_VERSION }}</div>
-    <div v-if="updateAvailable" class="mt-2">
-      <v-btn color="info" variant="tonal" size="small" @click="openUrl(updateAvailable.downloadUrl)">Download {{ updateAvailable.version }}</v-btn>
+    <h2 class="section-h">Smallest weight jumps at your gym, in {{ p.unit }}</h2>
+    <div class="group">
+      <div v-for="row in incRows" :key="row.key" class="group-row">
+        <div class="grow">
+          <div>{{ row.label }}</div>
+          <div class="t-tiny t-muted">{{ row.help }}</div>
+        </div>
+        <Stepper
+          v-model="p.increments[row.key]" :step="row.step" :min="row.step" :max="row.max"
+          :decimals="row.key !== 'pin'" size="md" class="mini"
+          @update:model-value="persist"
+        />
+      </div>
+      <div class="group-row">
+        <div class="grow">
+          <div>Barbell weight</div>
+          <div class="t-tiny t-muted">Used by the plate and warm-up tools</div>
+        </div>
+        <Stepper v-model="p.bar" :step="p.unit === 'kg' ? 5 : 5" :min="0" :max="50" size="md" class="mini" @update:model-value="persist" />
+      </div>
     </div>
-    <v-btn variant="text" size="small" class="px-0 mt-2" prepend-icon="mdi-content-copy" @click="copyDebug">Copy debug info</v-btn>
-    <div v-if="debugMsg" class="text-caption muted">{{ debugMsg }}</div>
+
+    <h2 class="section-h">Rest timer</h2>
+    <div class="group">
+      <div class="group-row">
+        <span class="grow">Vibrate when rest is over</span>
+        <Toggle v-model="s.restVibrate" @update:model-value="persist" />
+      </div>
+      <div class="group-row">
+        <div class="grow">
+          <div>Notify when the app is closed</div>
+          <div class="t-tiny t-muted">So you hear it with the phone in your pocket</div>
+        </div>
+        <Toggle v-model="s.restNotify" @update:model-value="persist" />
+      </div>
+    </div>
+
+    <h2 class="section-h">Backup</h2>
+    <div class="card card-pad">
+      <p class="t-small">
+        Your workouts are saved only on this phone. Export a backup now and then, to Drive or to yourself.
+      </p>
+      <p class="t-small t-muted last">Last backup: {{ state.data.lastBackupAt ? relativeDay(state.data.lastBackupAt) : 'never' }}</p>
+      <div class="row btns">
+        <button class="btn btn-primary grow" :disabled="exporting" @click="doExport"><Icon name="exportIcon" />Export</button>
+        <button class="btn btn-soft grow" @click="fileInput.click()"><Icon name="importIcon" />Import</button>
+      </div>
+      <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFile">
+    </div>
+
+    <h2 class="section-h">Routine</h2>
+    <div class="group">
+      <button class="group-row" :disabled="state.routineStatus.loading" @click="checkRoutine">
+        <div class="grow">
+          <div>{{ routine ? routine.title : 'No routine loaded' }}</div>
+          <div class="t-tiny" :class="state.routineStatus.error ? 't-err' : 't-muted'">
+            {{ state.routineStatus.error || `Updated ${state.data.cache.fetchedAt ? relativeDay(state.data.cache.fetchedAt) : 'never'}` }}
+          </div>
+        </div>
+        <span class="t-small t-muted">{{ state.routineStatus.loading ? 'Checking' : 'Check now' }}</span>
+      </button>
+      <button class="group-row" @click="openSource">
+        <span class="grow">Routine source</span>
+        <span class="t-small t-muted">{{ state.data.settings.routinesUrl ? 'Custom' : 'Default' }}</span>
+        <Icon name="chevronRight" class="chev" />
+      </button>
+    </div>
+
+    <h2 class="section-h">About</h2>
+    <div class="group">
+      <div class="group-row">
+        <span class="grow">Version</span>
+        <span class="t-muted t-num">{{ APP_VERSION }}</span>
+      </div>
+      <button v-if="updateAvailable" class="group-row" @click="openUrl(updateAvailable.downloadUrl)">
+        <Icon name="download" />
+        <span class="grow">Download version {{ updateAvailable.version }}</span>
+        <Icon name="chevronRight" class="chev" />
+      </button>
+      <button class="group-row" @click="copyDebug">
+        <Icon name="copy" />
+        <div class="grow">
+          <div>Copy details for a bug report</div>
+          <div class="t-tiny t-muted">Paste them into the group chat</div>
+        </div>
+      </button>
+    </div>
 
     <!-- Import confirm -->
-    <v-dialog v-model="importDialog" max-width="420">
-      <v-card title="Replace data from backup?">
-        <v-card-text>
-          This replaces everything on this phone with the backup ({{ pending?.sessions?.length || 0 }} workouts).
-          Export a backup first if you might want the current data.
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer /><v-btn @click="importDialog = false">Cancel</v-btn>
-          <v-btn color="error" variant="flat" @click="confirmImport">Replace</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
+    <Sheet v-model="importOpen" title="Replace this phone's data?">
+      <p class="t-body">
+        Everything on this phone will be replaced with the backup ({{ pending?.sessions?.length || 0 }} workouts).
+        Export first if you might want the current data.
+      </p>
+      <template #actions>
+        <button class="btn btn-soft btn-lg" @click="importOpen = false">Cancel</button>
+        <button class="btn btn-danger btn-lg" @click="confirmImport">Replace</button>
+      </template>
+    </Sheet>
+
+    <!-- Routine source -->
+    <Sheet v-model="sourceOpen" title="Routine source">
+      <p class="t-small t-muted">Where the app downloads the monthly routine. Leave it on the default unless someone gave you a different link.</p>
+      <label class="label src-label" for="src">Link</label>
+      <input id="src" v-model="urlDraft" class="field" type="url" placeholder="https://raw.githubusercontent.com/…/gym-routines/main/" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <p class="t-tiny t-muted src-now">Default: {{ DEFAULT_ROUTINES_URL }}</p>
+      <template #actions>
+        <button class="btn btn-soft btn-lg" @click="resetUrl">Use default</button>
+        <button class="btn btn-primary btn-lg" @click="saveUrl">Save</button>
+      </template>
+    </Sheet>
   </div>
 </template>
 
 <script setup>
 import { computed, ref } from 'vue'
 import { Capacitor } from '@capacitor/core'
+import Icon from '../ui/Icon.vue'
+import Sheet from '../ui/Sheet.vue'
+import Stepper from '../ui/Stepper.vue'
+import Segmented from '../ui/Segmented.vue'
+import Toggle from '../ui/Toggle.vue'
+import { toast } from '../ui/toast.js'
 import {
   state, persist, routine, refreshRoutines, routinesUrl, updateAvailable, exportJSON, markBackedUp, importJSON, finishedSessions
 } from '../store.js'
@@ -98,7 +152,17 @@ import { parseBackup } from '../lib/storage.js'
 
 const p = computed(() => state.data.profile)
 const s = computed(() => state.data.settings)
-const themeItems = [{ title: 'Dark', value: 'dark' }, { title: 'Light', value: 'light' }, { title: 'Follow phone', value: 'system' }]
+const themeItems = [{ label: 'Light', value: 'light' }, { label: 'Dark', value: 'dark' }, { label: 'Auto', value: 'system' }]
+
+const incRows = computed(() => {
+  const u = p.value.unit
+  return [
+    { key: 'upper', label: 'Upper-body barbell', help: 'Bench, overhead press, curls', step: u === 'kg' ? 0.5 : 1, max: 20 },
+    { key: 'lower', label: 'Lower-body barbell', help: 'Squat, deadlift, hip thrust', step: u === 'kg' ? 0.5 : 1, max: 40 },
+    { key: 'dumbbell', label: 'Dumbbells', help: 'Gap between dumbbell sizes', step: u === 'kg' ? 0.5 : 1, max: 20 },
+    { key: 'pin', label: 'Machine pins', help: 'Positions per jump on a stack', step: 1, max: 5 }
+  ]
+})
 
 function onUnit (u) {
   const prof = state.data.profile
@@ -110,59 +174,60 @@ function onUnit (u) {
 
 // Backup
 const exporting = ref(false)
-const backupMsg = ref('')
-const backupError = ref(false)
 async function doExport () {
-  exporting.value = true; backupMsg.value = ''; backupError.value = false
+  exporting.value = true
   try {
     const name = `gym-crew-backup-${new Date().toISOString().slice(0, 10)}.json`
     const r = await shareBackupFile(name, exportJSON())
-    if (r !== 'cancelled') { markBackedUp(); backupMsg.value = 'Backup exported.' }
+    if (r !== 'cancelled') { markBackedUp(); toast('Backup exported') }
   } catch (e) {
-    backupError.value = true; backupMsg.value = 'Export failed: ' + (e.message || e)
+    toast(`Export failed: ${e.message || e}`)
   } finally { exporting.value = false }
 }
 
 const fileInput = ref(null)
-const importDialog = ref(false)
+const importOpen = ref(false)
 const pendingText = ref('')
 const pending = ref(null)
 async function onFile (ev) {
   const file = ev.target.files?.[0]
   ev.target.value = ''
   if (!file) return
-  backupMsg.value = ''; backupError.value = false
   try {
     pendingText.value = await file.text()
     pending.value = parseBackup(pendingText.value)
-    importDialog.value = true
+    importOpen.value = true
   } catch (e) {
-    backupError.value = true; backupMsg.value = e.message
+    toast(e.message)
   }
 }
 async function confirmImport () {
-  importDialog.value = false
+  importOpen.value = false
   try {
     await importJSON(pendingText.value)
-    backupMsg.value = `Imported ${finishedSessions.value.length} workouts.`
+    toast(`Imported ${finishedSessions.value.length} workouts`)
     refreshRoutines()
-  } catch (e) { backupError.value = true; backupMsg.value = e.message }
+  } catch (e) { toast(e.message) }
 }
 
-// Routine URL
-const urlDraft = ref(state.data.settings.routinesUrl || '')
+// Routine
+async function checkRoutine () {
+  await refreshRoutines()
+  toast(state.routineStatus.error ? "Couldn't reach the routine" : 'Routine is up to date')
+}
+const sourceOpen = ref(false)
+const urlDraft = ref('')
+function openSource () { urlDraft.value = state.data.settings.routinesUrl || ''; sourceOpen.value = true }
 function saveUrl () {
   state.data.settings.routinesUrl = urlDraft.value.trim() || null
-  persist(); refreshRoutines()
+  persist(); sourceOpen.value = false; checkRoutine()
 }
 function resetUrl () {
-  urlDraft.value = ''
   state.data.settings.routinesUrl = null
-  persist(); refreshRoutines()
+  persist(); sourceOpen.value = false; checkRoutine()
 }
 
 // Debug
-const debugMsg = ref('')
 async function copyDebug () {
   const info = {
     app: APP_VERSION,
@@ -170,17 +235,29 @@ async function copyDebug () {
     userAgent: navigator.userAgent,
     routine: routine.value?.month || null,
     routinesUrl: routinesUrl.value,
-    defaultUrl: DEFAULT_ROUTINES_URL,
     lastFetch: state.data.cache.fetchedAt,
     lastError: state.routineStatus.error,
     sessions: state.data.sessions.length,
     dataSchema: state.data.schemaVersion
   }
   const ok = await copyText(JSON.stringify(info, null, 2))
-  debugMsg.value = ok ? 'Copied — paste it into the group chat when reporting a bug.' : JSON.stringify(info)
+  toast(ok ? 'Copied. Paste it into the group chat.' : "Couldn't copy on this device")
 }
 </script>
 
 <style scoped>
-.flex-1 { flex: 1 1 0; }
+.head { margin-top: 8px; }
+.group-row.col { flex-direction: column; align-items: stretch; gap: 10px; }
+.inline-input {
+  width: 55%; text-align: right; background: transparent; border: 0; outline: none;
+  font-size: 17px; color: var(--ink-2); padding: 8px 0;
+}
+.inline-input:focus { color: var(--ink); }
+.mini { width: 168px; flex: 0 0 auto; }
+.mini :deep(.st-btn) { width: 40px; height: 40px; border-radius: 10px; }
+.mini :deep(.st-display), .mini :deep(.st-input) { font-size: 24px; height: 36px; line-height: 36px; }
+.last { margin-top: 6px; }
+.btns { margin-top: 14px; gap: 10px; }
+.src-label { margin-top: 16px; }
+.src-now { margin-top: 8px; word-break: break-all; }
 </style>

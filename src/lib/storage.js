@@ -18,7 +18,7 @@ export function emptyData () {
       bodyweight: null,
       increments: { ...DEFAULT_INCREMENTS.kg },
       bar: DEFAULT_BAR.kg,
-      theme: 'dark'
+      theme: 'system'
     },
     settings: {
       routinesUrl: null, // null = use DEFAULT_ROUTINES_URL from config.js
@@ -32,7 +32,8 @@ export function emptyData () {
     cache: { manifest: null, routine: null, exercises: null, fetchedAt: null },
     routineArchive: {}, // { [month]: routine }
     lastSeenRoutineMonth: null,
-    lastBackupAt: null
+    lastBackupAt: null,
+    welcomed: false
   }
 }
 

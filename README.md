@@ -1,18 +1,19 @@
 # Gym Crew (gym-app)
 
-Private Android app for the crew. Vue 3 + Vuetify 3, wrapped as an APK with Capacitor 8.
+Private Android app for the crew. Vue 3 with a small custom UI kit (no component library), wrapped as an APK with Capacitor 8.
 The monthly routine and exercise library come from the **public** `gym-routines` repo,
 so a new month never needs a new APK. Workout history lives only on each phone.
 
 ## Features
 
-- **Train** — this month's A/B/C days, "next up" rotation, exercise instructions, set-up, cues, common mistakes, video search
-- **Workout logging** — sets prefilled from your last session, reps-in-reserve (RIR) tap, edit/undo, swap exercise (alternatives), add sets, notes, free sessions (e.g. PT days), crash-safe (saved after every set), screen kept awake
-- **Rest timer** — starts on every logged set, superset-aware, ±time, vibrates; notification when the app is in the background
-- **Progression** — double progression per exercise: hit the top of the rep range on all sets → add your smallest jump; stalled below range twice → back off ~10%; deload week support
-- **Progress** — est. 1RM + heaviest-set chart per exercise (with table view), PRs, sets per muscle (last 7 days), 12-week consistency heatmap, history
-- **Tools** — effort / 1RM calculator with "what should I lift next" and rep table, plate calculator, warm-up ramp
-- **Settings** — kg/lb, machine pins, your gym's smallest weight jumps, theme, JSON backup export/import (share sheet → Drive/WhatsApp), update banner, copy debug info
+- **Train**: next-up day with a big start button, Monday-to-Sunday week strip, this month's days (each day wears a plate colour: A red, B blue, C yellow, D green)
+- **Workout logging**: one exercise at a time, large − / + steppers (tap the number to type, hold to repeat), log button under your thumb, swipe left/right between exercises, undo after every set, tap a set to edit or delete it, optional "reps left in the tank", built-in timer for holds, swap exercise, add/remove sets, notes, free sessions; saved after every set and the screen stays awake
+- **Rest timer**: built into the workout screen, superset-aware, ±time, vibrates, notifies when the app is in the background, floating pill on other screens
+- **Progression**: double progression per exercise (hit the top of the range on every set → add your smallest jump; stalled twice → back off ~10%); deload week support
+- **Progress**: estimated max and heaviest-set chart (with a table), records, sets per muscle, 12-week consistency grid, history
+- **Tools**: effort / one-rep-max calculator with "what should I lift next", plate calculator with competition plate colours, warm-up ramp
+- **Settings**: name, kg/lb, light/dark/auto theme, your gym's weight jumps, rest alerts, backup export/import, routine source, bug-report details
+- First-run welcome (name + units), Android back button closes sheets first, works offline (fonts bundled)
 
 ## First-time setup (one person does this once)
 
@@ -104,7 +105,9 @@ src/
   lib/storage.js       atomic JSON file storage + migrations
   lib/restTimer.js     rest timer + background notification
   lib/native.js        Capacitor wrappers with browser fallbacks
-  views/               Home, Day, Exercise, Workout, Summary, Progress, History, Tools, Settings
+  ui/                  design system: Sheet, Stepper, Segmented, Toggle, Toast, PlateBadge, icons
+  styles/base.css      colour tokens (light + dark), type, buttons, lists
+  views/               Home, Day, Exercise, Workout, Summary, Progress, History, Tools, Settings, Welcome
 android/               Capacitor Android project (signing reads env vars from CI)
 assets/                icon sources (regenerate: npx @capacitor/assets generate --android)
 .github/workflows/     release.yml

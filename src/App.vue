@@ -1,68 +1,71 @@
 <template>
-  <v-app>
-    <v-main class="safe-top">
-      <router-view v-slot="{ Component }">
-        <component :is="Component" />
-      </router-view>
-    </v-main>
+  <RouterView v-slot="{ Component }">
+    <Transition name="fade" mode="out-in">
+      <component :is="Component" :key="route.path" />
+    </Transition>
+  </RouterView>
 
-    <RestTimerBar />
+  <BottomNav v-if="!route.meta.hideNav" :active="route.meta.tab" />
+  <RestPill />
+  <Toast :bottom="toastBottom" :top="toastTop" />
 
-    <v-bottom-navigation
-      v-if="!route.meta.hideNav"
-      :model-value="route.meta.tab"
-      grow
-      color="primary"
-      class="safe-bottom"
-    >
-      <v-btn value="home" to="/"><v-icon>mdi-dumbbell</v-icon><span>Train</span></v-btn>
-      <v-btn value="progress" to="/progress"><v-icon>mdi-chart-line</v-icon><span>Progress</span></v-btn>
-      <v-btn value="tools" to="/tools"><v-icon>mdi-calculator-variant</v-icon><span>Tools</span></v-btn>
-      <v-btn value="settings" to="/settings"><v-icon>mdi-cog</v-icon><span>Settings</span></v-btn>
-    </v-bottom-navigation>
+  <!-- New month's routine -->
+  <Sheet :model-value="!!announce" :title="announce?.title" @update:model-value="(v) => !v && markRoutineSeen()">
+    <template v-if="announce">
+      <p v-if="announce.description" class="t-body t-muted">{{ announce.description }}</p>
+      <ul class="news">
+        <li v-for="(w, i) in announce.whatsNew" :key="i">{{ w }}</li>
+      </ul>
+    </template>
+    <template #actions>
+      <button class="btn btn-primary btn-lg" @click="markRoutineSeen">Got it</button>
+    </template>
+  </Sheet>
 
-    <!-- New monthly routine announcement -->
-    <v-dialog :model-value="!!announce" max-width="480" persistent>
-      <v-card v-if="announce">
-        <v-card-title class="text-wrap pt-5">
-          <v-icon color="primary" class="mr-2">mdi-calendar-star</v-icon>
-          {{ announce.title || 'New routine' }}
-        </v-card-title>
-        <v-card-text>
-          <p v-if="announce.description" class="mb-3">{{ announce.description }}</p>
-          <div v-if="announce.whatsNew?.length" class="section-label mt-0">What's new</div>
-          <ul class="pl-4">
-            <li v-for="(w, i) in announce.whatsNew" :key="i" class="mb-1">{{ w }}</li>
-          </ul>
-        </v-card-text>
-        <v-card-actions>
-          <v-spacer />
-          <v-btn color="primary" variant="flat" @click="markRoutineSeen">Let's go</v-btn>
-        </v-card-actions>
-      </v-card>
-    </v-dialog>
-  </v-app>
+  <WelcomeSheet />
 </template>
 
 <script setup>
 import { computed, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
-import { useTheme } from 'vuetify'
-import RestTimerBar from './components/RestTimerBar.vue'
+import BottomNav from './ui/BottomNav.vue'
+import RestPill from './ui/RestPill.vue'
+import Toast from './ui/Toast.vue'
+import Sheet from './ui/Sheet.vue'
+import WelcomeSheet from './views/WelcomeSheet.vue'
 import { state, newRoutineToAnnounce, markRoutineSeen } from './store.js'
+import { rest } from './lib/restTimer.js'
 
 const route = useRoute()
-const theme = useTheme()
 
-// Don't interrupt a workout with the announcement
-const announce = computed(() => (route.meta.hideNav ? null : newRoutineToAnnounce.value))
+// Don't interrupt a workout or a first-run welcome with the routine announcement
+const announce = computed(() => {
+  if (route.meta.hideNav) return null
+  if (!state.data.welcomed && !state.data.sessions.length) return null
+  return newRoutineToAnnounce.value
+})
 
+// In a workout the bottom is busy (rest timer, log button), so messages drop in from the top
+const toastTop = computed(() => (route.name === 'workout' ? 'calc(var(--safe-top) + 64px)' : ''))
+// …and elsewhere they sit above the nav bar and the floating rest timer
+const toastBottom = computed(() => {
+  if (route.meta.hideNav) return 'calc(var(--safe-bottom) + 16px)'
+  return `calc(var(--nav-h) + var(--safe-bottom) + ${rest.endsAt ? 72 : 12}px)`
+})
+
+// Theme: light, dark, or follow the phone
 const media = window.matchMedia?.('(prefers-color-scheme: dark)')
 function applyTheme () {
-  const pref = state.data.profile.theme
-  const dark = pref === 'system' ? (media?.matches ?? true) : pref !== 'light'
-  theme.global.name.value = dark ? 'gymDark' : 'gymLight'
+  const pref = state.data.profile.theme || 'system'
+  const dark = pref === 'system' ? !!media?.matches : pref === 'dark'
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#181D25' : '#EEF1F4')
 }
 watchEffect(applyTheme)
 media?.addEventListener?.('change', applyTheme)
 </script>
+
+<style scoped>
+.news { margin: 14px 0 0 20px; }
+.news li { margin-bottom: 8px; font-size: 16px; }
+</style>

@@ -1,0 +1,227 @@
+/* ─────────────────────────────────────────────────────────────
+   Gym Crew design system
+   Chalk-and-iron palette; each training day wears a competition
+   plate colour (A red, B blue, C yellow, D green, E white).
+   Barlow Condensed for numbers and titles, Barlow for reading.
+   ───────────────────────────────────────────────────────────── */
+
+:root {
+  --paper: #EEF1F4;
+  --card: #FFFFFF;
+  --card-2: #F5F7F9;
+  --ink: #15202E;
+  --ink-2: #566173;
+  --ink-3: #8A94A3;
+  --line: #DDE2E8;
+  --press: rgba(21, 32, 46, 0.06);
+
+  --primary: #15202E;      /* buttons are ink, not a brand colour */
+  --on-primary: #FFFFFF;
+
+  --ok: #1A7A43;
+  --ok-soft: #E3F3EA;
+  --warn: #9A5B00;
+  --warn-soft: #FDF1DC;
+  --err: #C7322B;
+  --err-soft: #FBE7E5;
+
+  --plate-red: #C7322B;
+  --plate-blue: #2457B5;
+  --plate-yellow: #F2B33D;
+  --plate-green: #23824F;
+  --plate-white: #E6EAEF;
+  --plate-ring: rgba(0, 0, 0, 0);
+
+  --shadow-sheet: 0 -8px 32px rgba(21, 32, 46, 0.18);
+  --shadow-float: 0 6px 20px rgba(21, 32, 46, 0.18);
+
+  --r-sheet: 22px;
+  --r-card: 16px;
+  --r-ctl: 12px;
+
+  --font: 'Barlow', system-ui, sans-serif;
+  --font-num: 'Barlow Condensed', 'Barlow', system-ui, sans-serif;
+
+  --nav-h: 64px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --paper: #181D25;
+  --card: #212833;
+  --card-2: #283040;
+  --ink: #E9EDF2;
+  --ink-2: #9AA4B2;
+  --ink-3: #6E7888;
+  --line: #2F3846;
+  --press: rgba(233, 237, 242, 0.07);
+
+  --primary: #E9EDF2;
+  --on-primary: #15202E;
+
+  --ok: #4CC584;
+  --ok-soft: rgba(76, 197, 132, 0.14);
+  --warn: #F2B33D;
+  --warn-soft: rgba(242, 179, 61, 0.14);
+  --err: #FF7A70;
+  --err-soft: rgba(255, 122, 112, 0.14);
+
+  --plate-ring: rgba(233, 237, 242, 0.28);
+
+  --shadow-sheet: 0 -8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-float: 0 6px 20px rgba(0, 0, 0, 0.45);
+
+  color-scheme: dark;
+}
+
+/* ── Reset ─────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--font);
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--ink);
+  background: var(--paper);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+h1, h2, h3, h4, p, ul, ol { margin: 0; }
+ul, ol { padding: 0; }
+button, input, textarea, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; padding: 0; touch-action: manipulation; }
+a { color: inherit; text-decoration: none; }
+img, svg { display: block; }
+:focus-visible { outline: 2.5px solid var(--plate-blue); outline-offset: 2px; border-radius: 6px; }
+
+/* ── Type ──────────────────────────────────────────────── */
+.t-title { font-family: var(--font-num); font-weight: 700; font-size: 30px; line-height: 1.05; letter-spacing: -0.005em; }
+.t-h2 { font-family: var(--font-num); font-weight: 600; font-size: 22px; line-height: 1.15; }
+.t-h3 { font-weight: 600; font-size: 17px; line-height: 1.3; }
+.t-body { font-size: 17px; }
+.t-small { font-size: 15px; line-height: 1.4; }
+.t-tiny { font-size: 13px; line-height: 1.35; }
+.t-num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.t-muted { color: var(--ink-2); }
+.t-faint { color: var(--ink-3); }
+.t-ok { color: var(--ok); }
+.t-err { color: var(--err); }
+.t-warn { color: var(--warn); }
+
+/* Section headings are sentence case, quiet, and only where they help navigate */
+.section-h { font-size: 15px; font-weight: 600; color: var(--ink-2); margin: 28px 4px 10px; }
+
+/* ── Layout ────────────────────────────────────────────── */
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: calc(var(--safe-top) + 12px) 16px calc(var(--nav-h) + var(--safe-bottom) + 32px);
+}
+.page.no-nav { padding-bottom: calc(var(--safe-bottom) + 32px); }
+.row { display: flex; align-items: center; gap: 12px; }
+.grow { flex: 1 1 auto; min-width: 0; }
+.stack > * + * { margin-top: 12px; }
+.truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Top bar used by pushed screens */
+.topbar {
+  display: flex; align-items: center; gap: 4px;
+  min-height: 52px; margin: 0 -8px 8px;
+}
+.topbar .t-h3 { flex: 1; min-width: 0; text-align: center; }
+
+/* ── Surfaces ──────────────────────────────────────────── */
+.card { background: var(--card); border-radius: var(--r-card); }
+.card-pad { padding: 18px; }
+
+/* Grouped list: rows separated by hairlines inside one surface */
+.group { background: var(--card); border-radius: var(--r-card); overflow: hidden; }
+.group-row {
+  display: flex; align-items: center; gap: 14px;
+  min-height: 60px; padding: 12px 16px;
+  width: 100%; text-align: left;
+  position: relative;
+}
+.group-row + .group-row::before {
+  content: ''; position: absolute; top: 0; right: 0; left: 16px;
+  border-top: 1px solid var(--line);
+}
+button.group-row:active, a.group-row:active { background: var(--press); }
+.chev { color: var(--ink-3); flex: 0 0 auto; }
+
+/* ── Buttons ───────────────────────────────────────────── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 48px; padding: 0 20px;
+  border-radius: var(--r-ctl);
+  font-weight: 600; font-size: 17px;
+  user-select: none; -webkit-user-select: none;
+  transition: transform 90ms ease, background-color 120ms ease, opacity 120ms ease;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.4; pointer-events: none; }
+.btn-block { width: 100%; }
+.btn-lg { min-height: 58px; font-size: 19px; border-radius: 14px; }
+.btn-primary { background: var(--primary); color: var(--on-primary); }
+.btn-soft { background: var(--card-2); color: var(--ink); }
+.card .btn-soft { background: var(--paper); }
+.btn-ghost { background: transparent; color: var(--ink); }
+.btn-ghost:active { background: var(--press); }
+.btn-danger { background: var(--err-soft); color: var(--err); }
+.btn-sm { min-height: 38px; padding: 0 14px; font-size: 15px; border-radius: 10px; }
+
+.icon-btn {
+  width: 44px; height: 44px; border-radius: 50%;
+  display: inline-grid; place-items: center; flex: 0 0 auto;
+  color: var(--ink);
+}
+.icon-btn:active { background: var(--press); }
+
+/* Plate-coloured buttons (e.g. "Start Day B") */
+.btn-plate { background: var(--plate-bg); color: var(--plate-fg); }
+
+/* ── Chips / pills ─────────────────────────────────────── */
+.pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 32px; padding: 0 12px; border-radius: 999px;
+  font-size: 14px; font-weight: 600;
+  background: var(--card-2); color: var(--ink-2);
+}
+.pill-warn { background: var(--warn-soft); color: var(--warn); }
+.pill-ok { background: var(--ok-soft); color: var(--ok); }
+
+/* ── Form fields ───────────────────────────────────────── */
+.field {
+  width: 100%; min-height: 50px; padding: 12px 14px;
+  border-radius: var(--r-ctl);
+  background: var(--card-2); border: 1.5px solid transparent;
+  font-size: 17px; /* ≥16px stops Android zooming on focus */
+  outline: none;
+}
+.field:focus { border-color: var(--ink-3); background: var(--card); }
+textarea.field { resize: none; line-height: 1.4; }
+.field::placeholder { color: var(--ink-3); }
+.label { display: block; font-size: 14px; font-weight: 600; color: var(--ink-2); margin: 0 2px 6px; }
+
+/* Callouts */
+.note { border-radius: 14px; padding: 14px 16px; font-size: 15px; line-height: 1.4; }
+.note-warn { background: var(--warn-soft); }
+.note-info { background: var(--card); }
+.note-ok { background: var(--ok-soft); }
+.note-err { background: var(--err-soft); }
+
+/* ── Motion ────────────────────────────────────────────── */
+.fade-enter-active, .fade-leave-active { transition: opacity 160ms ease; }
+.fade-enter-from, .fade-leave-to { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition-duration: 1ms !important; animation-duration: 1ms !important; }
+}
+
+/* Quiet destructive link-style buttons (e.g. "Delete this workout") */
+.btn-ghost.t-err { color: var(--err); }

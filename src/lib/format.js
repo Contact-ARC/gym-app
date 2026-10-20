@@ -10,6 +10,30 @@ export function prescription (item, exercise = null) {
   return `${sets} sets`
 }
 
+/** 95 → "1:35" */
+export function mmss (secs) {
+  const s = Math.max(0, Math.round(secs || 0))
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+}
+
+/** Rest as people say it: "90 s", "2 min", "2:30" */
+export function restLabel (secs) {
+  if (!secs) return 'no rest'
+  if (secs < 60) return `${secs} s rest`
+  if (secs % 60 === 0) return `${secs / 60} min rest`
+  return `${mmss(secs)} rest`
+}
+
+/** "Day A — Chest & Triceps" → "Chest & Triceps" (the badge already shows the letter) */
+export function dayTitle (name, id) {
+  if (!name) return id ? `Day ${id}` : 'Workout'
+  return name.replace(/^day\s+[a-z0-9]+\s*[—–-]\s*/i, '') || name
+}
+
+export function weekdayDate (d = new Date()) {
+  return d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })
+}
+
 export function relativeDay (iso) {
   if (!iso) return ''
   const d = new Date(iso)
