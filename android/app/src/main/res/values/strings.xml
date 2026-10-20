@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Gym Crew</string>
+    <string name="title_activity_main">Gym Crew</string>
+    <string name="package_name">com.gymcrew.app</string>
+    <string name="custom_url_scheme">com.gymcrew.app</string>
+</resources>

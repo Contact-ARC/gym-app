@@ -1,0 +1,89 @@
+name: Build & release APK
+
+# Push a tag like v0.1.0 to build a signed APK and attach it to a GitHub Release:
+#   npm version patch   # bumps package.json and creates the tag
+#   git push --follow-tags
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Check signing secrets
+        env:
+          KS: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KS" ]; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 secret is missing — see README → Signing"
+            exit 1
+          fi
+
+      - name: Install & test
+        run: |
+          npm ci
+          npm test
+
+      - name: Build web app & sync Android
+        run: |
+          npm run build
+          npx cap sync android
+
+      - name: Version info
+        id: ver
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "name=$VERSION" >> "$GITHUB_OUTPUT"
+          # Monotonic versionCode from the version: 0.4.12 -> 4012 ... 1.2.3 -> 1002003
+          echo "code=$(node -p "const [a,b,c]=require('./package.json').version.split('.').map(Number); a*1000000+b*1000+c")" >> "$GITHUB_OUTPUT"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ] && [ "${GITHUB_REF_NAME}" != "v$VERSION" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} doesn't match package.json version v$VERSION"
+            exit 1
+          fi
+
+      - name: Build signed release APK
+        env:
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          VERSION_CODE: ${{ steps.ver.outputs.code }}
+          VERSION_NAME: ${{ steps.ver.outputs.name }}
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$ANDROID_KEYSTORE_PATH"
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/gym-crew-${VERSION_NAME}.apk"
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gym-crew-${{ steps.ver.outputs.name }}
+          path: gym-crew-*.apk
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: gym-crew-*.apk
+          generate_release_notes: true

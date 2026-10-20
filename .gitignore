@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+
+# Never commit signing material
+*.jks
+*.keystore
+*.b64
+
+.DS_Store
+.idea/
+.vscode/
