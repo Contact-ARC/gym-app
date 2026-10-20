@@ -17,9 +17,9 @@ so a new month never needs a new APK. Workout history lives only on each phone.
 ## First-time setup (one person does this once)
 
 ### 1. Point the app at your routines repo
-Edit `src/config.js` and replace `OWNER` with the GitHub account name:
+Edit `src/config.js` and replace `Contact-ARC` with the GitHub account name:
 ```js
-'https://raw.githubusercontent.com/OWNER/gym-routines/main/'
+'https://raw.githubusercontent.com/Contact-ARC/gym-routines/main/'
 ```
 Do the same for `downloadUrl` in `gym-routines/latest.json`.
 
@@ -98,7 +98,7 @@ On a phone over USB (Android Studio installed): `npm run android:sync && npx cap
 ## Project layout
 ```
 src/
-  config.js            routines URL + versions        ← edit OWNER
+  config.js            routines URL + versions        ← edit Contact-ARC
   store.js             app state, sessions, routine download
   lib/training.js      pure maths: e1RM, progression, plates, warm-ups, PRs (unit-tested)
   lib/storage.js       atomic JSON file storage + migrations
