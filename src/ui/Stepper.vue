@@ -3,7 +3,7 @@
     <div v-if="label" class="st-label">{{ label }}</div>
     <div class="st-row">
       <button
-        class="st-btn" type="button" :aria-label="`Decrease ${label || ''}`"
+        class="st-btn" type="button" :aria-label="t('Decrease {what}', { what: label || '' })"
         :disabled="modelValue != null && modelValue <= min"
         @pointerdown.prevent="hold(-1)" @pointerup="release" @pointerleave="release" @pointercancel="release"
         @keydown.enter.prevent="bump(-1)" @keydown.space.prevent="bump(-1)"
@@ -23,14 +23,14 @@
           @keydown.enter.prevent="commit"
           @blur="commit"
         >
-        <button v-else class="st-display t-num" type="button" :aria-label="`${label || 'Value'}: ${display}. Tap to type`" @click="startEdit">
+        <button v-else class="st-display t-num" type="button" :aria-label="t('{what}: {value}. Tap to type', { what: label || t('Value'), value: display })" @click="startEdit">
           {{ display }}
         </button>
         <div v-if="unit" class="st-unit">{{ unit }}</div>
       </div>
 
       <button
-        class="st-btn" type="button" :aria-label="`Increase ${label || ''}`"
+        class="st-btn" type="button" :aria-label="t('Increase {what}', { what: label || '' })"
         :disabled="modelValue != null && max != null && modelValue >= max"
         @pointerdown.prevent="hold(1)" @pointerup="release" @pointerleave="release" @pointercancel="release"
         @keydown.enter.prevent="bump(1)" @keydown.space.prevent="bump(1)"

@@ -1,49 +1,49 @@
 <template>
   <div class="page">
-    <h1 class="t-title head">Tools</h1>
-    <Segmented v-model="tab" :options="tabs" label="Tool" class="tabs" />
+    <h1 class="t-title head">{{ t('Tools') }}</h1>
+    <Segmented v-model="tab" :options="tabs" :label="t('Tool')" class="tabs" />
 
     <!-- Effort: estimated max and what to lift next -->
     <section v-if="tab === 'effort'" class="tool">
-      <p class="t-small t-muted lead">Enter a set you just did.</p>
+      <p class="t-small t-muted lead">{{ t('Enter a set you just did.') }}</p>
       <div class="card card-pad stack-lg">
-        <Stepper v-model="w" label="Weight" :unit="unit" :step="incs.upper" :decimals="true" size="md" />
-        <Stepper v-model="r" label="Reps" :step="1" :min="1" :max="30" size="md" />
+        <Stepper v-model="w" :label="t('Weight')" :unit="unit" :step="incs.upper" :decimals="true" size="md" />
+        <Stepper v-model="r" :label="t('Reps')" :step="1" :min="1" :max="30" size="md" />
         <div>
-          <div class="label">Reps you had left</div>
-          <Segmented v-model="rir" :options="rirOptions" label="Reps left" />
+          <div class="label">{{ t('Reps you had left') }}</div>
+          <Segmented v-model="rir" :options="rirOptions" :label="t('Reps you had left')" />
         </div>
       </div>
 
       <div v-if="oneRM" class="result">
-        <div class="t-small t-muted">Estimated one-rep max</div>
+        <div class="t-small t-muted">{{ t('Estimated one-rep max') }}</div>
         <div class="t-num result-v">{{ fmtLoad(oneRM, unit) }}</div>
-        <div v-if="r + (rir || 0) > 12" class="t-tiny t-warn">Sets above 12 reps give a rougher estimate.</div>
+        <div v-if="r + (rir || 0) > 12" class="t-tiny t-warn">{{ t('Sets above 12 reps give a rougher estimate.') }}</div>
       </div>
 
       <template v-if="oneRM">
-        <h2 class="section-h">What should I lift next?</h2>
+        <h2 class="section-h">{{ t('What should I lift next?') }}</h2>
         <div class="card card-pad stack-lg">
-          <Stepper v-model="targetReps" label="Reps you want to do" :step="1" :min="1" :max="30" size="md" />
+          <Stepper v-model="targetReps" :label="t('Reps you want to do')" :step="1" :min="1" :max="30" size="md" />
           <div>
-            <div class="label">Reps to leave in the tank</div>
-            <Segmented v-model="targetRir" :options="rirOptions" label="Reps to leave" />
+            <div class="label">{{ t('Reps to leave in the tank') }}</div>
+            <Segmented v-model="targetRir" :options="rirOptions" :label="t('Reps to leave in the tank')" />
           </div>
           <div>
-            <div class="label">Lift type (sets the rounding)</div>
-            <Segmented v-model="group" :options="groupItems" label="Lift type" />
+            <div class="label">{{ t('Lift type (sets the rounding)') }}</div>
+            <Segmented v-model="group" :options="groupItems" :label="t('Lift type (sets the rounding)')" />
           </div>
           <div class="answer">
-            <span class="t-small t-muted">Try</span>
+            <span class="t-small t-muted">{{ t('Try') }}</span>
             <span class="t-num answer-v">{{ fmtLoad(nextLoad, unit) }}</span>
-            <span class="t-small t-muted">for {{ targetReps }} reps</span>
+            <span class="t-small t-muted">{{ t('for {n} reps', { n: targetReps }) }}</span>
           </div>
         </div>
 
-        <h2 class="section-h">Reps at each weight</h2>
+        <h2 class="section-h">{{ t('Reps at each weight') }}</h2>
         <div class="card table-card">
           <table class="tbl t-num">
-            <thead><tr><th>Reps</th><th>To failure</th><th>2 left</th></tr></thead>
+            <thead><tr><th>{{ t('Reps') }}</th><th>{{ t('To failure') }}</th><th>{{ t('2 left') }}</th></tr></thead>
             <tbody>
               <tr v-for="n in [1, 2, 3, 4, 5, 6, 8, 10, 12, 15]" :key="n" :class="{ hl: n === r }">
                 <td>{{ n }}</td>
@@ -53,17 +53,17 @@
             </tbody>
           </table>
         </div>
-        <p class="t-tiny t-muted foot">Based on the average of the Epley and Brzycki formulas. Your own numbers may run a little higher or lower, especially on machines.</p>
+        <p class="t-tiny t-muted foot">{{ t('Based on the average of the Epley and Brzycki formulas. Your own numbers may run a little higher or lower, especially on machines.') }}</p>
       </template>
     </section>
 
     <!-- Plates -->
     <section v-else-if="tab === 'plates'" class="tool">
       <div class="card card-pad stack-lg">
-        <Stepper v-model="plateTarget" label="Total weight" :unit="unit" :step="unit === 'kg' ? 2.5 : 5" :min="0" :decimals="true" size="md" />
+        <Stepper v-model="plateTarget" :label="t('Total weight')" :unit="unit" :step="unit === 'kg' ? 2.5 : 5" :min="0" :decimals="true" size="md" />
         <div>
-          <div class="label">Bar</div>
-          <Segmented v-model="bar" :options="barOptions" label="Bar weight" />
+          <div class="label">{{ t('Bar') }}</div>
+          <Segmented v-model="bar" :options="barOptions" :label="t('Bar weight')" />
         </div>
       </div>
 
@@ -79,15 +79,15 @@
             ><span>{{ p }}</span></div>
             <div class="sleeve-end" />
           </div>
-          <div class="t-small t-muted">On each side</div>
-          <div class="t-h2 t-num per-side">{{ plates.perSide.length ? plates.perSide.join(' + ') : 'Nothing, just the bar' }}</div>
+          <div class="t-small t-muted">{{ t('On each side') }}</div>
+          <div class="t-h2 t-num per-side">{{ plates.perSide.length ? plates.perSide.join(' + ') : t('Nothing, just the bar') }}</div>
           <div v-if="Math.abs(plates.remainder) > 0.001" class="note note-warn t-small">
-            The closest you can load is {{ fmtLoad(plates.achieved, unit) }}, which is {{ plates.remainder }} {{ unit }} short.
+            {{ t('The closest you can load is {a}, which is {b} short.', { a: fmtLoad(plates.achieved, unit), b: `${plates.remainder} ${unit}` }) }}
           </div>
         </template>
       </div>
 
-      <h2 class="section-h">Plates your gym has</h2>
+      <h2 class="section-h">{{ t('Plates your gym has') }}</h2>
       <div class="plate-picks">
         <button
           v-for="p in allPlates" :key="p" class="pick t-num" :class="{ on: platesOn.includes(p) }"
@@ -99,26 +99,26 @@
     <!-- Warm-up -->
     <section v-else class="tool">
       <div class="card card-pad stack-lg">
-        <Stepper v-model="working" label="Working weight" :unit="unit" :step="incs.upper" :min="0" :decimals="true" size="md" />
+        <Stepper v-model="working" :label="t('Working weight')" :unit="unit" :step="incs.upper" :min="0" :decimals="true" size="md" />
         <div>
-          <div class="label">Using</div>
-          <Segmented v-model="warmBar" :options="[{ label: 'Barbell', value: true }, { label: 'Dumbbells or machine', value: false }]" label="Equipment" />
+          <div class="label">{{ t('Using') }}</div>
+          <Segmented v-model="warmBar" :options="[{ label: t('Barbell'), value: true }, { label: t('Dumbbells or machine'), value: false }]" :label="t('Equipment')" />
         </div>
       </div>
       <div v-if="warmups.length" class="group warm">
         <div v-for="(s, i) in warmups" :key="i" class="group-row">
           <span class="num t-num">{{ i + 1 }}</span>
           <span class="grow t-num wv">{{ fmtLoad(s.load, unit) }} × {{ s.reps }}</span>
-          <span class="t-small t-muted">{{ s.label === 'Empty bar' ? 'empty bar' : s.label }}</span>
+          <span class="t-small t-muted">{{ s.label }}</span>
         </div>
         <div class="group-row work">
           <span class="num t-num"><Icon name="checkBold" :size="16" /></span>
           <span class="grow t-num wv">{{ fmtLoad(working, unit) }}</span>
-          <span class="t-small">working sets</span>
+          <span class="t-small">{{ t('working sets') }}</span>
         </div>
       </div>
-      <p v-else-if="working" class="t-small t-muted foot">That's light enough to go straight to your working sets.</p>
-      <p class="t-tiny t-muted foot">Rest about a minute between warm-up sets. You usually only need them for the first exercise of each muscle group.</p>
+      <p v-else-if="working" class="t-small t-muted foot">{{ t("That's light enough to go straight to your working sets.") }}</p>
+      <p class="t-tiny t-muted foot">{{ t('Rest about a minute between warm-up sets. You usually only need them for the first exercise of each muscle group.') }}</p>
     </section>
   </div>
 </template>
@@ -130,13 +130,14 @@ import Stepper from '../ui/Stepper.vue'
 import Segmented from '../ui/Segmented.vue'
 import { weightPlateColors } from '../ui/plates.js'
 import { state } from '../store.js'
+import { t } from '../i18n/index.js'
 import {
   estimate1RM, loadForReps, roundToIncrement, fmtLoad, platesPerSide, warmupSets, DEFAULT_PLATES, DEFAULT_BAR
 } from '../lib/training.js'
 
-const tabs = [{ label: 'Effort', value: 'effort' }, { label: 'Plates', value: 'plates' }, { label: 'Warm-up', value: 'warmup' }]
+const tabs = computed(() => [{ label: t('Effort'), value: 'effort' }, { label: t('Plates'), value: 'plates' }, { label: t('Warm-up'), value: 'warmup' }])
 const tab = ref(sessionStorageGet('tools-tab') || 'effort')
-watch(tab, (t) => sessionStorageSet('tools-tab', t))
+watch(tab, (v) => sessionStorageSet('tools-tab', v))
 function sessionStorageGet (k) { try { return sessionStorage.getItem(k) } catch { return null } }
 function sessionStorageSet (k, v) { try { sessionStorage.setItem(k, v) } catch { /* ignore */ } }
 
@@ -152,7 +153,7 @@ const oneRM = computed(() => estimate1RM(w.value, r.value, rir.value))
 const targetReps = ref(8)
 const targetRir = ref(2)
 const group = ref('upper')
-const groupItems = [{ label: 'Upper', value: 'upper' }, { label: 'Lower', value: 'lower' }, { label: 'Dumbbell', value: 'dumbbell' }]
+const groupItems = computed(() => [{ label: t('Upper'), value: 'upper' }, { label: t('Lower'), value: 'lower' }, { label: t('Dumbbell'), value: 'dumbbell' }])
 const inc = computed(() => incs.value[group.value] || 2.5)
 const nextLoad = computed(() => roundToIncrement(loadForReps(oneRM.value, targetReps.value || 1, targetRir.value), inc.value, 'down'))
 

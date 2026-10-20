@@ -24,6 +24,8 @@
   --warn-soft: #FDF1DC;
   --err: #C7322B;
   --err-soft: #FBE7E5;
+  --info: #2457B5;
+  --info-soft: #E6EEFB;
 
   --plate-red: #C7322B;
   --plate-blue: #2457B5;
@@ -68,6 +70,8 @@
   --warn-soft: rgba(242, 179, 61, 0.14);
   --err: #FF7A70;
   --err-soft: rgba(255, 122, 112, 0.14);
+  --info: #8DB0F0;
+  --info-soft: rgba(90, 139, 224, 0.16);
 
   --plate-ring: rgba(233, 237, 242, 0.28);
 
@@ -194,6 +198,7 @@ button.group-row:active, a.group-row:active { background: var(--press); }
 }
 .pill-warn { background: var(--warn-soft); color: var(--warn); }
 .pill-ok { background: var(--ok-soft); color: var(--ok); }
+.pill-info { background: var(--info-soft); color: var(--info); }
 
 /* ── Form fields ───────────────────────────────────────── */
 .field {

@@ -2,10 +2,10 @@
   <div class="xd" :class="{ 'in-sheet': inSheet }">
     <p class="t-small t-muted equip">{{ equipmentLine }}</p>
 
-    <div v-if="photos.length" class="photos" aria-label="Photos of the movement">
+    <div v-if="photos.length" class="photos" :aria-label="t('Photos of the movement')">
       <img
         v-for="(src, i) in photos" :key="src" :src="src" loading="lazy"
-        :alt="`${ex.name}, ${i === 0 ? 'start' : 'end'} position`"
+        :alt="i === 0 ? t('{name}, start position', { name: tx(ex, 'name') }) : t('{name}, end position', { name: tx(ex, 'name') })"
         @error="(e) => (e.target.style.display = 'none')"
       >
     </div>
@@ -16,39 +16,39 @@
         <span v-for="m in ex.primary || []" :key="'p' + m" class="pill main">{{ muscleLabel(m) }}</span>
         <span v-for="m in ex.secondary || []" :key="'s' + m" class="pill">{{ muscleLabel(m) }}</span>
       </div>
-      <p class="t-tiny t-muted legend">Solid: main target. Light: also working.</p>
+      <p class="t-tiny t-muted legend">{{ t('Solid: main target. Light: also working.') }}</p>
     </div>
 
     <p v-if="!canDoAtGym(ex, state.data.settings.equipment)" class="note note-warn t-small gym-note">
-      Your gym doesn't have everything this needs. Check Settings, Your gym.
+      {{ t("Your gym doesn't have everything this needs. Check Settings, Your gym.") }}
     </p>
 
     <button class="btn btn-soft btn-block video" @click="openUrl(videoUrl)">
-      <Icon name="video" />{{ ex.videoUrl ? 'Watch the video' : 'Find a form video' }}
+      <Icon name="video" />{{ ex.videoUrl ? t('Watch the video') : t('Find a form video') }}
     </button>
 
-    <section v-if="ex.setup?.length">
-      <h2 class="section-h">Set-up</h2>
-      <ul class="card card-pad bullets"><li v-for="(s, i) in ex.setup" :key="i">{{ s }}</li></ul>
+    <section v-if="setup?.length">
+      <h2 class="section-h">{{ t('Set-up') }}</h2>
+      <ul class="card card-pad bullets"><li v-for="(s, i) in setup" :key="i">{{ s }}</li></ul>
     </section>
 
     <section>
-      <h2 class="section-h">How to do it</h2>
+      <h2 class="section-h">{{ t('How to do it') }}</h2>
       <ol class="card card-pad steps">
-        <li v-for="(s, i) in ex.steps || []" :key="i">
+        <li v-for="(s, i) in steps || []" :key="i">
           <span class="step-n t-num">{{ i + 1 }}</span><span>{{ s }}</span>
         </li>
       </ol>
     </section>
 
-    <section v-if="ex.cues?.length">
-      <h2 class="section-h">Think about</h2>
-      <ul class="card card-pad bullets"><li v-for="(s, i) in ex.cues" :key="i">{{ s }}</li></ul>
+    <section v-if="cues?.length">
+      <h2 class="section-h">{{ t('Think about') }}</h2>
+      <ul class="card card-pad bullets"><li v-for="(s, i) in cues" :key="i">{{ s }}</li></ul>
     </section>
 
-    <section v-if="ex.mistakes?.length">
-      <h2 class="section-h">Avoid</h2>
-      <ul class="card card-pad bullets avoid"><li v-for="(s, i) in ex.mistakes" :key="i">{{ s }}</li></ul>
+    <section v-if="mistakes?.length">
+      <h2 class="section-h">{{ t('Avoid') }}</h2>
+      <ul class="card card-pad bullets avoid"><li v-for="(s, i) in mistakes" :key="i">{{ s }}</li></ul>
     </section>
   </div>
 </template>
@@ -61,6 +61,7 @@ import { state, imageUrl } from '../store.js'
 import { muscleLabel, youtubeSearchUrl } from '../lib/format.js'
 import { openUrl } from '../lib/native.js'
 import { canDoAtGym } from '../lib/training.js'
+import { t, tx } from '../i18n/index.js'
 
 const props = defineProps({
   ex: { type: Object, required: true },
@@ -68,12 +69,16 @@ const props = defineProps({
 })
 
 const photos = computed(() => (props.ex.images || []).map(imageUrl))
+const setup = computed(() => tx(props.ex, 'setup'))
+const steps = computed(() => tx(props.ex, 'steps'))
+const cues = computed(() => tx(props.ex, 'cues'))
+const mistakes = computed(() => tx(props.ex, 'mistakes'))
 const videoUrl = computed(() => props.ex.videoUrl || youtubeSearchUrl(props.ex.name || ''))
 const equipmentLine = computed(() => {
-  const e = (props.ex.equipment || []).join(', ')
+  const e = (tx(props.ex, 'equipment') || []).join(', ')
   const extra = []
-  if (props.ex.perSide) extra.push('one side at a time')
-  if (props.ex.loadUnit === 'pin') extra.push('logged by pin position')
+  if (props.ex.perSide) extra.push(t('one side at a time'))
+  if (props.ex.loadUnit === 'pin') extra.push(t('logged by pin position'))
   return [e.charAt(0).toUpperCase() + e.slice(1), ...extra].filter(Boolean).join('. ')
 })
 </script>

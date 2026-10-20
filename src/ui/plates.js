@@ -13,6 +13,13 @@ export function dayPlate (index) {
   return DAY_PLATES[index % DAY_PLATES.length]
 }
 
+// Literal colours for drawing on a canvas (share images), where CSS variables don't apply
+const HEX = { red: '#C7322B', blue: '#2457B5', yellow: '#F2B33D', green: '#23824F', white: '#E6EAEF', free: '#E6EAEF' }
+export function plateHex (index) {
+  const p = dayPlate(index)
+  return { bg: HEX[p.name], fg: p.name === 'free' ? '#15202E' : p.fg }
+}
+
 export function plateStyle (index) {
   const p = dayPlate(index)
   return { '--plate-bg': p.bg, '--plate-fg': p.fg }

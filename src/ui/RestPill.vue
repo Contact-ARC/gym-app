@@ -2,8 +2,8 @@
   <Transition name="fade">
     <button v-if="show" class="rest-pill" :class="{ done: rest.done }" @click="goWorkout">
       <Icon name="timer" :size="20" />
-      <span class="t-num rp-time">{{ rest.done ? 'Go' : mmss(rest.remaining) }}</span>
-      <span class="rp-label">{{ rest.done ? 'Rest over' : 'Resting' }}</span>
+      <span class="t-num rp-time">{{ rest.done ? t('Go') : mmss(rest.remaining) }}</span>
+      <span class="rp-label">{{ rest.done ? t('Rest over') : t('Resting') }}</span>
       <Icon name="chevronRight" :size="20" />
     </button>
   </Transition>

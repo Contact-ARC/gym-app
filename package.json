@@ -1,13 +1,14 @@
 {
   "name": "gym-app",
   "private": true,
-  "version": "0.3.1",
+  "version": "0.4.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test test/*.test.js",
+    "test": "node --test test/*.test.js && node scripts/i18n-check.mjs --strict",
+    "i18n": "node scripts/i18n-check.mjs",
     "android:sync": "vite build && cap sync android",
     "android:open": "cap open android"
   },

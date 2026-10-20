@@ -12,9 +12,16 @@ export default createRouter({
     { path: '/summary/:id', name: 'summary', component: () => import('./views/SummaryView.vue'), meta: { hideNav: true } },
     { path: '/history', name: 'history', component: () => import('./views/HistoryView.vue'), meta: { tab: 'progress' } },
     { path: '/progress', name: 'progress', component: () => import('./views/ProgressView.vue'), meta: { tab: 'progress' } },
+    { path: '/body', name: 'body', component: () => import('./views/BodyView.vue'), meta: { tab: 'progress' } },
+    { path: '/report/:month?', name: 'report', component: () => import('./views/ReportView.vue'), meta: { tab: 'progress' } },
+    { path: '/crew', name: 'crew', component: () => import('./views/CrewView.vue'), meta: { tab: 'crew' } },
     { path: '/tools', name: 'tools', component: () => import('./views/ToolsView.vue'), meta: { tab: 'tools' } },
-    { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue'), meta: { tab: 'settings' } },
+    { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue'), meta: { tab: 'home' } },
     { path: '/:pathMatch(.*)*', redirect: '/' }
   ],
-  scrollBehavior: (to, from, saved) => saved || { top: 0 }
+  scrollBehavior: (to, from, saved) => {
+    if (saved) return saved
+    if (to.hash) return { el: to.hash, top: 12, behavior: 'smooth' }
+    return { top: 0 }
+  }
 })

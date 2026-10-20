@@ -19,6 +19,9 @@ so a new month never needs a new APK. Workout history lives only on each phone.
 - **Tools**: effort / one-rep-max calculator with "what should I lift next", plate calculator with competition plate colours, warm-up ramp
 - **Settings**: name, kg/lb, light/dark/auto theme, your gym's weight jumps, rest alerts, backup export/import, routine source, bug-report details
 - First-run welcome (name + units), Android back button closes sheets first, works offline (fonts bundled)
+- **v0.4, the crew**: English and Spanish (follows the phone, or pick it in Settings; exercises and routines carry their own Spanish text), beginner track (routine items can have a `beginner` version), monthly challenge from the routine file, crew board (weekly ranking, streaks, feed with records and high fives) on Supabase
+- **v0.4, data safety**: automatic weekly backups to `Documents/GymCrew` (last 6 kept; survive uninstalling), restore from them in Settings, CSV export of every set and of body entries
+- **v0.4, motivation**: week streaks (2+ workouts a week), month report (shown once when a new month starts, and in Progress → Reports), share images for a workout or a month, rep records and longest holds, bodyweight + measurements + private progress photos, hard sets per muscle against a 10–20 target (changeable), calendar in History
 
 ## First-time setup (one person does this once)
 
@@ -75,6 +78,32 @@ git tag v0.1.0 && git push --tags
 Actions → **Build & release APK** builds, signs and attaches `gym-crew-0.1.0.apk` to a GitHub Release
 (~5–8 minutes). You can also run it manually from the Actions tab (it then uploads the APK as a build artifact instead of a release).
 
+## Crew board (optional, one person does this once)
+The crew board runs on a free Supabase project. Until it's set up the Crew tab just explains that; everything else works.
+
+1. Create a free project at [supabase.com](https://supabase.com) (any EU region).
+2. Dashboard → **SQL Editor** → New query → paste all of [`supabase/crew.sql`](supabase/crew.sql) → **Run**.
+   It's safe to run again later; it only adds what's missing.
+3. Dashboard → **Project Settings → API Keys**: copy the **publishable** key (`sb_publishable_…`).
+   Project URL is on the project's home page (`https://<id>.supabase.co`).
+4. Add this to `gym-routines/latest.json` and push:
+   ```json
+   "crew": { "url": "https://<id>.supabase.co", "anonKey": "sb_publishable_…" }
+   ```
+   Every phone picks it up the next time it checks the routine. No new APK needed.
+
+Notes:
+- The public key is meant to be public. The tables have row level security on with no policies, and the
+  anon role has no table rights, so the app can only call the `crew_*` functions. Each phone has a random
+  secret; the database stores only its hash, and every write checks it. The crew code is the invite.
+- If the app shows an auth error with the publishable key, use the legacy `anon` key instead
+  (same page, "Legacy API keys" tab). Both work with the same SQL.
+- Free Supabase projects pause after about a week with no activity. If that happens, press Restore in the
+  dashboard. The app queues posts while it can't reach the board and sends them later.
+- Shared: display name, workouts (day, length, sets, volume, records) and weekly totals. Never shared:
+  notes, body weight, measurements, photos. Anyone can turn off posting to the feed, or leave the crew
+  (which deletes their posts).
+
 ## Installing on a phone
 1. On the phone, open GitHub in Chrome, signed in to the account, → `gym-app` → Releases → download the APK.
 2. Open it. Android asks to allow installs from Chrome ("Install unknown apps") — allow it once.
@@ -91,7 +120,7 @@ The tag must match `package.json`'s version (CI checks).
 ## Local development
 ```bash
 npm install
-npm test                  # progression / 1RM / plates logic
+npm test                  # progression, records, streaks, reports + Spanish coverage
 npm run dev               # browser at http://localhost:5173 (use phone size in devtools)
 ```
 To test against a local copy of the routines, serve that folder with CORS and point the app at it:
@@ -112,7 +141,14 @@ src/
   lib/native.js        Capacitor wrappers with browser fallbacks
   ui/                  design system: Sheet, Stepper, Segmented, Toggle, Toast, PlateBadge, icons
   styles/base.css      colour tokens (light + dark), type, buttons, lists
-  views/               Home, Day, Exercise, Workout, Summary, Progress, History, Tools, Settings, Welcome
+  lib/stats.js         streaks, month report, calendar, muscle volume, challenges (unit-tested)
+  lib/crew.js          crew board client (plain fetch to Supabase RPC) + offline queue
+  lib/backup.js        automatic backups + CSV export
+  lib/shareCard.js     canvas-drawn share images
+  lib/photos.js        progress photos (resized, app storage only)
+  i18n/                t() translation helper + es.js (check coverage: npm run i18n)
+  views/               Home, Day, Exercise, Workout, Summary, Progress, History, Report, Body, Crew, Tools, Settings, Welcome
+supabase/crew.sql      crew board database setup (run once in Supabase)
 android/               Capacitor Android project (signing reads env vars from CI)
 assets/                icon sources (regenerate: npx @capacitor/assets generate --android)
 .github/workflows/     release.yml
@@ -120,8 +156,13 @@ assets/                icon sources (regenerate: npx @capacitor/assets generate 
 
 ## Data & backups
 - Stored in the app's private storage as `gym-data.json` (written atomically after every set).
-- Android's own Google backup includes it if the phone has backup enabled, but don't rely on that alone —
-  use **Settings → Export** every couple of weeks (the app nags after 14 days).
+- **Automatic backups** (v0.4): weekly by default (or after every workout) to `Documents/GymCrew`, newest 6 kept.
+  They survive uninstalling the app. After a reinstall Android may not let the app list the old files,
+  so use **Import** and pick one from that folder. If `Documents` isn't writable the app falls back to its own storage.
+- That still lives on the phone, so **Settings → Export** a copy off it now and then (the app reminds you after
+  14 days, or 35 while automatic backups are working).
+- **CSV export**: one row per set (`gym-crew-sets-*.csv`) plus body entries, for Sheets/Excel. Column names stay English.
+- Progress photos are stored only in app storage and are **not** in backups.
 - **Import** replaces all data on the phone with the backup — handy when switching phones.
 - Machine/cable weights are logged as **pin positions** so different stacks don't corrupt your kg charts.
 - Dumbbell weights are logged **per dumbbell**.

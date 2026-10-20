@@ -15,9 +15,19 @@ import App from './App.vue'
 import router from './router.js'
 import { initStore, state, days, activeSession, startSession } from './store.js'
 import { closeTopOverlay } from './ui/overlay.js'
+import { t, tn, setLang, deviceLang } from './i18n/index.js'
+import { initCrew } from './lib/crew.js'
+import { initAutoBackup } from './lib/backup.js'
 
 initStore().then(() => {
-  createApp(App).use(router).mount('#app')
+  setLang(state.data.settings.lang || deviceLang())
+  const app = createApp(App).use(router)
+  // t() and tn() are available in every template without importing them
+  app.config.globalProperties.t = t
+  app.config.globalProperties.tn = tn
+  app.mount('#app')
+  initCrew()
+  initAutoBackup()
 
   // Android back: close an open sheet first, then go back, then exit from the home screen
   CapApp.addListener('backButton', ({ canGoBack }) => {

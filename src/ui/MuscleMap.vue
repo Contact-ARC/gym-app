@@ -16,7 +16,7 @@
           <ellipse v-if="m.t === 'ellipse'" v-bind="m.a" />
           <path v-else v-bind="m.a" />
         </g>
-        <text x="50" y="208" text-anchor="middle" class="cap">{{ fig.name }}</text>
+        <text x="50" y="208" text-anchor="middle" class="cap">{{ t(fig.name) }}</text>
       </g>
     </svg>
   </figure>
@@ -25,6 +25,7 @@
 <script setup>
 import { computed } from 'vue'
 import { muscleLabel } from '../lib/format.js'
+import { t } from '../i18n/index.js'
 
 const props = defineProps({
   primary: { type: Array, default: () => [] },
@@ -34,7 +35,7 @@ const props = defineProps({
 const label = computed(() => {
   const p = props.primary.map(muscleLabel).join(', ')
   const s = props.secondary.map(muscleLabel).join(', ')
-  return `Muscles worked: ${p}${s ? `. Also: ${s}` : ''}`
+  return s ? t('Muscles worked: {p}. Also: {s}', { p, s }) : t('Muscles worked: {p}', { p })
 })
 
 function cls (k) {
@@ -78,7 +79,7 @@ const back = [
   ...pair(s => E('calves', mx(40, s), 170, 6, 14, s * 3))
 ]
 
-const figures = [{ name: 'Front', muscles: front }, { name: 'Back', muscles: back }]
+const figures = [{ name: 'body|Front', muscles: front }, { name: 'body|Back', muscles: back }]
 </script>
 
 <style scoped>

@@ -10,15 +10,29 @@
   <Toast :bottom="toastBottom" :top="toastTop" />
 
   <!-- New month's routine -->
-  <Sheet :model-value="!!announce" :title="announce?.title" @update:model-value="(v) => !v && markRoutineSeen()">
+  <Sheet :model-value="!!announce" :title="tx(announce, 'title')" @update:model-value="(v) => !v && markRoutineSeen()">
     <template v-if="announce">
-      <p v-if="announce.description" class="t-body t-muted">{{ announce.description }}</p>
+      <p v-if="tx(announce, 'description')" class="t-body t-muted">{{ tx(announce, 'description') }}</p>
       <ul class="news">
-        <li v-for="(w, i) in announce.whatsNew" :key="i">{{ w }}</li>
+        <li v-for="(w, i) in tx(announce, 'whatsNew')" :key="i">{{ w }}</li>
       </ul>
+      <div v-if="announce.challenge" class="ch card-pad">
+        <div class="t-tiny t-muted up">{{ t('This month\'s challenge') }}</div>
+        <div class="t-h3">{{ tx(announce.challenge, 'title') }}</div>
+        <p v-if="tx(announce.challenge, 'description')" class="t-small t-muted">{{ tx(announce.challenge, 'description') }}</p>
+      </div>
     </template>
     <template #actions>
-      <button class="btn btn-primary btn-lg" @click="markRoutineSeen">Got it</button>
+      <button class="btn btn-primary btn-lg" @click="markRoutineSeen">{{ t('Got it') }}</button>
+    </template>
+  </Sheet>
+
+  <!-- Last month's report, once, at the start of a new month -->
+  <Sheet :model-value="!!reportToShow" :title="t('Your {month} in numbers', { month: monthName(reportToShow || '', { month: 'long' }) })" @update:model-value="(v) => !v && seeReport(false)">
+    <p class="t-body t-muted">{{ t('A new month started. Here\'s how the last one went: workouts, records and your biggest gains.') }}</p>
+    <template #actions>
+      <button class="btn btn-primary btn-lg" @click="seeReport(true)">{{ t('See my report') }}</button>
+      <button class="btn btn-ghost" @click="seeReport(false)">{{ t('Later') }}</button>
     </template>
   </Sheet>
 
@@ -27,18 +41,24 @@
 
 <script setup>
 import { computed, watch, watchEffect } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import BottomNav from './ui/BottomNav.vue'
 import RestPill from './ui/RestPill.vue'
 import Toast from './ui/Toast.vue'
 import Sheet from './ui/Sheet.vue'
 import WelcomeSheet from './views/WelcomeSheet.vue'
-import { state, newRoutineToAnnounce, markRoutineSeen, days } from './store.js'
+import { state, newRoutineToAnnounce, markRoutineSeen, days, persist } from './store.js'
 import { scheduleReminders } from './lib/reminders.js'
-import { dayTitle } from './lib/format.js'
+import { dayTitle, monthName } from './lib/format.js'
 import { rest } from './lib/restTimer.js'
+import { t, tx, setLang, deviceLang, i18n } from './i18n/index.js'
+import { monthKey, shiftMonth, sessionsInMonth } from './lib/stats.js'
 
 const route = useRoute()
+const router = useRouter()
+
+// Language: the setting, or the phone's language
+watchEffect(() => setLang(state.data.settings.lang || deviceLang()))
 
 // Don't interrupt a workout or a first-run welcome with the routine announcement
 const announce = computed(() => {
@@ -46,6 +66,21 @@ const announce = computed(() => {
   if (!state.data.welcomed && !state.data.sessions.length) return null
   return newRoutineToAnnounce.value
 })
+
+// Month report: first time the app opens in a new month, if last month had workouts
+const reportToShow = computed(() => {
+  if (route.meta.hideNav || announce.value || !state.data.welcomed) return null
+  const last = shiftMonth(monthKey(new Date(state.today + 'T12:00:00')), -1)
+  if (state.data.reportsSeen[last]) return null
+  return sessionsInMonth(state.data.sessions, last).length ? last : null
+})
+function seeReport (open) {
+  const m = reportToShow.value
+  if (!m) return
+  state.data.reportsSeen[m] = true
+  persist()
+  if (open) router.push(`/report/${m}`)
+}
 
 // In a workout the bottom is busy (rest timer, log button), so messages drop in from the top
 const toastTop = computed(() => (route.name === 'workout' ? 'calc(var(--safe-top) + 64px)' : ''))
@@ -74,12 +109,12 @@ watchEffect(() => {
 // Keep the weekly reminders in sync with the settings and the next day in the rotation
 let remTimer = null
 watch(
-  () => [JSON.stringify(state.data.settings.reminders), state.data.nextDayIndex, days.value.length],
+  () => [JSON.stringify(state.data.settings.reminders), state.data.nextDayIndex, days.value.length, i18n.lang],
   () => {
     clearTimeout(remTimer)
     remTimer = setTimeout(() => {
       const d = days.value[state.data.nextDayIndex] || days.value[0]
-      const body = d ? `Next up: day ${d.id}, ${dayTitle(d.name, d.id)}` : 'Time to train'
+      const body = d ? t('Next up: day {id}, {name}', { id: d.id, name: dayTitle(tx(d, 'name'), d.id) }) : t('Time to train')
       scheduleReminders(state.data.settings.reminders, body)
     }, 800)
   },
@@ -90,4 +125,7 @@ watch(
 <style scoped>
 .news { margin: 14px 0 0 20px; }
 .news li { margin-bottom: 8px; font-size: 16px; }
+.ch { margin-top: 14px; background: var(--card-2); border-radius: var(--r-card); }
+.ch .t-small { margin-top: 4px; }
+.up { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
 </style>

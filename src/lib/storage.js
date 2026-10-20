@@ -4,6 +4,7 @@
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { DATA_SCHEMA_VERSION } from '../config.js'
 import { DEFAULT_INCREMENTS, DEFAULT_BAR } from './training.js'
+import { t } from '../i18n/index.js'
 
 const FILE = 'gym-data.json'
 const TMP = 'gym-data.tmp.json'
@@ -18,7 +19,8 @@ export function emptyData () {
       bodyweight: null,
       increments: { ...DEFAULT_INCREMENTS.kg },
       bar: DEFAULT_BAR.kg,
-      theme: 'system'
+      theme: 'system',
+      level: 'standard' // standard | beginner (routine track)
     },
     settings: {
       routinesUrl: null, // null = use DEFAULT_ROUTINES_URL from config.js
@@ -28,7 +30,10 @@ export function emptyData () {
       restWarn: true, // buzz with 10 seconds left
       textSize: 'normal', // normal | large
       reminders: { days: [], time: '18:00' }, // days: 1=Mon … 7=Sun
-      equipment: {} // { [tag]: false } for equipment your gym doesn't have
+      equipment: {}, // { [tag]: false } for equipment your gym doesn't have
+      lang: null, // null = follow the phone (en | es)
+      autoBackup: 'weekly', // off | weekly | workout
+      volumeTarget: [10, 20] // hard sets per muscle per week
     },
     sessions: [], // [{ id, startedAt, finishedAt, routineMonth, dayId, dayName, items:[], sets:[], notes }]
     activeSessionId: null,
@@ -40,7 +45,13 @@ export function emptyData () {
     lastBackupAt: null,
     welcomed: false,
     machineSettings: {}, // { [exerciseId]: [{ label, value }] }
-    tips: {} // first-time hints already shown
+    tips: {}, // first-time hints already shown
+    // v0.4
+    autoBackup: { lastAt: null, lastFile: null, lastError: null, where: null },
+    body: { entries: [], photos: [] }, // entries: [{ id, date, weight, unit, waist, chest, arm, thigh, hips, mUnit }]; photos: [{ id, date, file, pose }]
+    challenges: {}, // { [routineMonth]: { manual: number, doneAt } }
+    reportsSeen: {}, // { [month]: true } month reports already shown
+    crew: { code: null, name: '', memberId: null, key: null, shareFeed: true, queue: [], lastSync: null, url: null, anonKey: null }
   }
 }
 
@@ -54,8 +65,14 @@ export function migrate (data) {
     settings: { ...base.settings, ...(data.settings || {}), reminders: { ...base.settings.reminders, ...(data.settings?.reminders || {}) }, equipment: { ...(data.settings?.equipment || {}) } },
     cache: { ...base.cache, ...(data.cache || {}) },
     machineSettings: { ...(data.machineSettings || {}) },
-    tips: { ...(data.tips || {}) }
+    tips: { ...(data.tips || {}) },
+    autoBackup: { ...base.autoBackup, ...(data.autoBackup || {}) },
+    body: { entries: [...(data.body?.entries || [])], photos: [...(data.body?.photos || [])] },
+    challenges: { ...(data.challenges || {}) },
+    reportsSeen: { ...(data.reportsSeen || {}) },
+    crew: { ...base.crew, ...(data.crew || {}), queue: [...(data.crew?.queue || [])] }
   }
+  if (!Array.isArray(out.settings.volumeTarget) || out.settings.volumeTarget.length !== 2) out.settings.volumeTarget = base.settings.volumeTarget
   // if (out.schemaVersion < 2) { ...transform...; out.schemaVersion = 2 }
   out.schemaVersion = DATA_SCHEMA_VERSION
   return out
@@ -96,12 +113,12 @@ export function saveData (data) {
 /** Validate an imported backup. Throws with a readable message. */
 export function parseBackup (text) {
   let obj
-  try { obj = JSON.parse(text) } catch { throw new Error('That file is not valid JSON.') }
+  try { obj = JSON.parse(text) } catch { throw new Error(t('That file is not valid JSON.')) }
   if (!obj || typeof obj !== 'object' || !Array.isArray(obj.sessions)) {
-    throw new Error("That file doesn't look like a Gym Crew backup.")
+    throw new Error(t("That file doesn't look like a Gym Crew backup."))
   }
   if ((obj.schemaVersion || 0) > DATA_SCHEMA_VERSION) {
-    throw new Error('This backup was made by a newer app version. Update the app first.')
+    throw new Error(t('This backup was made by a newer app version. Update the app first.'))
   }
   return migrate(obj)
 }

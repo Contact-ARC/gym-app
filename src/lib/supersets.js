@@ -11,12 +11,3 @@ export function effectiveRest (items, i) {
   }
   return it.restSec ?? 90
 }
-
-/** Index of the next exercise to do after logging a set of items[i] (for the rest-timer label). */
-export function nextInGroup (items, i) {
-  const it = items[i]
-  if (!it?.group) return i
-  const groupIdx = items.map((x, j) => (x.group === it.group ? j : -1)).filter(j => j >= 0)
-  const pos = groupIdx.indexOf(i)
-  return groupIdx[(pos + 1) % groupIdx.length]
-}

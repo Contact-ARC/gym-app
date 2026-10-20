@@ -6,6 +6,7 @@ import { KeepAwake } from '@capacitor-community/keep-awake'
 import { Share } from '@capacitor/share'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { Browser } from '@capacitor/browser'
+import { t } from '../i18n/index.js'
 
 export const isNative = Capacitor.isNativePlatform()
 
@@ -51,8 +52,8 @@ export async function scheduleRestNotification (at, body) {
     await LocalNotifications.schedule({
       notifications: [{
         id: REST_NOTIF_ID,
-        title: 'Rest over',
-        body: body || 'Time for your next set 💪',
+        title: t('Rest over'),
+        body: body || t('Time for your next set 💪'),
         schedule: { at: new Date(at), allowWhileIdle: true }
       }]
     })
@@ -70,7 +71,7 @@ export async function shareText (title, text) {
   try {
     if (isNative) await Share.share({ title, text, dialogTitle: title })
     else if (navigator.share) await navigator.share({ title, text })
-    else { await navigator.clipboard.writeText(text); return 'copied' }
+    else return (await copyText(text)) ? 'copied' : 'failed'
     return 'shared'
   } catch (e) {
     if (String(e?.message || e).toLowerCase().includes('cancel')) return 'cancelled'
@@ -91,12 +92,34 @@ export async function shareBackupFile (filename, json) {
   }
   const res = await Filesystem.writeFile({ path: filename, data: json, directory: Directory.Cache, encoding: Encoding.UTF8 })
   try {
-    await Share.share({ title: 'Gym Crew backup', files: [res.uri], dialogTitle: 'Save your backup' })
+    await Share.share({ title: t('Gym Crew backup'), files: [res.uri], dialogTitle: t('Save your backup') })
     return 'shared'
   } catch (e) {
     if (String(e?.message || e).toLowerCase().includes('cancel')) return 'cancelled'
     throw e
   }
+}
+
+/** Share one or more files already written to disk (uris), e.g. CSVs or an image. */
+export async function shareFiles (uris, title) {
+  try {
+    await Share.share({ title, files: uris, dialogTitle: title })
+    return 'shared'
+  } catch (e) {
+    if (String(e?.message || e).toLowerCase().includes('cancel')) return 'cancelled'
+    throw e
+  }
+}
+
+/** Browser fallback: download a Blob or data URL. */
+export function downloadFile (filename, blobOrUrl) {
+  const a = document.createElement('a')
+  a.href = typeof blobOrUrl === 'string' ? blobOrUrl : URL.createObjectURL(blobOrUrl)
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  if (typeof blobOrUrl !== 'string') setTimeout(() => URL.revokeObjectURL(a.href), 5000)
 }
 
 export async function copyText (text) {

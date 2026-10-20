@@ -2,26 +2,26 @@
   <div v-if="session" class="wk" :style="plateVars">
     <!-- Header -->
     <header class="wk-head">
-      <button class="icon-btn" :aria-label="editingFinished ? 'Back to the summary' : 'Back to home (workout keeps running)'" @click="leave">
+      <button class="icon-btn" :aria-label="editingFinished ? t('Back to the summary') : t('Back to home (workout keeps running)')" @click="leave">
         <Icon :name="editingFinished ? 'back' : 'close'" />
       </button>
       <div class="grow wk-title">
-        <div class="t-h3 truncate">{{ editingFinished ? 'Editing workout' : dayTitle(session.dayName, session.dayId) }}</div>
+        <div class="t-h3 truncate">{{ editingFinished ? t('Editing workout') : sessionTitle(session) }}</div>
         <div class="t-tiny t-muted t-num">
           <template v-if="editingFinished">{{ fmtDate(session.startedAt) }}</template>
-          <template v-else>{{ elapsed }}<span class="sep" />{{ doneSets }} of {{ plannedSets }} sets</template>
+          <template v-else>{{ elapsed }}<span class="sep" />{{ t('{a} of {b} sets', { a: doneSets, b: plannedSets }) }}</template>
         </div>
       </div>
-      <button class="icon-btn" aria-label="Workout options" @click="menuOpen = true"><Icon name="more" /></button>
-      <button v-if="editingFinished" class="btn btn-sm btn-primary" @click="leave">Done</button>
-      <button v-else class="btn btn-sm btn-primary" @click="finishOpen = true">Finish</button>
+      <button class="icon-btn" :aria-label="t('Workout options')" @click="menuOpen = true"><Icon name="more" /></button>
+      <button v-if="editingFinished" class="btn btn-sm btn-primary" @click="leave">{{ t('Done') }}</button>
+      <button v-else class="btn btn-sm btn-primary" @click="finishOpen = true">{{ t('Finish') }}</button>
     </header>
     <div class="wk-progress" role="progressbar" :aria-valuenow="doneSets" :aria-valuemax="plannedSets">
       <div :style="{ width: progressPct + '%' }" />
     </div>
 
     <!-- Exercise strip -->
-    <div v-if="items.length" class="strip" role="tablist" aria-label="Exercises">
+    <div v-if="items.length" class="strip" role="tablist" :aria-label="t('Exercises')">
       <button
         v-for="(e, ei) in entries" :key="ei" :ref="(el) => (chips[ei] = el)"
         class="chip" role="tab" :aria-selected="e.indices.includes(current)"
@@ -38,9 +38,9 @@
 
     <!-- Empty free session -->
     <main v-if="!items.length" class="wk-empty page no-nav">
-      <p class="t-h2">What are you training?</p>
-      <p class="t-muted t-small">Add the exercises as you go. They're saved like any other workout.</p>
-      <button class="btn btn-primary btn-lg btn-block" @click="addOpen = true"><Icon name="plus" />Add an exercise</button>
+      <p class="t-h2">{{ t('What are you training?') }}</p>
+      <p class="t-muted t-small">{{ t("Add the exercises as you go. They're saved like any other workout.") }}</p>
+      <button class="btn btn-primary btn-lg btn-block" @click="addOpen = true"><Icon name="plus" />{{ t('Add an exercise') }}</button>
     </main>
 
     <!-- Current exercise -->
@@ -48,17 +48,17 @@
       <!-- First workout only: how the screen works -->
       <div v-if="!state.data.tips.workout && !editingFinished" class="tip">
         <div class="grow t-small">
-          <b>Tips:</b> swipe left or right to switch exercises. Tap a logged set to change it. Hold − or + to change numbers quickly.
+          <b>{{ t('Tips:') }}</b> {{ t('swipe left or right to switch exercises. Tap a logged set to change it. Hold − or + to change numbers quickly.') }}
         </div>
-        <button class="btn btn-sm btn-soft" @click="dismissTip">Got it</button>
+        <button class="btn btn-sm btn-soft" @click="dismissTip">{{ t('Got it') }}</button>
       </div>
 
       <div v-if="group" class="ss-card" :key="'ss' + group.indices[0]">
         <div class="ss-head t-small">
           <Icon name="superset" :size="18" />
-          <span><b>Superset.</b> One set of each, back to back, then rest {{ restLabel(groupRest).replace(' rest', '') }}.</span>
+          <span><b>{{ t('Superset.') }}</b> {{ t('One set of each, back to back, then rest {t}.', { t: restShort(groupRest) }) }}</span>
         </div>
-        <div class="ss-tabs" role="tablist" aria-label="Exercises in this superset">
+        <div class="ss-tabs" role="tablist" :aria-label="t('Exercises in this superset')">
           <button
             v-for="(gi, k) in group.indices" :key="gi" class="ss-tab" role="tab"
             :aria-selected="gi === current" :class="{ on: gi === current, done: isComplete(gi) }"
@@ -69,18 +69,18 @@
             <Icon v-if="isComplete(gi)" name="checkBold" :size="15" />
           </button>
         </div>
-        <div class="ss-grid t-num" :style="{ gridTemplateColumns: `28px repeat(${groupRounds}, minmax(0, 1fr))` }" aria-label="Rounds">
+        <div class="ss-grid t-num" :style="{ gridTemplateColumns: `28px repeat(${groupRounds}, minmax(0, 1fr))` }" :aria-label="t('Rounds')">
           <span />
-          <span v-for="r in groupRounds" :key="'h' + r" class="ss-rh">Round {{ r }}</span>
+          <span v-for="r in groupRounds" :key="'h' + r" class="ss-rh">{{ t('Round {n}', { n: r }) }}</span>
           <template v-for="(gi, k) in group.indices" :key="'row' + gi">
             <span class="ss-letter sm">{{ letters[k] }}</span>
             <button
               v-for="r in groupRounds" :key="gi + ':' + r" class="ss-cell"
               :class="{ done: !!planLogged(gi)[r - 1], now: gi === current && r === planLogged(gi).length + 1, off: r > rowCount(gi) }"
               :disabled="!planLogged(gi)[r - 1] && gi === current"
-              :aria-label="planLogged(gi)[r - 1] ? `Edit ${letters[k]}, round ${r}` : `${letters[k]}, round ${r}`"
+              :aria-label="planLogged(gi)[r - 1] ? t('Edit {x}, round {n}', { x: letters[k], n: r }) : t('{x}, round {n}', { x: letters[k], n: r })"
               @click="planLogged(gi)[r - 1] ? openEdit(planLogged(gi)[r - 1]) : go(gi, 'swap')"
-            >{{ planLogged(gi)[r - 1] ? setText(planLogged(gi)[r - 1]) : (gi === current && r === planLogged(gi).length + 1 ? 'now' : '') }}</button>
+            >{{ planLogged(gi)[r - 1] ? setText(planLogged(gi)[r - 1]) : (gi === current && r === planLogged(gi).length + 1 ? t('now') : '') }}</button>
           </template>
         </div>
       </div>
@@ -88,24 +88,25 @@
       <Transition :name="slideDir" mode="out-in">
         <section :key="current + ':' + item.exerciseId" class="ex">
           <div class="row ex-top">
-            <button v-if="thumb" class="thumb" aria-label="How to do it" @click="infoOpen = true">
+            <button v-if="thumb" class="thumb" :aria-label="t('How to do it')" @click="infoOpen = true">
               <img :src="thumb" alt="" @error="(e) => (e.target.parentElement.style.display = 'none')">
             </button>
             <div class="grow">
-              <h1 class="t-title" :class="{ 'in-ss': !!group }" @click="infoOpen = true">{{ ex?.name || item.exerciseId }}</h1>
+              <h1 class="t-title" :class="{ 'in-ss': !!group }" @click="infoOpen = true">{{ name(item.exerciseId) }}</h1>
               <div class="t-small t-muted ex-meta">
                 <span>{{ prescription({ ...item, sets: rowCount(current) }, ex) }}</span>
                 <span v-if="restSecs">{{ restLabel(restSecs) }}</span>
-                <span v-if="item.exerciseId !== item.originalExerciseId" class="t-faint">replaces {{ name(item.originalExerciseId) }}</span>
+                <span v-if="item.exerciseId !== item.originalExerciseId" class="t-faint">{{ t('replaces {name}', { name: name(item.originalExerciseId) }) }}</span>
+                <span v-if="item.track" class="t-faint">{{ t('beginner version') }}</span>
               </div>
             </div>
-            <button class="icon-btn info-btn" aria-label="How to do it" @click="infoOpen = true"><Icon name="info" /></button>
-            <button class="icon-btn" aria-label="Exercise options" @click="exMenuOpen = true"><Icon name="more" /></button>
+            <button class="icon-btn info-btn" :aria-label="t('How to do it')" @click="infoOpen = true"><Icon name="info" /></button>
+            <button class="icon-btn" :aria-label="t('Exercise options')" @click="exMenuOpen = true"><Icon name="more" /></button>
           </div>
 
           <div v-if="targetLine || session.easy || machine.length" class="tags">
             <span v-if="targetLine" class="pill" :class="{ 'pill-warn': session.plan?.deload }">{{ targetLine }}</span>
-            <span v-if="session.easy" class="pill pill-warn"><Icon name="deload" :size="16" />Lighter day</span>
+            <span v-if="session.easy" class="pill pill-warn"><Icon name="deload" :size="16" />{{ t('Lighter day') }}</span>
             <button v-for="r in machine" :key="r.label" class="pill ms" @click="msOpen = true">
               {{ r.label }} <b class="t-num">{{ r.value }}</b>
             </button>
@@ -118,14 +119,14 @@
           <p v-if="state.data.exerciseNotes[item.exerciseId]" class="t-small mini-note">
             <Icon name="note" :size="16" /> {{ state.data.exerciseNotes[item.exerciseId] }}
           </p>
-          <p v-if="item.notes" class="t-small t-muted mini-note">{{ item.notes }}</p>
+          <p v-if="tx(item, 'notes')" class="t-small t-muted mini-note">{{ tx(item, 'notes') }}</p>
 
           <!-- Warm-up ramp (first lift of the day, or when the routine asks for it) -->
           <div v-if="showWarmup" class="warm card">
             <button class="warm-head" :aria-expanded="warmOpen" @click="warmOpen = !warmOpen">
               <span class="grow">
-                <b>Warm-up</b>
-                <span class="t-small t-muted">{{ warmDoneCount }} of {{ warmups.length }} done</span>
+                <b>{{ t('Warm-up') }}</b>
+                <span class="t-small t-muted">{{ t('{a} of {b} done', { a: warmDoneCount, b: warmups.length }) }}</span>
               </span>
               <Icon :name="warmOpen ? 'minus' : 'plus'" :size="20" />
             </button>
@@ -136,17 +137,17 @@
               >
                 <span class="tick"><Icon v-if="warmDone(k)" name="checkBold" :size="16" /></span>
                 <span class="grow t-num wv">{{ fmtLoad(w.load, unit) }} × {{ w.reps }}</span>
-                <span class="t-tiny t-muted">{{ w.label === 'Empty bar' ? 'empty bar' : w.label }}</span>
+                <span class="t-tiny t-muted">{{ w.label }}</span>
               </button>
-              <p class="t-tiny t-muted warm-foot">Based on {{ fmtLoad(warmBase, unit) }}. Warm-ups aren't counted in your records.</p>
+              <p class="t-tiny t-muted warm-foot">{{ t("Based on {load}. Warm-ups aren't counted in your records.", { load: fmtLoad(warmBase, unit) }) }}</p>
             </div>
           </div>
 
           <!-- Sets -->
-          <div v-if="!group" class="sets" aria-label="Sets">
+          <div v-if="!group" class="sets" :aria-label="t('Sets')">
             <button
               v-for="s in logged(current)" :key="s.id" class="set done" :class="{ extra: !fillsPlannedSet(s) }"
-              :aria-label="`${setName(s)}: ${setText(s)}. Tap to edit`" @click="openEdit(s)"
+              :aria-label="t('{name}: {value}. Tap to edit', { name: setName(s), value: setText(s) })" @click="openEdit(s)"
             >
               <span class="set-n">{{ setBadge(s) }}</span>
               <span class="t-num set-v">{{ setText(s) }}</span>
@@ -156,12 +157,12 @@
               class="set" :class="{ next: k === 1 }"
             >
               <span class="set-n">{{ planLogged(current).length + k }}</span>
-              <span class="set-v t-faint">{{ k === 1 ? 'next' : '' }}</span>
+              <span class="set-v t-faint">{{ k === 1 ? t('next') : '' }}</span>
             </div>
-            <button class="set add" aria-label="Add a set" @click="addSet"><Icon name="plus" :size="20" /></button>
+            <button class="set add" :aria-label="t('Add a set')" @click="addSet"><Icon name="plus" :size="20" /></button>
           </div>
           <p v-if="lastSameSet" class="t-small t-muted last-line">
-            Set {{ planLogged(current).length + 1 }} last time: <b class="t-num">{{ lastSameSet }}</b>
+            {{ t('Set {n} last time:', { n: planLogged(current).length + 1 }) }} <b class="t-num">{{ lastSameSet }}</b>
           </p>
 
           <!-- Inputs -->
@@ -171,34 +172,34 @@
               <p v-if="plateLine" class="t-small t-muted plate-line t-num">{{ plateLine }}</p>
             </div>
 
-            <Stepper v-if="isTimed" v-model="draft.seconds" label="Seconds" :step="5" :min="0" :format="(v) => String(Math.round(v))" />
+            <Stepper v-if="isTimed" v-model="draft.seconds" :label="t('Seconds')" :step="5" :min="0" :format="(v) => String(Math.round(v))" />
             <div v-else-if="split" class="split">
-              <Stepper v-model="draft.repsL" label="Left reps" :step="1" :min="0" size="md" />
-              <Stepper v-model="draft.repsR" label="Right reps" :step="1" :min="0" size="md" />
+              <Stepper v-model="draft.repsL" :label="t('Left reps')" :step="1" :min="0" size="md" />
+              <Stepper v-model="draft.repsR" :label="t('Right reps')" :step="1" :min="0" size="md" />
             </div>
-            <Stepper v-else v-model="draft.reps" :label="ex?.perSide ? 'Reps per side' : 'Reps'" :step="1" :min="0" />
+            <Stepper v-else v-model="draft.reps" :label="ex?.perSide ? t('Reps per side') : t('Reps')" :step="1" :min="0" />
             <button v-if="ex?.perSide && !isTimed" class="link-btn t-small" @click="toggleSplit">
-              {{ split ? 'Same reps on both sides' : 'Different reps on each side?' }}
+              {{ split ? t('Same reps on both sides') : t('Different reps on each side?') }}
             </button>
 
             <div v-if="isTimed" class="hold">
               <button class="btn btn-soft btn-block" @click="toggleHold">
                 <Icon :name="hold.running ? 'stop' : 'play'" />
-                {{ hold.running ? `Stop at ${hold.elapsed} s` : 'Time it' }}
+                {{ hold.running ? t('Stop at {n} s', { n: hold.elapsed }) : t('Time it') }}
               </button>
             </div>
 
             <template v-else>
               <div>
-                <div class="label rir-label">Reps left in the tank <span class="t-faint">(optional)</span></div>
-                <Segmented v-model="draft.rir" :options="rirOptions" allow-none label="Reps left in the tank" />
+                <div class="label rir-label">{{ t('Reps left in the tank') }} <span class="t-faint">{{ t('(optional)') }}</span></div>
+                <Segmented v-model="draft.rir" :options="rirOptions" allow-none :label="t('Reps left in the tank')" />
               </div>
-              <div class="types" role="group" aria-label="Mark this set as">
-                <span class="t-tiny t-muted">Mark as</span>
+              <div class="types" role="group" :aria-label="t('Mark this set as')">
+                <span class="t-tiny t-muted">{{ t('Mark as') }}</span>
                 <button
-                  v-for="t in typeOptions" :key="t.value" class="type-chip" :class="{ on: draft.type === t.value }"
-                  :aria-pressed="draft.type === t.value" @click="draft.type = draft.type === t.value ? null : t.value"
-                >{{ t.label }}</button>
+                  v-for="o in typeOptions" :key="o.value" class="type-chip" :class="{ on: draft.type === o.value }"
+                  :aria-pressed="draft.type === o.value" @click="draft.type = draft.type === o.value ? null : o.value"
+                >{{ o.label }}</button>
               </div>
             </template>
           </div>
@@ -213,12 +214,12 @@
           <div class="rest-bar"><div :style="{ width: restPct + '%' }" /></div>
           <div class="row">
             <div class="grow">
-              <div class="t-num rest-time">{{ rest.done ? 'Go' : mmss(rest.remaining) }}</div>
-              <div class="t-tiny rest-next truncate">{{ rest.done ? 'Rest over' : 'Resting' }}<template v-if="rest.label">, then {{ rest.label }}</template></div>
+              <div class="t-num rest-time">{{ rest.done ? t('Go') : mmss(rest.remaining) }}</div>
+              <div class="t-tiny rest-next truncate">{{ rest.done ? t('Rest over') : t('Resting') }}<template v-if="rest.label">{{ t(', then {what}', { what: rest.label }) }}</template></div>
             </div>
             <button class="btn btn-sm rest-btn" :disabled="rest.remaining <= 15" @click="addRest(-15)">−15</button>
             <button class="btn btn-sm rest-btn" @click="addRest(30)">+30</button>
-            <button class="btn btn-sm rest-btn strong" @click="stopRest">{{ rest.done ? 'OK' : 'Skip' }}</button>
+            <button class="btn btn-sm rest-btn strong" @click="stopRest">{{ rest.done ? t('OK') : t('Skip') }}</button>
           </div>
         </div>
       </Transition>
@@ -226,65 +227,65 @@
         <Icon name="check" />{{ logLabel }}
       </button>
       <button v-else class="btn btn-lg btn-block btn-primary log" @click="finishOpen = true">
-        <Icon name="trophy" />Finish workout
+        <Icon name="trophy" />{{ t('Finish workout') }}
       </button>
     </div>
 
     <!-- Workout menu -->
-    <Sheet v-model="menuOpen" title="Workout">
+    <Sheet v-model="menuOpen" :title="t('Workout')">
       <div class="group">
-        <button class="group-row" @click="menuOpen = false; addOpen = true"><Icon name="plus" /><span class="grow">Add an exercise</span></button>
+        <button class="group-row" @click="menuOpen = false; addOpen = true"><Icon name="plus" /><span class="grow">{{ t('Add an exercise') }}</span></button>
         <button v-if="!editingFinished" class="group-row" @click="toggleEasy">
           <Icon name="deload" />
           <div class="grow">
-            <div>{{ session.easy ? 'Back to a normal day' : 'Feeling rough? Make today lighter' }}</div>
-            <div class="t-tiny t-muted">{{ session.easy ? 'Restores the sets and weights' : 'About 10% lighter and one set fewer on exercises you haven\'t started' }}</div>
+            <div>{{ session.easy ? t('Back to a normal day') : t('Feeling rough? Make today lighter') }}</div>
+            <div class="t-tiny t-muted">{{ session.easy ? t('Restores the sets and weights') : t("About 10% lighter and one set fewer on exercises you haven't started") }}</div>
           </div>
         </button>
         <div class="group-row notes-row">
-          <textarea v-model="sessionNotes" class="field" rows="2" placeholder="Notes about this session" aria-label="Session notes" @blur="saveSessionNotes" />
+          <textarea v-model="sessionNotes" class="field" rows="2" :placeholder="t('Notes about this session')" :aria-label="t('Session notes')" @blur="saveSessionNotes" />
         </div>
-        <button class="group-row t-err" @click="menuOpen = false; discardOpen = true"><Icon name="trash" /><span class="grow">{{ editingFinished ? 'Delete this workout' : 'Discard this workout' }}</span></button>
+        <button class="group-row t-err" @click="menuOpen = false; discardOpen = true"><Icon name="trash" /><span class="grow">{{ editingFinished ? t('Delete this workout') : t('Discard this workout') }}</span></button>
       </div>
     </Sheet>
 
     <!-- Exercise menu -->
-    <Sheet v-model="exMenuOpen" :title="ex?.name">
+    <Sheet v-model="exMenuOpen" :title="name(item?.exerciseId)">
       <div class="group">
-        <button class="group-row" @click="exMenuOpen = false; swapOpen = true"><Icon name="swap" /><span class="grow">Swap for another exercise</span></button>
-        <button class="group-row" @click="exMenuOpen = false; infoOpen = true"><Icon name="info" /><span class="grow">How to do it</span></button>
-        <button class="group-row" @click="exMenuOpen = false; msOpen = true"><Icon name="settings" /><span class="grow">Machine settings</span></button>
-        <button class="group-row" @click="exMenuOpen = false; openNote()"><Icon name="note" /><span class="grow">{{ state.data.exerciseNotes[item.exerciseId] ? 'Edit your note' : 'Add a note for next time' }}</span></button>
-        <button class="group-row" @click="addSet(); exMenuOpen = false"><Icon name="plus" /><span class="grow">Add a set</span></button>
+        <button class="group-row" @click="exMenuOpen = false; swapOpen = true"><Icon name="swap" /><span class="grow">{{ t('Swap for another exercise') }}</span></button>
+        <button class="group-row" @click="exMenuOpen = false; infoOpen = true"><Icon name="info" /><span class="grow">{{ t('How to do it') }}</span></button>
+        <button class="group-row" @click="exMenuOpen = false; msOpen = true"><Icon name="settings" /><span class="grow">{{ t('Machine settings') }}</span></button>
+        <button class="group-row" @click="exMenuOpen = false; openNote()"><Icon name="note" /><span class="grow">{{ state.data.exerciseNotes[item.exerciseId] ? t('Edit your note') : t('Add a note for next time') }}</span></button>
+        <button class="group-row" @click="addSet(); exMenuOpen = false"><Icon name="plus" /><span class="grow">{{ t('Add a set') }}</span></button>
         <button v-if="rowCount(current) > Math.max(1, planLogged(current).length)" class="group-row" @click="removeSet(); exMenuOpen = false">
-          <Icon name="minus" /><span class="grow">Remove a set</span>
+          <Icon name="minus" /><span class="grow">{{ t('Remove a set') }}</span>
         </button>
       </div>
     </Sheet>
 
     <ExercisePicker
-      v-model="swapOpen" title="Swap exercise"
-      :suggested-ids="swapSuggestions" suggested-label="Works the same muscles"
+      v-model="swapOpen" :title="t('Swap exercise')"
+      :suggested-ids="swapSuggestions" :suggested-label="t('Works the same muscles')"
       :exclude-id="item?.exerciseId" @pick="doSwap"
     />
-    <ExercisePicker v-model="addOpen" title="Add an exercise" @pick="doAdd" />
+    <ExercisePicker v-model="addOpen" :title="t('Add an exercise')" @pick="doAdd" />
     <MachineSettingsSheet v-if="item" v-model="msOpen" :exercise-id="item.exerciseId" />
 
     <!-- Quick look at how to do the current exercise -->
-    <Sheet v-model="infoOpen" :title="ex?.name">
+    <Sheet v-model="infoOpen" :title="name(item?.exerciseId)">
       <ExerciseDetails v-if="ex" :ex="ex" in-sheet />
       <RouterLink :to="`/exercise/${item?.exerciseId}`" class="btn btn-ghost btn-block full-link" @click="infoOpen = false">
-        Your history and notes for this exercise
+        {{ t('Your history and notes for this exercise') }}
       </RouterLink>
     </Sheet>
 
     <!-- Note -->
-    <Sheet v-model="noteOpen" :title="ex?.name">
-      <label class="label" for="ex-note">Your note, shown every time you do this exercise</label>
-      <textarea id="ex-note" v-model="noteText" class="field" rows="3" placeholder="Grip, cues, how it felt" />
+    <Sheet v-model="noteOpen" :title="name(item?.exerciseId)">
+      <label class="label" for="ex-note">{{ t('Your note, shown every time you do this exercise') }}</label>
+      <textarea id="ex-note" v-model="noteText" class="field" rows="3" :placeholder="t('Grip, cues, how it felt')" />
       <template #actions>
-        <button class="btn btn-soft btn-lg" @click="noteOpen = false">Cancel</button>
-        <button class="btn btn-primary btn-lg" @click="saveNote">Save note</button>
+        <button class="btn btn-soft btn-lg" @click="noteOpen = false">{{ t('Cancel') }}</button>
+        <button class="btn btn-primary btn-lg" @click="saveNote">{{ t('Save note') }}</button>
       </template>
     </Sheet>
 
@@ -292,61 +293,61 @@
     <Sheet v-model="editOpen" :title="editing ? setName(editing) : ''">
       <div v-if="editing" class="inputs">
         <Stepper v-if="showLoad" v-model="editDraft.load" :label="loadLabel" :unit="unitText" :step="inc" :min="0" :decimals="unit !== 'pin'" size="md" />
-        <Stepper v-if="isTimed" v-model="editDraft.seconds" label="Seconds" :step="5" :min="0" size="md" />
+        <Stepper v-if="isTimed" v-model="editDraft.seconds" :label="t('Seconds')" :step="5" :min="0" size="md" />
         <div v-else-if="editDraft.repsL != null" class="split">
-          <Stepper v-model="editDraft.repsL" label="Left reps" :step="1" :min="0" size="md" />
-          <Stepper v-model="editDraft.repsR" label="Right reps" :step="1" :min="0" size="md" />
+          <Stepper v-model="editDraft.repsL" :label="t('Left reps')" :step="1" :min="0" size="md" />
+          <Stepper v-model="editDraft.repsR" :label="t('Right reps')" :step="1" :min="0" size="md" />
         </div>
-        <Stepper v-else v-model="editDraft.reps" label="Reps" :step="1" :min="0" size="md" />
+        <Stepper v-else v-model="editDraft.reps" :label="t('Reps')" :step="1" :min="0" size="md" />
         <template v-if="!isTimed">
           <div>
-            <div class="label rir-label">Reps left in the tank</div>
-            <Segmented v-model="editDraft.rir" :options="rirOptions" allow-none label="Reps left in the tank" />
+            <div class="label rir-label">{{ t('Reps left in the tank') }}</div>
+            <Segmented v-model="editDraft.rir" :options="rirOptions" allow-none :label="t('Reps left in the tank')" />
           </div>
           <div>
-            <div class="label rir-label">This set was</div>
-            <Segmented v-model="editDraft.type" :options="editTypeOptions" label="Set type" />
+            <div class="label rir-label">{{ t('This set was') }}</div>
+            <Segmented v-model="editDraft.type" :options="editTypeOptions" :label="t('Set type')" />
           </div>
         </template>
       </div>
       <template #actions>
-        <button class="btn btn-danger btn-lg" @click="removeEditing"><Icon name="trash" />Delete</button>
-        <button class="btn btn-primary btn-lg" @click="saveEdit">Save</button>
+        <button class="btn btn-danger btn-lg" @click="removeEditing"><Icon name="trash" />{{ t('Delete') }}</button>
+        <button class="btn btn-primary btn-lg" @click="saveEdit">{{ t('Save') }}</button>
       </template>
     </Sheet>
 
     <!-- Finish + check-in -->
-    <Sheet v-model="finishOpen" title="Finish workout?">
+    <Sheet v-model="finishOpen" :title="t('Finish workout?')">
       <p class="t-body">
-        You logged <b>{{ doneSets }}</b> of {{ plannedSets }} planned sets.
-        <span v-if="doneSets < plannedSets" class="t-muted">Sets you didn't log just won't be recorded.</span>
+        {{ t('You logged {a} of {b} planned sets.', { a: doneSets, b: plannedSets }) }}
+        <span v-if="doneSets < plannedSets" class="t-muted">{{ t("Sets you didn't log just won't be recorded.") }}</span>
       </p>
       <template v-if="doneSets">
-        <div class="label check-label">How hard was it? <span class="t-faint">(optional)</span></div>
-        <Segmented v-model="rating.effort" :options="effortOptions" allow-none label="How hard was it" />
-        <div class="label check-label">Your energy today</div>
-        <Segmented v-model="rating.energy" :options="energyOptions" allow-none label="Energy" />
+        <div class="label check-label">{{ t('How hard was it?') }} <span class="t-faint">{{ t('(optional)') }}</span></div>
+        <Segmented v-model="rating.effort" :options="effortOptions" allow-none :label="t('How hard was it?')" />
+        <div class="label check-label">{{ t('Your energy today') }}</div>
+        <Segmented v-model="rating.energy" :options="energyOptions" allow-none :label="t('Energy')" />
       </template>
       <template #actions>
-        <button class="btn btn-soft btn-lg" @click="finishOpen = false">Keep going</button>
-        <button v-if="doneSets" class="btn btn-primary btn-lg" @click="finish">Finish</button>
-        <button v-else class="btn btn-danger btn-lg" @click="discard">Discard</button>
+        <button class="btn btn-soft btn-lg" @click="finishOpen = false">{{ t('Keep going') }}</button>
+        <button v-if="doneSets" class="btn btn-primary btn-lg" @click="finish">{{ t('Finish') }}</button>
+        <button v-else class="btn btn-danger btn-lg" @click="discard">{{ t('Discard') }}</button>
       </template>
     </Sheet>
 
     <!-- Discard / delete -->
-    <Sheet v-model="discardOpen" :title="editingFinished ? 'Delete this workout?' : 'Discard this workout?'">
-      <p class="t-body">All {{ doneSets }} logged sets from this session will be deleted. This can't be undone.</p>
+    <Sheet v-model="discardOpen" :title="editingFinished ? t('Delete this workout?') : t('Discard this workout?')">
+      <p class="t-body">{{ tn(doneSets, "The {n} logged set from this session will be deleted. This can't be undone.", "All {n} logged sets from this session will be deleted. This can't be undone.") }}</p>
       <template #actions>
-        <button class="btn btn-soft btn-lg" @click="discardOpen = false">Keep it</button>
-        <button class="btn btn-danger btn-lg" @click="discard">{{ editingFinished ? 'Delete' : 'Discard' }}</button>
+        <button class="btn btn-soft btn-lg" @click="discardOpen = false">{{ t('Keep it') }}</button>
+        <button class="btn btn-danger btn-lg" @click="discard">{{ editingFinished ? t('Delete') : t('Discard') }}</button>
       </template>
     </Sheet>
   </div>
 
   <div v-else class="page no-nav">
-    <p class="t-h2">This workout no longer exists</p>
-    <RouterLink to="/" class="btn btn-primary btn-lg btn-block" style="margin-top: 20px">Go home</RouterLink>
+    <p class="t-h2">{{ t('This workout no longer exists') }}</p>
+    <RouterLink to="/" class="btn btn-primary btn-lg btn-block" style="margin-top: 20px">{{ t('Go home') }}</RouterLink>
   </div>
 </template>
 
@@ -364,12 +365,13 @@ import { plateStyle } from '../ui/plates.js'
 import { toast, hideToast } from '../ui/toast.js'
 import {
   state, persist, getSession, exercisesById, imageUrl, suggestionFor, historyFor, logSet, updateSet, deleteSet,
-  swapExercise, addItemToSession, finishSession, discardSession, setExerciseNote, setEasyDay
+  swapExercise, addItemToSession, finishSession, discardSession, deleteSession, setExerciseNote, setEasyDay, markSessionEdited
 } from '../store.js'
+import { t, tn, tx } from '../i18n/index.js'
 import {
   unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, DEFAULT_PLATES
 } from '../lib/training.js'
-import { prescription, restLabel, dayTitle, mmss, fmtDate } from '../lib/format.js'
+import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle } from '../lib/format.js'
 import { effectiveRest } from '../lib/supersets.js'
 import { rest, startRest, stopRest, addRest } from '../lib/restTimer.js'
 import { tap, buzz, keepAwake } from '../lib/native.js'
@@ -379,7 +381,7 @@ const router = useRouter()
 const session = computed(() => getSession(route.params.id))
 const items = computed(() => session.value?.items || [])
 const editingFinished = computed(() => !!session.value?.finishedAt)
-const name = (id) => exercisesById.value[id]?.name || id
+const name = (id) => tx(exercisesById.value[id], 'name') || id || ''
 const plateVars = computed(() => plateStyle(session.value?.dayIndex ?? -1))
 
 // ── Current exercise ───────────────────────────────────────
@@ -432,7 +434,10 @@ const thumb = computed(() => (ex.value?.images?.[0] ? imageUrl(ex.value.images[0
 const infoOpen = ref(false)
 
 const chips = []
-const shortName = (id) => name(id).replace(/^(Barbell|Dumbbell|Cable|Machine|Smith Machine|EZ-Bar)\s+/i, '')
+const shortName = (id) => name(id)
+  .replace(/^(Barbell|Dumbbell|Cable|Machine|Smith Machine|EZ-Bar)\s+/i, '')
+  .replace(/\s+(con|en)\s+(barra( EZ)?|mancuernas?|polea|máquina|multipower)$/i, '')
+const restShort = (secs) => (secs < 60 ? `${secs} s` : secs % 60 === 0 ? `${secs / 60} min` : mmss(secs))
 
 // ── Sets ───────────────────────────────────────────────────
 const logged = (i) => (session.value?.sets || []).filter(s => s.itemIndex === i && s.exerciseId === items.value[i]?.exerciseId)
@@ -474,12 +479,12 @@ const isTimed = computed(() => !!item.value?.durationSec)
 const isBodyweight = computed(() => ex.value?.logType === 'bodyweight')
 const showLoad = computed(() => !isTimed.value || !!ex.value?.loadable)
 const loadLabel = computed(() => {
-  if (unit.value === 'pin') return 'Pin'
-  if (isBodyweight.value) return 'Added weight'
-  if (ex.value?.incrementGroup === 'dumbbell') return 'Each dumbbell'
-  return 'Weight'
+  if (unit.value === 'pin') return t('Pin')
+  if (isBodyweight.value) return t('Added weight')
+  if (ex.value?.incrementGroup === 'dumbbell') return t('Each dumbbell')
+  return t('Weight')
 })
-const unitText = computed(() => (unit.value === 'pin' ? 'position on the stack' : unit.value))
+const unitText = computed(() => (unit.value === 'pin' ? t('position on the stack') : unit.value))
 const restSecs = computed(() => effectiveRest(items.value, current.value))
 const groupMates = computed(() => items.value
   .map((it, i) => ({ it, i }))
@@ -490,37 +495,37 @@ const machine = computed(() => state.data.machineSettings[item.value?.exerciseId
 const targetLine = computed(() => {
   const p = session.value?.plan
   if (!p || isTimed.value) return ''
-  if (p.deload) return 'Deload: easy sets, 3+ reps left'
+  if (p.deload) return t('Deload: easy sets, 3+ reps left')
   if (p.rir == null) return ''
-  return p.rir === 0 ? 'Target: take sets close to failure' : `Target: leave ${p.rir} rep${p.rir === 1 ? '' : 's'} in the tank`
+  return p.rir === 0 ? t('Target: take sets close to failure') : tn(p.rir, 'Target: leave {n} rep in the tank', 'Target: leave {n} reps in the tank')
 })
 
 const rirOptions = [0, 1, 2, 3, 4].map(n => ({ label: n === 4 ? '4+' : String(n), value: n }))
-const typeOptions = [
-  { label: 'Drop set', value: 'drop' }, { label: 'To failure', value: 'failure' }, { label: 'Max reps', value: 'amrap' }
-]
-const editTypeOptions = [
-  { label: 'Normal', value: null }, { label: 'Warm-up', value: 'warmup' }, { label: 'Drop', value: 'drop' },
-  { label: 'Failure', value: 'failure' }, { label: 'Max reps', value: 'amrap' }
-]
+const typeOptions = computed(() => [
+  { label: t('Drop set'), value: 'drop' }, { label: t('To failure'), value: 'failure' }, { label: t('Max reps'), value: 'amrap' }
+])
+const editTypeOptions = computed(() => [
+  { label: t('Normal'), value: null }, { label: t('Warm-up'), value: 'warmup' }, { label: t('Drop'), value: 'drop' },
+  { label: t('Failure'), value: 'failure' }, { label: t('Max reps'), value: 'amrap' }
+])
 
 function repsText (s) {
   if (s.repsL != null && s.repsR != null && s.repsL !== s.repsR) return `${s.repsL}/${s.repsR}`
   return String(s.reps)
 }
 function setText (s) {
-  if (s.seconds) return s.load ? `${s.load} for ${s.seconds}s` : `${s.seconds}s`
-  const load = s.unit === 'pin' ? `P${s.load}` : (s.load ? String(s.load) : 'BW')
+  if (s.seconds) return s.load ? t('{load} for {s}s', { load: s.load, s: s.seconds }) : `${s.seconds}s`
+  const load = s.unit === 'pin' ? `P${s.load}` : (s.load ? String(s.load) : t('BW'))
   return `${load} × ${repsText(s)}`
 }
 function setBadge (s) {
-  if (s.type === 'warmup' || s.type === 'drop') return SET_TYPES[s.type].short
+  if (s.type === 'warmup' || s.type === 'drop') return t('set|' + SET_TYPES[s.type].short)
   return planLogged(current.value).findIndex(x => x.id === s.id) + 1
 }
 function setName (s) {
-  if (s.type === 'warmup') return 'Warm-up set'
-  if (s.type === 'drop') return 'Drop set'
-  return `Set ${planLogged(current.value).findIndex(x => x.id === s.id) + 1}`
+  if (s.type === 'warmup') return t('Warm-up set')
+  if (s.type === 'drop') return t('Drop set')
+  return t('Set {n}', { n: planLogged(current.value).findIndex(x => x.id === s.id) + 1 })
 }
 
 // ── Suggestions (frozen per slot so they don't shift mid-workout) ──
@@ -538,7 +543,7 @@ const lastSameSet = computed(() => {
   const prev = historyFor(item.value.exerciseId, session.value.id)[0]
   const s = prev?.sets.filter(fillsPlannedSet)[planLogged(current.value).length]
   if (!s) return ''
-  return setText(s) + (s.rir != null ? `, ${s.rir} left` : '')
+  return setText(s) + (s.rir != null ? t(', {n} left', { n: s.rir }) : '')
 })
 
 // ── Draft values per exercise slot ─────────────────────────
@@ -572,11 +577,11 @@ function toggleSplit () {
 const plateLine = computed(() => {
   if (!isBarbellLift(ex.value) || draft.value.load == null) return ''
   const bar = profile.value.bar || 0
-  if (draft.value.load < bar) return `Lighter than the ${bar} ${unit.value} bar`
+  if (draft.value.load < bar) return t('Lighter than the {w} bar', { w: `${bar} ${unit.value}` })
   const r = platesPerSide(draft.value.load, bar, DEFAULT_PLATES[unit.value] || [])
-  if (!r.perSide.length) return 'Just the bar'
-  const extra = Math.abs(r.remainder) > 0.001 ? ` (closest: ${fmtLoad(r.achieved, unit.value)})` : ''
-  return `Each side: ${r.perSide.join(' + ')}${extra}`
+  if (!r.perSide.length) return t('Just the bar')
+  const extra = Math.abs(r.remainder) > 0.001 ? t(' (closest: {w})', { w: fmtLoad(r.achieved, unit.value) }) : ''
+  return t('Each side: {plates}', { plates: r.perSide.join(' + ') }) + extra
 })
 
 // ── Warm-ups ───────────────────────────────────────────────
@@ -615,11 +620,11 @@ const canLog = computed(() => {
   return loadOk && repsOk
 })
 const logLabel = computed(() => {
-  if (draft.value.type === 'drop') return 'Log drop set'
+  if (draft.value.type === 'drop') return t('Log drop set')
   const n = planLogged(current.value).length + 1
-  if (n > rowCount(current.value)) return 'Log an extra set'
-  if (group.value) return `Log ${letters[group.value.indices.indexOf(current.value)]}, round ${n}`
-  return `Log set ${n}`
+  if (n > rowCount(current.value)) return t('Log an extra set')
+  if (group.value) return t('Log {x}, round {n}', { x: letters[group.value.indices.indexOf(current.value)], n })
+  return t('Log set {n}', { n })
 })
 
 function logNow () {
@@ -649,8 +654,8 @@ function logNow () {
   }
   if (planLogged(i).length === 1) warmOpen.value = false
   buzz(30)
-  toast(`${wasDrop ? 'Drop set' : `Set ${planLogged(i).length}`} of ${name(it.exerciseId)} logged`, {
-    actionLabel: 'Undo',
+  toast(wasDrop ? t('Drop set of {name} logged', { name: name(it.exerciseId) }) : t('Set {n} of {name} logged', { n: planLogged(i).length, name: name(it.exerciseId) }), {
+    actionLabel: t('Undo'),
     action: () => { deleteSet(session.value.id, row.id); stopRest(); go(i) }
   })
   if (editingFinished.value || wasDrop) return
@@ -683,8 +688,8 @@ function logNow () {
     next = firstOpenAfter(i)
   }
   const label = sameGroup
-    ? `${name(items.value[next].exerciseId)}, round ${planLogged(next).length + 1}`
-    : `${name(items.value[next].exerciseId)}, set ${planLogged(next).length + 1}`
+    ? t('{name}, round {n}', { name: name(items.value[next].exerciseId), n: planLogged(next).length + 1 })
+    : t('{name}, set {n}', { name: name(items.value[next].exerciseId), n: planLogged(next).length + 1 })
   if (secs && !allDone.value) startRest(secs, allDone.value ? '' : label)
   else stopRest()
   if (next !== i) setTimeout(() => go(next, sameGroup ? 'swap' : 'slide-next'), sameGroup ? 120 : 350)
@@ -705,14 +710,14 @@ function saveEdit () {
   if (!patch.type) { delete patch.type; delete editing.value.type }
   updateSet(session.value.id, editing.value.id, patch)
   editOpen.value = false
-  toast('Set updated')
+  toast(t('Set updated'))
 }
 function removeEditing () {
   const s = { ...editing.value }
   deleteSet(session.value.id, s.id)
   editOpen.value = false
-  toast('Set deleted', {
-    actionLabel: 'Undo',
+  toast(t('Set deleted'), {
+    actionLabel: t('Undo'),
     action: () => { session.value.sets.push(s); session.value.sets.sort((a, b) => a.ts.localeCompare(b.ts)); persist() }
   })
 }
@@ -769,7 +774,7 @@ function doSwap (id) {
   const was = name(item.value.exerciseId)
   swapExercise(session.value.id, current.value, id)
   resetSuggestions()
-  toast(`Swapped ${was} for ${name(id)}`)
+  toast(t('Swapped {a} for {b}', { a: was, b: name(id) }))
 }
 function doAdd (id) {
   addItemToSession(session.value.id, id)
@@ -782,14 +787,14 @@ function toggleEasy () {
   setEasyDay(session.value.id, on)
   resetSuggestions()
   menuOpen.value = false
-  toast(on ? 'Lighter day: weights and sets reduced' : 'Back to the normal plan')
+  toast(on ? t('Lighter day: weights and sets reduced') : t('Back to the normal plan'))
 }
 
 // ── Notes, tips ────────────────────────────────────────────
 const noteOpen = ref(false)
 const noteText = ref('')
 function openNote () { noteText.value = state.data.exerciseNotes[item.value.exerciseId] || ''; noteOpen.value = true }
-function saveNote () { setExerciseNote(item.value.exerciseId, noteText.value.trim()); noteOpen.value = false; toast('Note saved') }
+function saveNote () { setExerciseNote(item.value.exerciseId, noteText.value.trim()); noteOpen.value = false; toast(t('Note saved')) }
 const sessionNotes = ref(session.value?.notes || '')
 function saveSessionNotes () { if (session.value) { session.value.notes = sessionNotes.value; persist() } }
 function dismissTip () { state.data.tips.workout = true; persist() }
@@ -818,12 +823,12 @@ const exMenuOpen = ref(false)
 const finishOpen = ref(false)
 const discardOpen = ref(false)
 const rating = reactive({ effort: null, energy: null })
-const effortOptions = [1, 2, 3, 4, 5].map(n => ({ label: ['Easy', '2', '3', '4', 'Max'][n - 1], value: n }))
-const energyOptions = [1, 2, 3, 4, 5].map(n => ({ label: ['Low', '2', '3', '4', 'High'][n - 1], value: n }))
+const effortOptions = computed(() => [1, 2, 3, 4, 5].map(n => ({ label: [t('Easy'), '2', '3', '4', t('effort|Max')][n - 1], value: n })))
+const energyOptions = computed(() => [1, 2, 3, 4, 5].map(n => ({ label: [t('Low'), '2', '3', '4', t('High')][n - 1], value: n })))
 
 function leave () {
   saveSessionNotes()
-  if (editingFinished.value) router.replace(`/summary/${route.params.id}`)
+  if (editingFinished.value) { markSessionEdited(route.params.id); router.replace(`/summary/${route.params.id}`) }
   else router.push('/')
 }
 function finish () {
@@ -837,11 +842,12 @@ function finish () {
 function discard () {
   const wasFinished = editingFinished.value
   stopRest()
-  discardSession(session.value.id)
+  if (wasFinished) deleteSession(session.value.id)
+  else discardSession(session.value.id)
   finishOpen.value = false
   discardOpen.value = false
   router.replace(wasFinished ? '/history' : '/')
-  toast(wasFinished ? 'Workout deleted' : 'Workout discarded')
+  toast(wasFinished ? t('Workout deleted') : t('Workout discarded'))
 }
 </script>
 

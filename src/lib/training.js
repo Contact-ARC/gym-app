@@ -1,4 +1,6 @@
-// Pure training math — no Vue, no Capacitor. Covered by test/training.test.js.
+// Pure training math — no Capacitor. Covered by test/training.test.js.
+// Text goes through t() so the suggestions follow the app language (English is the key).
+import { t } from '../i18n/index.js'
 
 export const KG_PER_LB = 0.45359237
 
@@ -105,7 +107,7 @@ function avg (arr) {
  */
 export function suggestNext ({ item, exercise, history = [], profile, deload = false, loadFactor = null, reason = '' }) {
   const factor = loadFactor ?? (deload ? 0.9 : 1)
-  const why = reason || (deload ? 'Deload week' : 'Lighter day')
+  const why = reason || (deload ? t('Deload week') : t('Lighter day'))
   // Warm-ups and drop sets don't say anything about your working weight
   history = history.map(h => ({ ...h, sets: h.sets.filter(isWorkSet).filter(x => x.type !== 'drop') })).filter(h => h.sets.length)
   const unit = unitFor(exercise, profile)
@@ -119,7 +121,7 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
     const secs = last ? last.sets.map(s => s.seconds).filter(Boolean) : []
     const lastLoad = last ? mostCommonLoad(last.sets) : null
     if (!secs.length) {
-      return { load: lastLoad, reps: null, seconds: lo, unit, kind: 'start', text: `Start at ${lo}s and build toward ${hi}s.` }
+      return { load: lastLoad, reps: null, seconds: lo, unit, kind: 'start', text: t('Start at {lo}s and build toward {hi}s.', { lo, hi }) }
     }
     const minSecs = Math.min(...secs)
     if (minSecs >= hi) {
@@ -127,12 +129,12 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
       return {
         load: nextLoad, reps: null, seconds: lo, unit, kind: 'up',
         text: lastLoad != null
-          ? `Held ${hi}s on every set — add load and restart at ${lo}s.`
-          : `Held ${hi}s on every set — make it harder (load or harder variation) and restart at ${lo}s.`
+          ? t('Held {hi}s on every set — add load and restart at {lo}s.', { lo, hi })
+          : t('Held {hi}s on every set — make it harder (load or harder variation) and restart at {lo}s.', { lo, hi })
       }
     }
     const target = Math.min(hi, minSecs + 5)
-    return { load: lastLoad, reps: null, seconds: target, unit, kind: 'same', text: `Last shortest set: ${minSecs}s. Aim for ${target}s.` }
+    return { load: lastLoad, reps: null, seconds: target, unit, kind: 'same', text: t('Last shortest set: {a}s. Aim for {b}s.', { a: minSecs, b: target }) }
   }
 
   const [lo, hi] = item?.repRange || [8, 12]
@@ -142,8 +144,8 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
 
   if (!sessions.length) {
     const text = logType === 'bodyweight'
-      ? `No history yet — do ${lo}–${hi} reps leaving 1–2 in the tank. Add weight once ${hi} is easy.`
-      : `No history yet — pick a weight you could lift ~${hi + 2} times, then do ${lo}–${hi} reps.`
+      ? t('No history yet — do {lo}–{hi} reps leaving 1–2 in the tank. Add weight once {hi} is easy.', { lo, hi })
+      : t('No history yet — pick a weight you could lift ~{n} times, then do {lo}–{hi} reps.', { lo, hi, n: hi + 2 })
     return { load: logType === 'bodyweight' ? 0 : null, reps: lo, seconds: null, unit, kind: 'start', text }
   }
 
@@ -159,7 +161,7 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
   const reps = atLoad.map(s => s.reps)
   const rirs = atLoad.map(s => s.rir).filter(r => r != null)
   const targetSets = item?.sets || reps.length
-  const lastStr = `${fmtLoad(lastLoad, unit)} × ${reps.join(', ')}`
+  const lastStr = `${lastLoad ? fmtLoad(lastLoad, unit) : t('BW')} × ${reps.join(', ')}`
 
   let result
   const allTop = reps.length >= targetSets && reps.every(r => r >= hi)
@@ -168,7 +170,7 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
     const jump = easy ? inc * 2 : inc
     result = {
       load: Math.round(((lastLoad || 0) + jump) * 100) / 100, reps: lo, kind: 'up',
-      text: `Last: ${lastStr}. Hit ${hi} on every set${easy ? ' with reps to spare' : ''} → add ${fmtLoad(jump, unit)}, aim for ${lo}+.`
+      text: t(easy ? 'Last: {last}. Hit {hi} on every set with reps to spare → add {jump}, aim for {lo}+.' : 'Last: {last}. Hit {hi} on every set → add {jump}, aim for {lo}+.', { last: lastStr, hi, lo, jump: fmtLoad(jump, unit) })
     }
   } else {
     // Stalled below the range for two sessions at the same load → back off ~10%
@@ -182,20 +184,20 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
     if (lastBelow && prevBelow && lastLoad) {
       result = {
         load: roundToIncrement(lastLoad * 0.9, inc, 'down'), reps: lo, kind: 'down',
-        text: `Last: ${lastStr}. Below ${lo} reps two sessions running → drop ~10% and build back up.`
+        text: t('Last: {last}. Below {lo} reps two sessions running → drop ~10% and build back up.', { last: lastStr, lo })
       }
     } else {
       const target = Math.min(hi, Math.max(lo, Math.min(...reps) + 1))
       result = {
         load: lastLoad, reps: target, kind: 'same',
-        text: `Last: ${lastStr}. Same weight — aim for ${target}+ on each set.`
+        text: t('Last: {last}. Same weight — aim for {n}+ on each set.', { last: lastStr, n: target })
       }
     }
   }
 
   if (factor < 1 && result.load) {
     result.load = roundToIncrement(result.load * factor, inc, 'down')
-    result.text = `${why}: ${fmtLoad(result.load, unit)}, about ${Math.round(factor * 100)}% of normal. Stop each set with 3 or more reps left. Last time: ${lastStr}.`
+    result.text = t('{why}: {load}, about {pct}% of normal. Stop each set with 3 or more reps left. Last time: {last}.', { why, load: fmtLoad(result.load, unit), pct: Math.round(factor * 100), last: lastStr })
     result.kind = 'deload'
   }
   return { seconds: null, unit, ...result }
@@ -203,7 +205,7 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
 
 export function fmtLoad (load, unit) {
   if (load == null) return '—'
-  if (unit === 'pin') return `pin ${load}`
+  if (unit === 'pin') return t('pin {n}', { n: load })
   return `${round2(load)} ${unit}`
 }
 
@@ -213,7 +215,7 @@ export function fmtLoad (load, unit) {
  */
 export function platesPerSide (target, bar, plates) {
   if (target == null || bar == null) return { perSide: [], achieved: bar || 0, remainder: 0 }
-  if (target < bar) return { perSide: [], achieved: bar, remainder: round2(target - bar), error: 'Target is lighter than the bar.' }
+  if (target < bar) return { perSide: [], achieved: bar, remainder: round2(target - bar), error: t('Target is lighter than the bar.') }
   let rem = round2((target - bar) / 2)
   const perSide = []
   for (const p of [...plates].sort((a, b) => b - a)) {
@@ -227,7 +229,7 @@ export function platesPerSide (target, bar, plates) {
 export function warmupSets (working, inc, bar = 0) {
   if (!working || working <= 0) return []
   const out = []
-  if (bar > 0 && working > bar) out.push({ load: bar, reps: 10, label: 'Empty bar' })
+  if (bar > 0 && working > bar) out.push({ load: bar, reps: 10, label: t('Empty bar') })
   for (const [pct, reps] of [[0.4, 8], [0.6, 5], [0.8, 3]]) {
     const load = roundToIncrement(working * pct, inc)
     if (load <= bar || load >= working) continue
@@ -281,21 +283,71 @@ export function heaviest (sets, toUnit) {
   return round2(best)
 }
 
+/** Load of a set in `toUnit` (pins stay pins, bodyweight counts as 0). */
+function loadIn (s, toUnit) {
+  if (s.load == null) return 0
+  return s.unit === 'pin' ? s.load : round2(convertLoad(s.load, s.unit, toUnit))
+}
+
+/**
+ * Rep records: the most reps you've done at each weight, keeping only sets
+ * nothing else beats (no other set has as much weight AND as many reps). Heaviest first.
+ * @param {{load,unit,reps,type,date?}[]} sets
+ */
+export function repRecords (sets, toUnit) {
+  const pts = []
+  for (const s of sets) {
+    if (!isWorkSet(s) || !s.reps) continue
+    pts.push({ load: loadIn(s, toUnit), reps: s.reps, date: s.date || null })
+  }
+  pts.sort((a, b) => b.load - a.load || b.reps - a.reps || String(a.date).localeCompare(String(b.date)))
+  const out = []
+  let best = 0
+  for (const p of pts) {
+    if (p.reps > best) { out.push(p); best = p.reps }
+  }
+  return out
+}
+
+/** Longest timed set (holds, carries) at or above each load. */
+export function bestSeconds (sets) {
+  let best = 0
+  for (const s of sets) if (isWorkSet(s) && s.seconds) best = Math.max(best, s.seconds)
+  return best
+}
+
 /**
  * PRs set in `session` compared with all `previous` sessions.
- * @returns {{ exerciseId:string, type:'e1rm'|'load', value:number, prev:number }[]}
+ * Types: e1rm (estimated max), load (heaviest set), reps (more reps at a weight than ever at that weight or heavier),
+ * time (longest hold).
+ * @returns {{ exerciseId:string, type:'e1rm'|'load'|'reps'|'time', value:number, prev:number, load?:number }[]}
  */
 export function detectPRs (session, previous, toUnit) {
   const prs = []
   const ids = [...new Set((session.sets || []).map(s => s.exerciseId))]
   for (const id of ids) {
-    const mine = session.sets.filter(s => s.exerciseId === id)
-    const before = previous.flatMap(p => (p.sets || []).filter(s => s.exerciseId === id))
-    if (!before.length) continue // first time isn't a PR, it's a baseline
-    const e = bestE1RM(mine, toUnit); const eb = bestE1RM(before, toUnit)
+    const mine = session.sets.filter(s => s.exerciseId === id && isWorkSet(s))
+    const before = previous.flatMap(p => (p.sets || []).filter(s => s.exerciseId === id && isWorkSet(s)))
+    if (!before.length || !mine.length) continue // first time isn't a PR, it's a baseline
+    // Machine pins aren't real weights, so an "estimated max" in pins means nothing
+    const pin = mine.some(s => s.unit === 'pin')
+    const e = pin ? 0 : bestE1RM(mine, toUnit); const eb = pin ? 0 : bestE1RM(before, toUnit)
     if (e > eb && eb > 0) prs.push({ exerciseId: id, type: 'e1rm', value: e, prev: eb })
     const h = heaviest(mine, toUnit); const hb = heaviest(before, toUnit)
     if (h > hb && hb > 0) prs.push({ exerciseId: id, type: 'load', value: h, prev: hb })
+    // Rep record: heaviest set that beat the best reps ever done at that weight or more
+    let rep = null
+    for (const s of mine) {
+      if (!s.reps) continue
+      const l = loadIn(s, toUnit)
+      const prevBest = Math.max(0, ...before.filter(b => b.reps && loadIn(b, toUnit) >= l - 0.01).map(b => b.reps))
+      if (prevBest > 0 && s.reps > prevBest && (!rep || l > rep.load || (l === rep.load && s.reps > rep.value))) {
+        rep = { exerciseId: id, type: 'reps', value: s.reps, prev: prevBest, load: l }
+      }
+    }
+    if (rep) prs.push(rep)
+    const t1 = bestSeconds(mine); const t0 = bestSeconds(before)
+    if (t1 > t0 && t0 > 0) prs.push({ exerciseId: id, type: 'time', value: t1, prev: t0 })
   }
   return prs
 }
@@ -395,7 +447,7 @@ export function resolvePlan (routine, today = new Date()) {
   const apply = (e, source) => {
     if (!e) return
     if (e.rir != null) plan.rir = e.rir
-    if (e.focus) plan.focus = e.focus
+    if (e.focus) { plan.focus = e.focus; plan.es = e.es?.focus ? { focus: e.es.focus } : undefined }
     if (e.deload) {
       plan.deload = true
       plan.setDelta = e.setDelta ?? -1
@@ -420,6 +472,22 @@ export function plannedSetsFor (item, index, plan) {
   if (!plan?.setDelta) return base
   if (plan.applyTo === 'first' && index !== 0) return base
   return Math.max(1, base + plan.setDelta)
+}
+
+/**
+ * Routine tracks: an item can carry a `beginner` block that overrides it for people on the beginner track:
+ *   { exerciseId, sets, repRange, durationSec, restSec, note }
+ */
+export function applyTrack (item, level) {
+  if (!item || level !== 'beginner' || !item.beginner) return item
+  const { beginner, ...rest } = item
+  const out = { ...rest, ...beginner }
+  // Swapping a rep exercise for a timed one (or back) replaces the range type
+  if (beginner.durationSec) delete out.repRange
+  if (beginner.repRange) delete out.durationSec
+  if (beginner.es || rest.es) out.es = { ...(rest.es || {}), ...(beginner.es || {}) }
+  out.track = 'beginner'
+  return out
 }
 
 /** Pick the routine entry in effect today from latest.json's routines list. */

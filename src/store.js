@@ -2,7 +2,9 @@
 import { reactive, computed, toRaw } from 'vue'
 import { loadData, saveData, emptyData, parseBackup } from './lib/storage.js'
 import { DEFAULT_ROUTINES_URL, SUPPORTED_ROUTINE_SCHEMA, APP_VERSION } from './config.js'
-import { pickActiveRoutine, compareVersions, dateKey, suggestNext, detectPRs, sessionVolume, resolvePlan, plannedSetsFor } from './lib/training.js'
+import { pickActiveRoutine, compareVersions, dateKey, suggestNext, detectPRs, sessionVolume, resolvePlan, plannedSetsFor, applyTrack } from './lib/training.js'
+import { challengeProgress, weekStreak } from './lib/stats.js'
+import { t } from './i18n/index.js'
 
 export const state = reactive({
   ready: false,
@@ -23,6 +25,14 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 
 
 export function persist () {
   return saveData(structuredClone(toRaw(state.data)))
+}
+
+// Other modules (crew feed, automatic backups) react to finished or deleted workouts
+const hooks = { finished: [], deleted: [] }
+export function onSessionFinished (fn) { hooks.finished.push(fn) }
+export function onSessionDeleted (fn) { hooks.deleted.push(fn) }
+function emit (kind, payload) {
+  for (const fn of hooks[kind]) { try { fn(payload) } catch (e) { console.warn(kind, 'hook failed', e) } }
 }
 
 export async function initStore () {
@@ -47,6 +57,36 @@ export const exercisesById = computed(() => {
   return map
 })
 export const days = computed(() => routine.value?.days || [])
+
+/** A routine item as the user will do it (beginner track swaps in its overrides). */
+export function trackItem (item) {
+  return applyTrack(item, state.data.profile.level)
+}
+export const hasBeginnerTrack = computed(() => days.value.some(d => d.items.some(i => i.beginner)))
+
+// ── Monthly challenge (from the routine file) ────────────
+export const challenge = computed(() => routine.value?.challenge || null)
+export const challengeStatus = computed(() => {
+  const c = challenge.value
+  if (!c) return null
+  const month = routine.value.month
+  return challengeProgress(c, state.data.sessions, month, {
+    unit: state.data.profile.unit,
+    manual: state.data.challenges[month]?.manual || 0
+  })
+})
+export function bumpChallenge (delta) {
+  const month = routine.value?.month
+  if (!month) return
+  const c = (state.data.challenges[month] ||= { manual: 0 })
+  c.manual = Math.max(0, (c.manual || 0) + delta)
+  persist()
+}
+
+export const streak = computed(() => {
+  const [y, m, d] = state.today.split('-').map(Number)
+  return weekStreak(state.data.sessions, new Date(y, m - 1, d, 12))
+})
 
 /** Today's targets from the routine: week number, reps in reserve, deload, set changes. */
 export const todayPlan = computed(() => {
@@ -93,15 +133,15 @@ export async function refreshRoutines () {
     const base = routinesUrl.value
     const man = await getJSON(base + 'latest.json')
     const entry = pickActiveRoutine(man.routines)
-    if (!entry) throw new Error('latest.json has no routine in effect yet.')
+    if (!entry) throw new Error(t('latest.json has no routine in effect yet.'))
     const [rt, ex] = await Promise.all([
       getJSON(base + entry.file),
       getJSON(base + (man.exercisesFile || 'exercises.json'))
     ])
     if ((rt.schemaVersion || 1) > SUPPORTED_ROUTINE_SCHEMA || (ex.schemaVersion || 1) > SUPPORTED_ROUTINE_SCHEMA) {
-      throw new Error('This routine needs a newer app version. Check for an app update.')
+      throw new Error(t('This routine needs a newer app version. Check for an app update.'))
     }
-    if (!Array.isArray(rt.days) || !rt.days.length) throw new Error('Routine file has no days.')
+    if (!Array.isArray(rt.days) || !rt.days.length) throw new Error(t('Routine file has no days.'))
 
     const prevMonth = state.data.cache.routine?.month
     state.data.cache = { manifest: man, routine: rt, exercises: ex, fetchedAt: new Date().toISOString() }
@@ -146,8 +186,8 @@ export function suggestionFor (item, sessionId = null) {
   const session = sessionId ? getSession(sessionId) : null
   const plan = session ? (session.plan || {}) : todayPlan.value
   let factor = plan.loadFactor ?? 1
-  let reason = plan.deload ? 'Deload week' : ''
-  if (session?.easy) { factor *= 0.9; reason = reason ? `${reason}, lighter day` : 'Lighter day' }
+  let reason = plan.deload ? t('Deload week') : ''
+  if (session?.easy) { factor *= 0.9; reason = reason ? t('{a}, lighter day', { a: reason }) : t('Lighter day') }
   return suggestNext({
     item,
     exercise: exercisesById.value[item.exerciseId],
@@ -170,12 +210,16 @@ export function startSession (dayIndex) {
     dayIndex,
     dayId: day.id,
     dayName: day.name,
-    items: day.items.map((it, i) => ({
-      ...structuredClone(toRaw(it)),
-      sets: plannedSetsFor(it, i, todayPlan.value),
-      routineSets: it.sets,
-      originalExerciseId: it.exerciseId
-    })),
+    dayNameEs: day.es?.name || null,
+    items: day.items.map((raw, i) => {
+      const it = trackItem(structuredClone(toRaw(raw)))
+      return {
+        ...it,
+        sets: plannedSetsFor(it, i, todayPlan.value),
+        routineSets: it.sets,
+        originalExerciseId: it.exerciseId
+      }
+    }),
     plan: { ...todayPlan.value },
     sets: [],
     notes: ''
@@ -187,7 +231,7 @@ export function startSession (dayIndex) {
 }
 
 /** Ad-hoc session (e.g. a PT session) — starts empty, you add exercises yourself. */
-export function startFreeSession (name = 'Free session') {
+export function startFreeSession (name = t('Free session')) {
   if (activeSession.value) return activeSession.value.id
   const session = {
     id: uid(),
@@ -282,9 +326,17 @@ export function finishSession (sessionId, rating = null) {
   if (s.dayIndex != null && days.value.length) {
     state.data.nextDayIndex = (s.dayIndex + 1) % days.value.length
   }
+  const firstFinish = !s.postedAt
   if (state.data.activeSessionId === sessionId) state.data.activeSessionId = null
   persist()
+  emit('finished', { session: s, firstFinish })
   return s
+}
+
+/** After editing a finished workout: refresh what other modules derived from it (crew post). */
+export function markSessionEdited (sessionId) {
+  const s = getSession(sessionId)
+  if (s?.finishedAt) emit('finished', { session: s, edited: true })
 }
 
 export function discardSession (sessionId) {
@@ -294,14 +346,16 @@ export function discardSession (sessionId) {
 }
 
 export function deleteSession (sessionId) {
+  const s = getSession(sessionId)
   discardSession(sessionId)
+  if (s?.finishedAt) emit('deleted', { session: s })
 }
 
 export function sessionSummary (session) {
   const unit = state.data.profile.unit
   const previous = finishedSessions.value.filter(s => s.id !== session.id && s.startedAt < session.startedAt)
   const mins = session.finishedAt
-    ? Math.round((new Date(session.finishedAt) - new Date(session.startedAt)) / 60000)
+    ? Math.max(0, (new Date(session.finishedAt) - new Date(session.startedAt)) / 60000)
     : null
   return {
     minutes: mins,
@@ -336,6 +390,12 @@ export function importJSON (text) {
   const data = parseBackup(text)
   // Keep this device's routine settings; take everything else from the backup
   data.settings.routinesUrl = state.data.settings.routinesUrl
+  // Don't greet a restore with last month's report popup; it's still in Progress → Reports
+  const thisMonth = dateKey().slice(0, 7)
+  for (const s of data.sessions) {
+    const m = dateKey(s.startedAt).slice(0, 7)
+    if (s.finishedAt && m < thisMonth) data.reportsSeen[m] = true
+  }
   state.data = data
   return persist()
 }
@@ -347,3 +407,43 @@ export const daysSinceBackup = computed(() => {
 })
 
 export const todayKey = () => dateKey()
+
+// ── Body: weight, measurements, progress photos ──────────
+
+export const MEASUREMENTS = ['waist', 'chest', 'arm', 'thigh', 'hips']
+
+export function saveBodyEntry (entry) {
+  const list = state.data.body.entries
+  const clean = { ...entry }
+  for (const k of ['weight', ...MEASUREMENTS]) {
+    clean[k] = clean[k] == null || clean[k] === '' || !isFinite(clean[k]) ? null : Number(clean[k])
+  }
+  if (!clean.id) clean.id = uid()
+  const i = list.findIndex(e => e.id === clean.id)
+  if (i >= 0) list[i] = clean
+  else list.push(clean)
+  list.sort((a, b) => a.date.localeCompare(b.date))
+  // Keep the profile's bodyweight in step with the newest weigh-in (used for bodyweight exercises)
+  const latest = [...list].reverse().find(e => e.weight != null)
+  if (latest && latest.unit === state.data.profile.unit) state.data.profile.bodyweight = latest.weight
+  persist()
+  return clean
+}
+
+export function deleteBodyEntry (id) {
+  state.data.body.entries = state.data.body.entries.filter(e => e.id !== id)
+  persist()
+}
+
+export function addPhotoRecord (rec) {
+  state.data.body.photos.push({ id: rec.id || uid(), ...rec })
+  state.data.body.photos.sort((a, b) => a.date.localeCompare(b.date))
+  persist()
+}
+
+export function removePhotoRecord (id) {
+  state.data.body.photos = state.data.body.photos.filter(p => p.id !== id)
+  persist()
+}
+
+export const newId = uid

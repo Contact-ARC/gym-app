@@ -1,31 +1,31 @@
 <template>
   <div class="page">
-    <h1 class="t-title head">Exercises</h1>
-    <input v-model="q" class="field search" type="search" placeholder="Search by name or muscle" aria-label="Search exercises" enterkeyhint="search">
+    <h1 class="t-title head">{{ t('Exercises') }}</h1>
+    <input v-model="q" class="field search" type="search" :placeholder="t('Search by name or muscle')" :aria-label="t('Search exercises')" enterkeyhint="search">
 
-    <div class="filters" role="group" aria-label="Filter by muscle">
+    <div class="filters" role="group" :aria-label="t('Filter by muscle')">
       <button
         v-for="g in groups" :key="g.key" class="fchip" :class="{ on: group === g.key }"
         :aria-pressed="group === g.key" @click="group = group === g.key ? null : g.key"
-      >{{ g.label }}</button>
+      >{{ t(g.label) }}</button>
     </div>
     <label v-if="gymLimited" class="gym-toggle t-small">
       <Toggle v-model="gymOnly" />
-      <span>Only what my gym has</span>
+      <span>{{ t('Only what my gym has') }}</span>
     </label>
 
-    <p class="t-small t-muted count">{{ list.length }} exercise{{ list.length === 1 ? '' : 's' }}</p>
+    <p class="t-small t-muted count">{{ tn(list.length, '{n} exercise', '{n} exercises') }}</p>
     <div class="group">
       <RouterLink v-for="ex in list" :key="ex.id" :to="`/exercise/${ex.id}`" class="group-row">
         <img v-if="ex.images?.length" :src="imageUrl(ex.images[0])" alt="" class="thumb" loading="lazy" @error="(e) => (e.target.style.visibility = 'hidden')">
         <div v-else class="thumb" />
         <div class="grow">
-          <div class="t-h3">{{ ex.name }}</div>
-          <div class="t-tiny t-muted truncate">{{ (ex.primary || []).map(muscleLabel).join(', ') }}<template v-if="done[ex.id]">, done {{ done[ex.id] }}×</template></div>
+          <div class="t-h3">{{ tx(ex, 'name') }}</div>
+          <div class="t-tiny t-muted truncate">{{ (ex.primary || []).map(muscleLabel).join(', ') }}<template v-if="done[ex.id]">{{ t(', done {n}×', { n: done[ex.id] }) }}</template></div>
         </div>
         <Icon name="chevronRight" class="chev" />
       </RouterLink>
-      <div v-if="!list.length" class="group-row t-muted">Nothing matches. Try another word or clear the filter.</div>
+      <div v-if="!list.length" class="group-row t-muted">{{ t('Nothing matches. Try another word or clear the filter.') }}</div>
     </div>
   </div>
 </template>
@@ -37,13 +37,14 @@ import Toggle from '../ui/Toggle.vue'
 import { state, exercisesById, finishedSessions, imageUrl } from '../store.js'
 import { muscleLabel } from '../lib/format.js'
 import { canDoAtGym } from '../lib/training.js'
+import { tx, i18n } from '../i18n/index.js'
 
 const q = ref('')
 const group = ref(null)
 const gymOnly = ref(true)
 const groups = [
   { key: 'chest', label: 'Chest', m: ['chest'] },
-  { key: 'back', label: 'Back', m: ['lats', 'upper_back', 'lower_back', 'traps'] },
+  { key: 'back', label: 'body|Back', m: ['lats', 'upper_back', 'lower_back', 'traps'] },
   { key: 'shoulders', label: 'Shoulders', m: ['front_delts', 'side_delts', 'rear_delts'] },
   { key: 'arms', label: 'Arms', m: ['biceps', 'triceps', 'forearms'] },
   { key: 'legs', label: 'Legs', m: ['quads', 'hamstrings', 'adductors', 'calves'] },
@@ -60,13 +61,14 @@ const done = computed(() => {
 })
 
 const list = computed(() => {
-  const t = norm(q.value.trim())
+  const term = norm(q.value.trim())
   const g = groups.find(x => x.key === group.value)
+  const name = (e) => tx(e, 'name') || e.name
   return Object.values(exercisesById.value)
     .filter(e => !g || (e.primary || []).some(m => g.m.includes(m)))
-    .filter(e => !t || norm(e.name).includes(t) || [...(e.primary || []), ...(e.secondary || [])].some(m => norm(muscleLabel(m)).includes(t)))
+    .filter(e => !term || norm(name(e)).includes(term) || norm(e.name).includes(term) || [...(e.primary || []), ...(e.secondary || [])].some(m => norm(muscleLabel(m)).includes(term)))
     .filter(e => !gymLimited.value || !gymOnly.value || canDoAtGym(e, state.data.settings.equipment))
-    .sort((a, b) => a.name.localeCompare(b.name))
+    .sort((a, b) => name(a).localeCompare(name(b), i18n.lang))
 })
 </script>
 

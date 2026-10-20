@@ -43,5 +43,22 @@ export {
   mdiBookOpenPageVariantOutline as library,
   mdiBellOutline as bell,
   mdiFormatSize as textSize,
-  mdiVolumeHigh as sound
+  mdiVolumeHigh as sound,
+  mdiFire as fire,
+  mdiAccountGroupOutline as crew,
+  mdiScaleBathroom as scale,
+  mdiCamera as camera,
+  mdiImageMultipleOutline as photos,
+  mdiFlagCheckered as challenge,
+  mdiHandClap as clap,
+  mdiTranslate as language,
+  mdiFileDelimitedOutline as csv,
+  mdiShieldCheckOutline as shield,
+  mdiChartBoxOutline as report,
+  mdiCalendarMonthOutline as month,
+  mdiViewListOutline as list,
+  mdiTapeMeasure as measure,
+  mdiLogout as leave,
+  mdiAccountPlusOutline as join,
+  mdiCrown as crown
 } from '@mdi/js'
