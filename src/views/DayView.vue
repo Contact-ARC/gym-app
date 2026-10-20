@@ -12,8 +12,14 @@
       </div>
     </div>
     <p v-if="day.notes" class="t-small t-muted day-notes">{{ day.notes }}</p>
-    <div v-if="isDeloadWeek" class="note note-warn t-small" style="margin-top: 14px">
-      Deload week. Suggestions are about 10% lighter, and every set should end with 3 or more reps left.
+    <div v-if="todayPlan.deload" class="note note-warn t-small plan-note">
+      <b>Deload {{ todayPlan.source === 'date' ? 'today' : 'week' }}.</b> One set fewer, about 10% lighter, and every set ends with 3 or more reps left.
+    </div>
+    <div v-else-if="todayPlan.rir != null || todayPlan.focus || todayPlan.setDelta" class="note note-info t-small plan-note">
+      <b>{{ todayPlan.source === 'date' ? 'Today' : `Week ${todayPlan.week}` }}:</b>
+      <template v-if="todayPlan.rir != null"> leave {{ todayPlan.rir }} rep{{ todayPlan.rir === 1 ? '' : 's' }} in the tank.</template>
+      <template v-if="todayPlan.setDelta > 0"> {{ todayPlan.setDelta }} extra set{{ todayPlan.setDelta === 1 ? '' : 's' }} on {{ todayPlan.applyTo === 'first' ? 'the first exercise' : 'every exercise' }}.</template>
+      <template v-if="todayPlan.focus"> {{ todayPlan.focus }}</template>
     </div>
 
     <ol class="group list">
@@ -23,7 +29,7 @@
           <div class="grow">
             <div class="t-h3">{{ ex(it.exerciseId)?.name || it.exerciseId }}</div>
             <div class="t-small t-muted">
-              {{ prescription(it, ex(it.exerciseId)) }}, {{ restLabel(effectiveRest(day.items, i)) }}
+              {{ prescription({ ...it, sets: plannedSetsFor(it, i, todayPlan) }, ex(it.exerciseId)) }}, {{ restLabel(effectiveRest(day.items, i)) }}
             </div>
             <div v-if="it.group" class="t-tiny t-muted ss"><Icon name="superset" :size="14" />Superset</div>
             <div class="t-tiny suggest">{{ suggestionFor(it).text }}</div>
@@ -58,7 +64,8 @@ import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import PlateBadge from '../ui/PlateBadge.vue'
 import { plateStyle } from '../ui/plates.js'
-import { days, exercisesById, activeSession, startSession, suggestionFor, isDeloadWeek } from '../store.js'
+import { days, exercisesById, activeSession, startSession, suggestionFor, todayPlan } from '../store.js'
+import { plannedSetsFor } from '../lib/training.js'
 import { prescription, restLabel, dayTitle } from '../lib/format.js'
 import { effectiveRest } from '../lib/supersets.js'
 
@@ -79,6 +86,7 @@ function start () {
 .page { padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + 110px); }
 .head { gap: 16px; }
 .day-notes { margin-top: 14px; }
+.plan-note { margin-top: 14px; }
 .list { list-style: none; margin-top: 20px; }
 .list li + li .group-row::before {
   content: ''; position: absolute; top: 0; right: 0; left: 60px; border-top: 1px solid var(--line);

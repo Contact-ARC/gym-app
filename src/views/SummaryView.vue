@@ -32,8 +32,17 @@
       </div>
     </section>
 
+    <div v-if="session.rating?.effort || session.rating?.energy || session.easy" class="row check">
+      <span v-if="session.rating?.effort" class="pill">Effort {{ session.rating.effort }} of 5</span>
+      <span v-if="session.rating?.energy" class="pill">Energy {{ session.rating.energy }} of 5</span>
+      <span v-if="session.easy" class="pill pill-warn">Lighter day</span>
+    </div>
+
     <section>
-      <h2 class="section-h">What you did</h2>
+      <div class="row what-h">
+        <h2 class="section-h grow">What you did</h2>
+        <RouterLink :to="`/workout/${session.id}`" class="btn btn-sm btn-ghost"><Icon name="edit" :size="18" />Edit</RouterLink>
+      </div>
       <div class="group">
         <RouterLink v-for="id in sum.exercises" :key="id" :to="`/exercise/${id}`" class="group-row">
           <div class="grow">
@@ -96,7 +105,9 @@ const prGroups = computed(() => {
 function setsFor (id) {
   return session.value.sets.filter(s => s.exerciseId === id).map(s => {
     if (s.seconds) return s.load ? `${fmtLoad(s.load, s.unit)} for ${s.seconds}s` : `${s.seconds}s`
-    return `${s.load ? fmtLoad(s.load, s.unit) : 'BW'} × ${s.reps}`
+    const reps = s.repsL != null && s.repsR != null && s.repsL !== s.repsR ? `${s.repsL}/${s.repsR}` : s.reps
+    const tag = s.type === 'warmup' ? ' (warm-up)' : s.type === 'drop' ? ' (drop)' : s.type === 'failure' ? ' (to failure)' : s.type === 'amrap' ? ' (max reps)' : ''
+    return `${s.load ? fmtLoad(s.load, s.unit) : 'BW'} × ${reps}${tag}`
   }).join(',  ')
 }
 
@@ -130,5 +141,8 @@ function del () {
 .sets-line { font-size: 18px; color: var(--ink-2); margin-top: 2px; }
 .notes { display: flex; gap: 8px; margin-top: 10px; }
 .actions { margin-top: 28px; gap: 10px; }
+.check { flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.what-h { align-items: flex-end; }
+.what-h .btn { margin-bottom: 4px; }
 .del { margin-top: 12px; }
 </style>

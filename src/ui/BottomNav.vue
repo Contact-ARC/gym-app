@@ -15,6 +15,7 @@ import Icon from './Icon.vue'
 defineProps({ active: String })
 const tabs = [
   { to: '/', tab: 'home', icon: 'train', label: 'Train' },
+  { to: '/library', tab: 'library', icon: 'library', label: 'Exercises' },
   { to: '/progress', tab: 'progress', icon: 'progress', label: 'Progress' },
   { to: '/tools', tab: 'tools', icon: 'tools', label: 'Tools' },
   { to: '/settings', tab: 'settings', icon: 'settings', label: 'Settings' }
@@ -34,7 +35,7 @@ const tabs = [
   flex: 1 1 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
   color: var(--ink-3); font-size: 12px; font-weight: 600;
 }
-.nav-icon { display: grid; place-items: center; width: 56px; height: 30px; border-radius: 15px; transition: background-color 160ms ease; }
+.nav-icon { display: grid; place-items: center; width: 52px; height: 30px; border-radius: 15px; transition: background-color 160ms ease; }
 .nav-item.on { color: var(--ink); }
 .nav-item.on .nav-icon { background: var(--card-2); }
 .nav-item:active .nav-icon { background: var(--press); }

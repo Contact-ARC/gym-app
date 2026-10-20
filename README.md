@@ -8,6 +8,10 @@ so a new month never needs a new APK. Workout history lives only on each phone.
 
 - **Train**: next-up day with a big start button, Monday-to-Sunday week strip, this month's days (each day wears a plate colour: A red, B blue, C yellow, D green)
 - **Workout logging**: one exercise at a time, large − / + steppers (tap the number to type, hold to repeat), log button under your thumb, swipe left/right between exercises, undo after every set, tap a set to edit or delete it, optional "reps left in the tank", built-in timer for holds, swap exercise, add/remove sets, notes, free sessions; saved after every set and the screen stays awake
+- **In the workout (v0.3)**: plate breakdown under barbell weights, warm-up checklist on the first lift, "set 2 last time" line, drop sets / to failure / max reps, separate left and right reps for one-sided exercises, machine settings (seat, pads) shown on the exercise, "feeling rough" lighter-day button, effort and energy check-in at the end, edit a workout after finishing it
+- **Plans (v0.3)**: week-by-week reps-in-reserve targets, deload weeks drop a set automatically, date overrides (e.g. extra set on the first lift), exercises filtered to what your gym has, training-day reminders
+- **Exercises tab (v0.3)**: browse and filter all exercises, photos of the movement, front/back muscle map
+- **Polish (v0.3)**: themed app icon on Android 13+, long-press the app icon for "Start workout" and "Progress", larger-text option, first-workout tips, optional rest sound and 10-second warning
 - **Rest timer**: built into the workout screen, superset-aware, ±time, vibrates, notifies when the app is in the background, floating pill on other screens
 - **Progression**: double progression per exercise (hit the top of the range on every set → add your smallest jump; stalled twice → back off ~10%); deload week support
 - **Progress**: estimated max and heaviest-set chart (with a table), records, sets per muscle, 12-week consistency grid, history

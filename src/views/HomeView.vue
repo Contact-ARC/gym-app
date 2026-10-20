@@ -13,6 +13,7 @@
       <span class="pill">{{ routine.title }}</span>
       <span class="pill">Week {{ currentWeek }}</span>
       <span v-if="isDeloadWeek" class="pill pill-warn"><Icon name="deload" :size="16" />Deload week</span>
+      <span v-else-if="todayPlan.rir != null" class="pill">Leave {{ todayPlan.rir }} in the tank</span>
     </div>
 
     <!-- Status messages -->
@@ -74,7 +75,7 @@
       <ul class="ex-list">
         <li v-for="(it, i) in nextDay.items" :key="i" class="row">
           <span class="grow truncate">{{ exName(it.exerciseId) }}</span>
-          <span class="t-num t-muted">{{ prescription(it, exercisesById[it.exerciseId]) }}</span>
+          <span class="t-num t-muted">{{ prescription({ ...it, sets: plannedSetsFor(it, i, todayPlan) }, exercisesById[it.exerciseId]) }}</span>
         </li>
       </ul>
       <div class="row hero-actions">
@@ -129,12 +130,12 @@ import Icon from '../ui/Icon.vue'
 import PlateBadge from '../ui/PlateBadge.vue'
 import { plateStyle } from '../ui/plates.js'
 import {
-  state, routine, days, currentWeek, isDeloadWeek, updateAvailable, refreshRoutines,
+  state, routine, days, currentWeek, isDeloadWeek, todayPlan, updateAvailable, refreshRoutines,
   activeSession, exercisesById, startSession, startFreeSession, finishedSessions, daysSinceBackup
 } from '../store.js'
 import { openUrl } from '../lib/native.js'
 import { prescription, relativeDay, dayTitle, weekdayDate } from '../lib/format.js'
-import { dateKey } from '../lib/training.js'
+import { dateKey, plannedSetsFor } from '../lib/training.js'
 import { toast } from '../ui/toast.js'
 
 const router = useRouter()

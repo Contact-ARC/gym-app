@@ -149,3 +149,64 @@ test('routine week', () => {
   assert.equal(routineWeek('2026-10-01', new Date(2026, 9, 8)), 2)
   assert.equal(routineWeek('2026-10-01', new Date(2026, 9, 22)), 4)
 })
+
+// ── v0.3: plans, set types, equipment ──────────────────
+import { resolvePlan, plannedSetsFor, equipmentTags, canDoAtGym, isBarbellLift, bestE1RM } from '../src/lib/training.js'
+
+test('plan: month default rir, week overrides, deload drops a set', () => {
+  const r = {
+    effectiveFrom: '2026-11-01', rir: 2,
+    weekPlan: [{ week: 1, rir: 3, focus: 'Find weights' }, { week: 3, rir: 1 }, { week: 4, deload: true }]
+  }
+  const w1 = resolvePlan(r, new Date(2026, 10, 3))
+  assert.equal(w1.week, 1); assert.equal(w1.rir, 3); assert.equal(w1.focus, 'Find weights'); assert.equal(w1.setDelta, 0)
+  assert.equal(resolvePlan(r, new Date(2026, 10, 10)).rir, 2) // week 2 falls back to the month default
+  const w4 = resolvePlan(r, new Date(2026, 10, 23))
+  assert.equal(w4.deload, true); assert.equal(w4.setDelta, -1); assert.equal(w4.loadFactor, 0.9)
+  assert.equal(plannedSetsFor({ sets: 3 }, 2, w4), 2)
+  assert.equal(plannedSetsFor({ sets: 1 }, 0, w4), 1) // never below one set
+})
+
+test('plan: legacy deloadWeek still works', () => {
+  const p = resolvePlan({ effectiveFrom: '2026-10-01', deloadWeek: 4 }, new Date(2026, 9, 24))
+  assert.equal(p.deload, true); assert.equal(p.setDelta, -1)
+})
+
+test('plan: date ranges override the week and can target the first exercise', () => {
+  const r = { effectiveFrom: '2026-10-01', rir: 4, datePlan: [{ from: '2026-10-29', to: '2026-10-31', rir: 3, setDelta: 1, applyTo: 'first' }] }
+  const p = resolvePlan(r, new Date(2026, 9, 30))
+  assert.equal(p.rir, 3)
+  assert.equal(plannedSetsFor({ sets: 2 }, 0, p), 3)
+  assert.equal(plannedSetsFor({ sets: 2 }, 1, p), 2)
+  assert.equal(resolvePlan(r, new Date(2026, 9, 28)).rir, 4)
+})
+
+test('suggest: warm-ups and drop sets are ignored', () => {
+  const s = suggestNext({
+    item, exercise: bench, profile,
+    history: [{ sets: [
+      { load: 10, unit: 'kg', reps: 10, type: 'warmup' },
+      { load: 20, unit: 'kg', reps: 12 }, { load: 20, unit: 'kg', reps: 12 }, { load: 20, unit: 'kg', reps: 12 },
+      { load: 12, unit: 'kg', reps: 15, type: 'drop' }
+    ] }]
+  })
+  assert.equal(s.kind, 'up'); assert.equal(s.load, 22)
+})
+
+test('suggest: lighter day factor', () => {
+  const s = suggestNext({ item, exercise: bench, history: [sess(40, [10, 10, 9])], profile, loadFactor: 0.9, reason: 'Lighter day' })
+  assert.equal(s.load, 36); assert.match(s.text, /^Lighter day/)
+})
+
+test('records ignore warm-up sets', () => {
+  assert.equal(bestE1RM([{ load: 100, unit: 'kg', reps: 5, type: 'warmup' }, { load: 50, unit: 'kg', reps: 1 }], 'kg'), 50)
+})
+
+test('equipment tags and gym filter', () => {
+  assert.deepEqual(equipmentTags({ equipment: ['Smith machine', 'plate'] }), ['smith'])
+  assert.deepEqual(equipmentTags({ equipment: ['dumbbells', 'adjustable bench'] }).sort(), ['bench', 'dumbbells'])
+  assert.equal(canDoAtGym({ equipment: ['leg press machine', 'plates'] }, { legpress: false }), false)
+  assert.equal(canDoAtGym({ equipment: ['mat'] }, { legpress: false }), true)
+  assert.equal(isBarbellLift({ equipment: ['barbell', 'bench', 'bar pad'] }), true)
+  assert.equal(isBarbellLift({ equipment: ['cable stack'], loadUnit: 'pin' }), false)
+})

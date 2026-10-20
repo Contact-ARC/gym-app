@@ -98,10 +98,16 @@ function avg (arr) {
  * @param {object}   args.exercise   exercise definition
  * @param {object[]} args.history    previous sessions for this exercise, newest first: [{ date, sets:[{load,unit,reps,seconds,rir}] }]
  * @param {object}   args.profile    { unit, increments }
- * @param {boolean}  args.deload     deload week → lighter suggestion
+ * @param {boolean}  args.deload     deload week → lighter suggestion (~90%)
+ * @param {number}   args.loadFactor explicit multiplier (e.g. 0.9) for deload weeks or a "rough day"
+ * @param {string}   args.reason     short label for why it's lighter ("Deload week", "Lighter day")
  * @returns {{ load:number|null, reps:number|null, seconds:number|null, unit:string, text:string, kind:string }}
  */
-export function suggestNext ({ item, exercise, history = [], profile, deload = false }) {
+export function suggestNext ({ item, exercise, history = [], profile, deload = false, loadFactor = null, reason = '' }) {
+  const factor = loadFactor ?? (deload ? 0.9 : 1)
+  const why = reason || (deload ? 'Deload week' : 'Lighter day')
+  // Warm-ups and drop sets don't say anything about your working weight
+  history = history.map(h => ({ ...h, sets: h.sets.filter(isWorkSet).filter(x => x.type !== 'drop') })).filter(h => h.sets.length)
   const unit = unitFor(exercise, profile)
   const inc = incrementFor(exercise, profile)
   const logType = exercise?.logType || 'weight'
@@ -187,9 +193,9 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
     }
   }
 
-  if (deload && result.load) {
-    result.load = roundToIncrement(result.load * 0.9, inc, 'down')
-    result.text = `Deload week: lighter (~90%), stop 3+ reps short of failure. ` + result.text
+  if (factor < 1 && result.load) {
+    result.load = roundToIncrement(result.load * factor, inc, 'down')
+    result.text = `${why}: ${fmtLoad(result.load, unit)}, about ${Math.round(factor * 100)}% of normal. Stop each set with 3 or more reps left. Last time: ${lastStr}.`
     result.kind = 'deload'
   }
   return { seconds: null, unit, ...result }
@@ -231,10 +237,23 @@ export function warmupSets (working, inc, bar = 0) {
   return out
 }
 
+// ── Set types ───────────────────────────────────────────
+// type: undefined/'normal' | 'warmup' | 'drop' | 'failure' | 'amrap'
+export const SET_TYPES = {
+  drop: { short: 'D', label: 'Drop set' },
+  failure: { short: 'F', label: 'To failure' },
+  amrap: { short: 'A', label: 'As many as possible' },
+  warmup: { short: 'W', label: 'Warm-up' }
+}
+/** Counts toward records, charts and progression (everything except warm-ups). */
+export const isWorkSet = (s) => s && s.type !== 'warmup'
+/** Fills one of the planned sets (warm-ups and drop sets are extras). */
+export const fillsPlannedSet = (s) => s && s.type !== 'warmup' && s.type !== 'drop'
+
 // ── Session analytics ───────────────────────────────────
 
 export function setVolume (s, toUnit) {
-  if (!s.reps || s.load == null || s.unit === 'pin') return 0
+  if (!isWorkSet(s) || !s.reps || s.load == null || s.unit === 'pin') return 0
   return convertLoad(s.load, s.unit, toUnit) * s.reps
 }
 
@@ -246,7 +265,7 @@ export function sessionVolume (session, toUnit) {
 export function bestE1RM (sets, toUnit) {
   let best = 0
   for (const s of sets) {
-    if (!s.reps || s.load == null || s.load <= 0) continue
+    if (!isWorkSet(s) || !s.reps || s.load == null || s.load <= 0) continue
     const load = s.unit === 'pin' ? s.load : convertLoad(s.load, s.unit, toUnit)
     best = Math.max(best, estimate1RM(load, s.reps, s.rir || 0))
   }
@@ -256,7 +275,7 @@ export function bestE1RM (sets, toUnit) {
 export function heaviest (sets, toUnit) {
   let best = 0
   for (const s of sets) {
-    if (s.load == null || !s.reps) continue
+    if (!isWorkSet(s) || s.load == null || !s.reps) continue
     best = Math.max(best, s.unit === 'pin' ? s.load : convertLoad(s.load, s.unit, toUnit))
   }
   return round2(best)
@@ -286,7 +305,7 @@ export function setsPerMuscle (sessions, exercisesById) {
   const out = {}
   for (const sess of sessions) {
     for (const s of sess.sets || []) {
-      if (!s.reps && !s.seconds) continue
+      if (!isWorkSet(s) || (!s.reps && !s.seconds)) continue
       const ex = exercisesById[s.exerciseId]
       if (!ex) continue
       for (const m of ex.primary || []) out[m] = (out[m] || 0) + 1
@@ -294,6 +313,48 @@ export function setsPerMuscle (sessions, exercisesById) {
     }
   }
   return out
+}
+
+// ── Equipment ───────────────────────────────────────────
+export const EQUIPMENT = {
+  barbell: 'Barbells and plates',
+  rack: 'Squat rack or half rack',
+  bench: 'Benches',
+  dumbbells: 'Dumbbells or kettlebells',
+  ezbar: 'EZ bar',
+  cable: 'Cable stack or functional trainer',
+  smith: 'Smith machine',
+  legpress: 'Leg press',
+  legcurl: 'Leg curl machine',
+  pullup: 'Pull-up bar',
+  box: 'Plyo box or step'
+}
+const EQUIP_RULES = [
+  [/smith/, 'smith'], [/leg press/, 'legpress'], [/leg curl/, 'legcurl'],
+  [/ez bar/i, 'ezbar'], [/barbell|bar pad/, 'barbell'], [/rack/, 'rack'], [/bench/, 'bench'],
+  [/dumbbell|kettlebell/, 'dumbbells'], [/cable|pulldown|row station|functional trainer/, 'cable'],
+  [/pull-up bar/, 'pullup'], [/plyo box|step/, 'box']
+]
+/** Canonical equipment an exercise needs, from its free-text equipment list. */
+export function equipmentTags (exercise) {
+  const tags = new Set()
+  for (const raw of exercise?.equipment || []) {
+    const e = raw.toLowerCase()
+    for (const [re, tag] of EQUIP_RULES) if (re.test(e)) { tags.add(tag); break }
+  }
+  return [...tags]
+}
+/** true when every piece of equipment the exercise needs is available (missing = assume available). */
+export function canDoAtGym (exercise, available) {
+  if (!available) return true
+  return equipmentTags(exercise).every(t => available[t] !== false)
+}
+
+/** Is this loaded on a straight barbell, so a plate breakdown makes sense? */
+export function isBarbellLift (exercise) {
+  if (!exercise || exercise.loadUnit === 'pin') return false
+  const eq = (exercise.equipment || []).join(' ').toLowerCase()
+  return /\bbarbell\b/.test(eq) && !/smith|ez bar/i.test(eq)
 }
 
 // ── Dates ───────────────────────────────────────────────
@@ -314,6 +375,51 @@ export function routineWeek (effectiveFrom, today = new Date()) {
   const t = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const days = Math.floor((t - start) / 86400000)
   return Math.max(1, Math.floor(days / 7) + 1)
+}
+
+/**
+ * What applies today: target reps-in-reserve, deload, extra/fewer sets.
+ * Routine fields (all optional):
+ *   rir: 2                          default target for the whole month
+ *   deloadWeek: 4                   legacy shorthand for a deload week
+ *   weekPlan: [{ week, rir, focus, deload, setDelta, loadFactor, applyTo }]
+ *   datePlan: [{ from, to, rir, focus, deload, setDelta, loadFactor, applyTo }]   (overrides weekPlan)
+ * applyTo: 'all' (default) or 'first' (only the first exercise of each day).
+ * A deload defaults to one set fewer per exercise and ~90% load.
+ */
+export function resolvePlan (routine, today = new Date()) {
+  const plan = { week: 1, rir: null, focus: '', deload: false, setDelta: 0, loadFactor: 1, applyTo: 'all', source: null }
+  if (!routine) return plan
+  plan.week = routineWeek(routine.effectiveFrom, today)
+  if (routine.rir != null) plan.rir = routine.rir
+  const apply = (e, source) => {
+    if (!e) return
+    if (e.rir != null) plan.rir = e.rir
+    if (e.focus) plan.focus = e.focus
+    if (e.deload) {
+      plan.deload = true
+      plan.setDelta = e.setDelta ?? -1
+      plan.loadFactor = e.loadFactor ?? 0.9
+    } else {
+      if (e.setDelta != null) plan.setDelta = e.setDelta
+      if (e.loadFactor != null) plan.loadFactor = e.loadFactor
+    }
+    if (e.applyTo) plan.applyTo = e.applyTo
+    plan.source = source
+  }
+  if (routine.deloadWeek && routine.deloadWeek === plan.week) apply({ deload: true }, 'week')
+  apply((routine.weekPlan || []).find(w => w.week === plan.week), 'week')
+  const key = dateKey(today)
+  apply((routine.datePlan || []).find(d => d.from <= key && key <= (d.to || d.from)), 'date')
+  return plan
+}
+
+/** Planned sets for one routine item after today's plan is applied. */
+export function plannedSetsFor (item, index, plan) {
+  const base = item?.sets || 1
+  if (!plan?.setDelta) return base
+  if (plan.applyTo === 'first' && index !== 0) return base
+  return Math.max(1, base + plan.setDelta)
 }
 
 /** Pick the routine entry in effect today from latest.json's routines list. */

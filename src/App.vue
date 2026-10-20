@@ -26,14 +26,16 @@
 </template>
 
 <script setup>
-import { computed, watchEffect } from 'vue'
+import { computed, watch, watchEffect } from 'vue'
 import { useRoute } from 'vue-router'
 import BottomNav from './ui/BottomNav.vue'
 import RestPill from './ui/RestPill.vue'
 import Toast from './ui/Toast.vue'
 import Sheet from './ui/Sheet.vue'
 import WelcomeSheet from './views/WelcomeSheet.vue'
-import { state, newRoutineToAnnounce, markRoutineSeen } from './store.js'
+import { state, newRoutineToAnnounce, markRoutineSeen, days } from './store.js'
+import { scheduleReminders } from './lib/reminders.js'
+import { dayTitle } from './lib/format.js'
 import { rest } from './lib/restTimer.js'
 
 const route = useRoute()
@@ -63,6 +65,26 @@ function applyTheme () {
 }
 watchEffect(applyTheme)
 media?.addEventListener?.('change', applyTheme)
+
+// Larger text: scale the whole interface a little
+watchEffect(() => {
+  document.documentElement.style.zoom = state.data.settings.textSize === 'large' ? '1.1' : ''
+})
+
+// Keep the weekly reminders in sync with the settings and the next day in the rotation
+let remTimer = null
+watch(
+  () => [JSON.stringify(state.data.settings.reminders), state.data.nextDayIndex, days.value.length],
+  () => {
+    clearTimeout(remTimer)
+    remTimer = setTimeout(() => {
+      const d = days.value[state.data.nextDayIndex] || days.value[0]
+      const body = d ? `Next up: day ${d.id}, ${dayTitle(d.name, d.id)}` : 'Time to train'
+      scheduleReminders(state.data.settings.reminders, body)
+    }, 800)
+  },
+  { immediate: true }
+)
 </script>
 
 <style scoped>

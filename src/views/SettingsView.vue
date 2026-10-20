@@ -16,6 +16,35 @@
         <span>Theme</span>
         <Segmented v-model="p.theme" :options="themeItems" label="Theme" @update:model-value="persist" />
       </div>
+      <div class="group-row col">
+        <span>Text size</span>
+        <Segmented v-model="s.textSize" :options="[{ label: 'Normal', value: 'normal' }, { label: 'Larger', value: 'large' }]" label="Text size" @update:model-value="persist" />
+      </div>
+    </div>
+
+    <h2 class="section-h">Your gym</h2>
+    <div class="group">
+      <div v-for="(label, tag) in EQUIPMENT" :key="tag" class="group-row">
+        <span class="grow">{{ label }}</span>
+        <Toggle :model-value="s.equipment[tag] !== false" @update:model-value="(v) => setEquip(tag, v)" />
+      </div>
+    </div>
+    <p class="t-tiny t-muted foot">Exercise lists and swaps only show what your gym has. Routines still show everything.</p>
+
+    <h2 class="section-h">Reminders</h2>
+    <div class="card card-pad">
+      <div class="label">Remind me on</div>
+      <div class="days" role="group" aria-label="Reminder days">
+        <button
+          v-for="d in weekDays" :key="d.n" class="day" :class="{ on: s.reminders.days.includes(d.n) }"
+          :aria-pressed="s.reminders.days.includes(d.n)" :aria-label="d.long" @click="toggleDay(d.n)"
+        >{{ d.short }}</button>
+      </div>
+      <div class="row time-row">
+        <label class="grow" for="rem-time">At</label>
+        <input id="rem-time" v-model="s.reminders.time" class="field time" type="time" @change="persist">
+      </div>
+      <p class="t-tiny t-muted rem-note">{{ reminderNote }}</p>
     </div>
 
     <h2 class="section-h">Smallest weight jumps at your gym, in {{ p.unit }}</h2>
@@ -45,6 +74,18 @@
       <div class="group-row">
         <span class="grow">Vibrate when rest is over</span>
         <Toggle v-model="s.restVibrate" @update:model-value="persist" />
+      </div>
+      <div class="group-row">
+        <span class="grow">Buzz with 10 seconds left</span>
+        <Toggle v-model="s.restWarn" @update:model-value="persist" />
+      </div>
+      <div class="group-row">
+        <div class="grow">
+          <div>Play a sound</div>
+          <button v-if="s.restSound" class="link t-tiny" @click="previewRestSound">Play a sample</button>
+          <div v-else class="t-tiny t-muted">Beeps when rest is over, and with 10 seconds left</div>
+        </div>
+        <Toggle v-model="s.restSound" @update:model-value="(v) => { persist(); if (v) previewRestSound() }" />
       </div>
       <div class="group-row">
         <div class="grow">
@@ -145,7 +186,9 @@ import {
   state, persist, routine, refreshRoutines, routinesUrl, updateAvailable, exportJSON, markBackedUp, importJSON, finishedSessions
 } from '../store.js'
 import { APP_VERSION, DEFAULT_ROUTINES_URL } from '../config.js'
-import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad } from '../lib/training.js'
+import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT } from '../lib/training.js'
+import { previewRestSound } from '../lib/restTimer.js'
+import { isNative } from '../lib/native.js'
 import { relativeDay } from '../lib/format.js'
 import { shareBackupFile, openUrl, copyText } from '../lib/native.js'
 import { parseBackup } from '../lib/storage.js'
@@ -162,6 +205,28 @@ const incRows = computed(() => {
     { key: 'dumbbell', label: 'Dumbbells', help: 'Gap between dumbbell sizes', step: u === 'kg' ? 0.5 : 1, max: 20 },
     { key: 'pin', label: 'Machine pins', help: 'Positions per jump on a stack', step: 1, max: 5 }
   ]
+})
+
+function setEquip (tag, on) {
+  if (on) delete state.data.settings.equipment[tag]
+  else state.data.settings.equipment[tag] = false
+  persist()
+}
+
+const weekDays = [1, 2, 3, 4, 5, 6, 7].map(n => {
+  const d = new Date(2024, 0, n) // 1 Jan 2024 was a Monday
+  return { n, short: d.toLocaleDateString(undefined, { weekday: 'narrow' }), long: d.toLocaleDateString(undefined, { weekday: 'long' }) }
+})
+function toggleDay (n) {
+  const r = state.data.settings.reminders
+  r.days = r.days.includes(n) ? r.days.filter(x => x !== n) : [...r.days, n].sort()
+  persist()
+}
+const reminderNote = computed(() => {
+  const r = state.data.settings.reminders
+  if (!r.days.length) return 'Pick the days you train and we\'ll remind you which day is next.'
+  if (!isNative) return 'Reminders only work in the installed app.'
+  return `You'll get a reminder at ${r.time} with your next day.`
 })
 
 function onUnit (u) {
@@ -257,6 +322,14 @@ async function copyDebug () {
 .mini :deep(.st-btn) { width: 40px; height: 40px; border-radius: 10px; }
 .mini :deep(.st-display), .mini :deep(.st-input) { font-size: 24px; height: 36px; line-height: 36px; }
 .last { margin-top: 6px; }
+.foot { margin: 8px 4px 0; }
+.days { display: flex; justify-content: space-between; gap: 6px; }
+.day { width: 42px; height: 42px; border-radius: 50%; background: var(--paper); color: var(--ink-2); font-weight: 700; }
+.day.on { background: var(--ink); color: var(--paper); }
+.time-row { margin-top: 14px; }
+.time { width: 160px; text-align: center; }
+.rem-note { margin-top: 10px; }
+.link { color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; padding: 2px 0; }
 .btns { margin-top: 14px; gap: 10px; }
 .src-label { margin-top: 16px; }
 .src-now { margin-top: 8px; word-break: break-all; }

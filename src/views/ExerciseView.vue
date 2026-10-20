@@ -6,11 +6,22 @@
     <h1 class="t-title">{{ ex.name }}</h1>
     <p class="t-small t-muted equip">{{ equipmentLine }}</p>
 
-    <div class="muscles">
-      <span v-for="m in ex.primary || []" :key="'p' + m" class="pill main">{{ muscleLabel(m) }}</span>
-      <span v-for="m in ex.secondary || []" :key="'s' + m" class="pill">{{ muscleLabel(m) }}</span>
+    <div v-if="photos.length" class="photos" aria-label="Photos of the movement">
+      <img v-for="(src, i) in photos" :key="src" :src="src" :alt="`${ex.name}, ${i === 0 ? 'start' : 'end'} position`" loading="lazy" @error="(e) => (e.target.style.display = 'none')">
     </div>
-    <p class="t-tiny t-muted legend">Dark: main target. Light: also working.</p>
+
+    <div class="card card-pad map-card">
+      <MuscleMap :primary="ex.primary || []" :secondary="ex.secondary || []" />
+      <div class="muscles">
+        <span v-for="m in ex.primary || []" :key="'p' + m" class="pill main">{{ muscleLabel(m) }}</span>
+        <span v-for="m in ex.secondary || []" :key="'s' + m" class="pill">{{ muscleLabel(m) }}</span>
+      </div>
+      <p class="t-tiny t-muted legend">Solid: main target. Light: also working.</p>
+    </div>
+
+    <p v-if="!canDoAtGym(ex, state.data.settings.equipment)" class="note note-warn t-small gym-note">
+      Your gym doesn't have everything this needs. Check Settings, Your gym.
+    </p>
 
     <button class="btn btn-soft btn-block video" @click="openUrl(videoUrl)">
       <Icon name="video" />{{ ex.videoUrl ? 'Watch the video' : 'Find a form video' }}
@@ -38,6 +49,19 @@
     <section v-if="ex.mistakes?.length">
       <h2 class="section-h">Avoid</h2>
       <ul class="card card-pad bullets avoid"><li v-for="(s, i) in ex.mistakes" :key="i">{{ s }}</li></ul>
+    </section>
+
+    <section>
+      <h2 class="section-h">Your machine settings</h2>
+      <button class="group group-row settings-btn" @click="msOpen = true">
+        <div class="grow">
+          <div v-if="machine.length" class="ms-list">
+            <span v-for="r in machine" :key="r.label" class="ms"><span class="t-muted">{{ r.label }}</span> <b class="t-num">{{ r.value }}</b></span>
+          </div>
+          <span v-else class="t-muted">Seat height, pad position, pulley height…</span>
+        </div>
+        <Icon name="edit" class="chev" />
+      </button>
     </section>
 
     <section>
@@ -77,6 +101,8 @@
         </RouterLink>
       </div>
     </section>
+
+    <MachineSettingsSheet v-model="msOpen" :exercise-id="ex.id" />
   </div>
 
   <div v-else class="page">
@@ -90,16 +116,21 @@ import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import { toast } from '../ui/toast.js'
-import { state, exercisesById, historyFor, setExerciseNote } from '../store.js'
+import MuscleMap from '../ui/MuscleMap.vue'
+import MachineSettingsSheet from '../ui/MachineSettingsSheet.vue'
+import { state, exercisesById, historyFor, setExerciseNote, imageUrl } from '../store.js'
 import { muscleLabel, relativeDay, youtubeSearchUrl } from '../lib/format.js'
 import { openUrl } from '../lib/native.js'
-import { bestE1RM, heaviest, fmtLoad, unitFor } from '../lib/training.js'
+import { bestE1RM, heaviest, fmtLoad, unitFor, canDoAtGym } from '../lib/training.js'
 
 const route = useRoute()
 const router = useRouter()
 const ex = computed(() => exercisesById.value[route.params.id])
 const unit = computed(() => unitFor(ex.value, state.data.profile))
 const videoUrl = computed(() => ex.value?.videoUrl || youtubeSearchUrl(ex.value?.name || ''))
+const photos = computed(() => (ex.value?.images || []).map(imageUrl))
+const machine = computed(() => state.data.machineSettings[ex.value?.id] || [])
+const msOpen = ref(false)
 const alternatives = computed(() => (ex.value?.alternatives || []).map(id => exercisesById.value[id]).filter(Boolean))
 const history = computed(() => (ex.value ? historyFor(ex.value.id) : []))
 const best = computed(() => {
@@ -127,16 +158,26 @@ function saveNote () {
 
 function setStr (s) {
   if (s.seconds) return s.load ? `${fmtLoad(s.load, s.unit)} for ${s.seconds}s` : `${s.seconds}s`
-  return `${s.load ? fmtLoad(s.load, s.unit) : 'BW'} × ${s.reps}`
+  const reps = s.repsL != null && s.repsR != null && s.repsL !== s.repsR ? `${s.repsL}/${s.repsR}` : s.reps
+  const tag = s.type === 'drop' ? ' drop' : s.type === 'warmup' ? ' warm-up' : ''
+  return `${s.load ? fmtLoad(s.load, s.unit) : 'BW'} × ${reps}${tag}`
 }
 </script>
 
 <style scoped>
 .equip { margin-top: 6px; }
-.muscles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.photos { display: flex; gap: 8px; overflow-x: auto; margin: 16px -16px 0; padding: 0 16px; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.photos::-webkit-scrollbar { display: none; }
+.photos img { flex: 0 0 82%; max-width: 420px; aspect-ratio: 3 / 2; object-fit: cover; border-radius: 14px; background: var(--card-2); scroll-snap-align: center; }
+.map-card { margin-top: 16px; }
+.muscles { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.gym-note { margin-top: 12px; }
+.settings-btn { width: 100%; }
+.ms-list { display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.ms { font-size: 17px; }
 .pill.main { background: var(--ink); color: var(--paper); }
 .legend { margin: 8px 2px 0; }
-.video { margin-top: 18px; }
+.video { margin-top: 14px; }
 .bullets { list-style: none; }
 .bullets li { position: relative; padding-left: 18px; font-size: 16px; }
 .bullets li + li { margin-top: 10px; }

@@ -39,5 +39,9 @@ export {
   mdiContentCopy as copy,
   mdiLinkVariant as superset,
   mdiAlertCircleOutline as alert,
-  mdiCalendarStar as calendar
+  mdiCalendarStar as calendar,
+  mdiBookOpenPageVariantOutline as library,
+  mdiBellOutline as bell,
+  mdiFormatSize as textSize,
+  mdiVolumeHigh as sound
 } from '@mdi/js'

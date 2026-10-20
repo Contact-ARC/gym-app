@@ -4,6 +4,10 @@
       v-model="q" class="field" type="search" placeholder="Search exercises" autocomplete="off"
       enterkeyhint="search" aria-label="Search exercises"
     >
+    <label v-if="gymLimited" class="gym-toggle t-small">
+      <Toggle v-model="gymOnly" />
+      <span>Only what my gym has</span>
+    </label>
     <template v-if="!q && suggested.length">
       <div class="section-h">{{ suggestedLabel }}</div>
       <div class="group">
@@ -31,8 +35,10 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import Sheet from './Sheet.vue'
-import { exercisesById } from '../store.js'
+import Toggle from './Toggle.vue'
+import { state, exercisesById } from '../store.js'
 import { muscleLabel } from '../lib/format.js'
+import { canDoAtGym } from '../lib/training.js'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -44,14 +50,17 @@ const props = defineProps({
 })
 const emit = defineEmits(['update:modelValue', 'pick'])
 const q = ref('')
+const gymOnly = ref(true)
 watch(() => props.modelValue, (o) => { if (o) q.value = '' })
+const gymLimited = computed(() => Object.values(state.data.settings.equipment || {}).some(v => v === false))
+const atGym = (e) => !gymLimited.value || !gymOnly.value || canDoAtGym(e, state.data.settings.equipment)
 
 const all = computed(() => {
   let list = Object.values(exercisesById.value)
   if (props.onlyIds) list = list.filter(e => props.onlyIds.includes(e.id))
-  return list.filter(e => e.id !== props.excludeId).sort((a, b) => a.name.localeCompare(b.name))
+  return list.filter(e => e.id !== props.excludeId && atGym(e)).sort((a, b) => a.name.localeCompare(b.name))
 })
-const suggested = computed(() => props.suggestedIds.map(id => exercisesById.value[id]).filter(e => e && e.id !== props.excludeId))
+const suggested = computed(() => props.suggestedIds.map(id => exercisesById.value[id]).filter(e => e && e.id !== props.excludeId && atGym(e)))
 const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 const filtered = computed(() => {
   const t = norm(q.value.trim())
@@ -65,3 +74,7 @@ function pick (id) {
   emit('update:modelValue', false)
 }
 </script>
+
+<style scoped>
+.gym-toggle { display: flex; align-items: center; gap: 12px; margin: 14px 2px 0; }
+</style>

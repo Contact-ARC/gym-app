@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Long-press the app icon. Each opens gymcrew://… which the web app handles (see src/main.js). -->
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:shortcutId="start_next"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_play"
+        android:shortcutShortLabel="@string/shortcut_start_short"
+        android:shortcutLongLabel="@string/shortcut_start_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="gymcrew://start-next"
+            android:targetPackage="com.gymcrew.app"
+            android:targetClass="com.gymcrew.app.MainActivity" />
+    </shortcut>
+    <shortcut
+        android:shortcutId="progress"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_chart"
+        android:shortcutShortLabel="@string/shortcut_progress_short"
+        android:shortcutLongLabel="@string/shortcut_progress_long">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:data="gymcrew://progress"
+            android:targetPackage="com.gymcrew.app"
+            android:targetClass="com.gymcrew.app.MainActivity" />
+    </shortcut>
+</shortcuts>

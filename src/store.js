@@ -2,13 +2,22 @@
 import { reactive, computed, toRaw } from 'vue'
 import { loadData, saveData, emptyData, parseBackup } from './lib/storage.js'
 import { DEFAULT_ROUTINES_URL, SUPPORTED_ROUTINE_SCHEMA, APP_VERSION } from './config.js'
-import { pickActiveRoutine, compareVersions, routineWeek, dateKey, suggestNext, detectPRs, sessionVolume } from './lib/training.js'
+import { pickActiveRoutine, compareVersions, dateKey, suggestNext, detectPRs, sessionVolume, resolvePlan, plannedSetsFor } from './lib/training.js'
 
 export const state = reactive({
   ready: false,
   data: emptyData(),
-  routineStatus: { loading: false, error: null, lastAttempt: null }
+  routineStatus: { loading: false, error: null, lastAttempt: null },
+  today: dateKey() // refreshed when the app comes back to the foreground
 })
+
+export function touchToday () {
+  const k = dateKey()
+  if (k !== state.today) state.today = k
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) touchToday() })
+}
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 
@@ -39,11 +48,19 @@ export const exercisesById = computed(() => {
 })
 export const days = computed(() => routine.value?.days || [])
 
-export const currentWeek = computed(() => routineWeek(routine.value?.effectiveFrom))
-export const isDeloadWeek = computed(() => {
-  const dw = routine.value?.deloadWeek
-  return !!dw && currentWeek.value === dw
+/** Today's targets from the routine: week number, reps in reserve, deload, set changes. */
+export const todayPlan = computed(() => {
+  const [y, m, d] = state.today.split('-').map(Number)
+  return resolvePlan(routine.value, new Date(y, m - 1, d))
 })
+export const currentWeek = computed(() => todayPlan.value.week)
+export const isDeloadWeek = computed(() => todayPlan.value.deload)
+
+/** Exercise photos live in the routines repo; paths in exercises.json are relative to it. */
+export function imageUrl (path) {
+  if (!path) return ''
+  return /^https?:/.test(path) ? path : routinesUrl.value + path
+}
 
 export const updateAvailable = computed(() => {
   const v = manifest.value?.app?.version
@@ -126,12 +143,18 @@ export function historyFor (exerciseId, excludeSessionId = null) {
 }
 
 export function suggestionFor (item, sessionId = null) {
+  const session = sessionId ? getSession(sessionId) : null
+  const plan = session ? (session.plan || {}) : todayPlan.value
+  let factor = plan.loadFactor ?? 1
+  let reason = plan.deload ? 'Deload week' : ''
+  if (session?.easy) { factor *= 0.9; reason = reason ? `${reason}, lighter day` : 'Lighter day' }
   return suggestNext({
     item,
     exercise: exercisesById.value[item.exerciseId],
     history: historyFor(item.exerciseId, sessionId),
     profile: state.data.profile,
-    deload: isDeloadWeek.value
+    loadFactor: factor,
+    reason
   })
 }
 
@@ -147,7 +170,13 @@ export function startSession (dayIndex) {
     dayIndex,
     dayId: day.id,
     dayName: day.name,
-    items: day.items.map(it => ({ ...structuredClone(toRaw(it)), originalExerciseId: it.exerciseId })),
+    items: day.items.map((it, i) => ({
+      ...structuredClone(toRaw(it)),
+      sets: plannedSetsFor(it, i, todayPlan.value),
+      routineSets: it.sets,
+      originalExerciseId: it.exerciseId
+    })),
+    plan: { ...todayPlan.value },
     sets: [],
     notes: ''
   }
@@ -223,9 +252,32 @@ export function swapExercise (sessionId, itemIndex, newExerciseId) {
   persist()
 }
 
-export function finishSession (sessionId) {
+/** "Rough day": ~10% lighter suggestions and one set fewer on exercises you haven't started. */
+export function setEasyDay (sessionId, on) {
+  const s = getSession(sessionId)
+  if (!s) return
+  s.easy = on
+  s.items.forEach((it, i) => {
+    const started = s.sets.some(x => x.itemIndex === i)
+    if (started) return
+    const planned = (it.sets || 1) + (it.extraSets || 0) - (it.removedSets || 0)
+    if (on && planned > 1) { it.removedSets = (it.removedSets || 0) + 1; it.easyRemoved = true }
+    if (!on && it.easyRemoved) { it.removedSets = Math.max(0, (it.removedSets || 0) - 1); it.easyRemoved = false }
+  })
+  persist()
+}
+
+export function setMachineSettings (exerciseId, rows) {
+  const clean = rows.map(r => ({ label: r.label.trim(), value: String(r.value ?? '').trim() })).filter(r => r.label && r.value)
+  if (clean.length) state.data.machineSettings[exerciseId] = clean
+  else delete state.data.machineSettings[exerciseId]
+  persist()
+}
+
+export function finishSession (sessionId, rating = null) {
   const s = getSession(sessionId)
   if (!s) return null
+  if (rating && (rating.effort || rating.energy)) s.rating = rating
   s.finishedAt = new Date().toISOString()
   if (s.dayIndex != null && days.value.length) {
     state.data.nextDayIndex = (s.dayIndex + 1) % days.value.length

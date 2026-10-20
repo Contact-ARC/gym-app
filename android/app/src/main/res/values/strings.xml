@@ -4,4 +4,8 @@
     <string name="title_activity_main">Gym Crew</string>
     <string name="package_name">com.gymcrew.app</string>
     <string name="custom_url_scheme">com.gymcrew.app</string>
+    <string name="shortcut_start_short">Start workout</string>
+    <string name="shortcut_start_long">Start your next workout</string>
+    <string name="shortcut_progress_short">Progress</string>
+    <string name="shortcut_progress_long">See your progress</string>
 </resources>

@@ -23,7 +23,12 @@ export function emptyData () {
     settings: {
       routinesUrl: null, // null = use DEFAULT_ROUTINES_URL from config.js
       restVibrate: true,
-      restNotify: true
+      restNotify: true,
+      restSound: false,
+      restWarn: true, // buzz with 10 seconds left
+      textSize: 'normal', // normal | large
+      reminders: { days: [], time: '18:00' }, // days: 1=Mon … 7=Sun
+      equipment: {} // { [tag]: false } for equipment your gym doesn't have
     },
     sessions: [], // [{ id, startedAt, finishedAt, routineMonth, dayId, dayName, items:[], sets:[], notes }]
     activeSessionId: null,
@@ -33,7 +38,9 @@ export function emptyData () {
     routineArchive: {}, // { [month]: routine }
     lastSeenRoutineMonth: null,
     lastBackupAt: null,
-    welcomed: false
+    welcomed: false,
+    machineSettings: {}, // { [exerciseId]: [{ label, value }] }
+    tips: {} // first-time hints already shown
   }
 }
 
@@ -44,8 +51,10 @@ export function migrate (data) {
     ...base,
     ...data,
     profile: { ...base.profile, ...(data.profile || {}) },
-    settings: { ...base.settings, ...(data.settings || {}) },
-    cache: { ...base.cache, ...(data.cache || {}) }
+    settings: { ...base.settings, ...(data.settings || {}), reminders: { ...base.settings.reminders, ...(data.settings?.reminders || {}) }, equipment: { ...(data.settings?.equipment || {}) } },
+    cache: { ...base.cache, ...(data.cache || {}) },
+    machineSettings: { ...(data.machineSettings || {}) },
+    tips: { ...(data.tips || {}) }
   }
   // if (out.schemaVersion < 2) { ...transform...; out.schemaVersion = 2 }
   out.schemaVersion = DATA_SCHEMA_VERSION

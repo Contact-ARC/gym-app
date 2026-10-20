@@ -6,7 +6,8 @@ export default createRouter({
   routes: [
     { path: '/', name: 'home', component: HomeView, meta: { tab: 'home' } },
     { path: '/day/:index', name: 'day', component: () => import('./views/DayView.vue'), meta: { tab: 'home' } },
-    { path: '/exercise/:id', name: 'exercise', component: () => import('./views/ExerciseView.vue') },
+    { path: '/library', name: 'library', component: () => import('./views/LibraryView.vue'), meta: { tab: 'library' } },
+    { path: '/exercise/:id', name: 'exercise', component: () => import('./views/ExerciseView.vue'), meta: { tab: 'library' } },
     { path: '/workout/:id', name: 'workout', component: () => import('./views/WorkoutView.vue'), meta: { hideNav: true } },
     { path: '/summary/:id', name: 'summary', component: () => import('./views/SummaryView.vue'), meta: { hideNav: true } },
     { path: '/history', name: 'history', component: () => import('./views/HistoryView.vue'), meta: { tab: 'progress' } },

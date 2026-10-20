@@ -13,7 +13,7 @@ import './styles/base.css'
 
 import App from './App.vue'
 import router from './router.js'
-import { initStore } from './store.js'
+import { initStore, state, days, activeSession, startSession } from './store.js'
 import { closeTopOverlay } from './ui/overlay.js'
 
 initStore().then(() => {
@@ -26,4 +26,19 @@ initStore().then(() => {
     if (path === '/' || !canGoBack) CapApp.exitApp()
     else router.back()
   }).catch(() => {})
+
+  // App-icon shortcuts: gymcrew://start-next and gymcrew://progress
+  function openLink (url) {
+    if (!url || !url.startsWith('gymcrew://')) return
+    const what = url.replace('gymcrew://', '').replace(/\/$/, '')
+    if (what === 'progress') return router.push('/progress')
+    if (what === 'start-next') {
+      if (activeSession.value) return router.push(`/workout/${activeSession.value.id}`)
+      const i = days.value[state.data.nextDayIndex] ? state.data.nextDayIndex : 0
+      const id = days.value.length ? startSession(i) : null
+      router.push(id ? `/workout/${id}` : '/')
+    }
+  }
+  CapApp.addListener('appUrlOpen', ({ url }) => openLink(url)).catch(() => {})
+  CapApp.getLaunchUrl().then(r => openLink(r?.url)).catch(() => {})
 })
