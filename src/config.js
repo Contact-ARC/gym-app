@@ -1,12 +1,12 @@
 // ─────────────────────────────────────────────────────────────
 // EDIT THIS before your first build.
 // Base URL of the PUBLIC gym-routines repo (must end with "/").
-// Replace OWNER with the GitHub account name.
+// Replace Contact-ARC with the GitHub account name.
 // For local dev you can override it with VITE_ROUTINES_URL in a .env file.
 // ─────────────────────────────────────────────────────────────
 export const DEFAULT_ROUTINES_URL =
   import.meta.env.VITE_ROUTINES_URL ||
-  'https://raw.githubusercontent.com/OWNER/gym-routines/main/'
+  'https://raw.githubusercontent.com/Contact-ARC/gym-routines/main/'
 
 export const APP_VERSION = __APP_VERSION__
 
