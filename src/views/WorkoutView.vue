@@ -23,15 +23,16 @@
     <!-- Exercise strip -->
     <div v-if="items.length" class="strip" role="tablist" aria-label="Exercises">
       <button
-        v-for="(it, i) in items" :key="i" :ref="(el) => (chips[i] = el)"
-        class="chip" role="tab" :aria-selected="i === current"
-        :class="{ on: i === current, complete: isComplete(i) }"
-        @click="go(i)"
+        v-for="(e, ei) in entries" :key="ei" :ref="(el) => (chips[ei] = el)"
+        class="chip" role="tab" :aria-selected="e.indices.includes(current)"
+        :class="{ on: e.indices.includes(current), complete: entryComplete(e), ss: e.indices.length > 1 }"
+        @click="goEntry(ei)"
       >
-        <span class="chip-n t-num">{{ i + 1 }}</span>
-        <span class="chip-name">{{ shortName(it.exerciseId) }}</span>
-        <Icon v-if="isComplete(i)" name="checkBold" :size="15" class="chip-check" />
-        <span v-else class="chip-count t-num">{{ planLogged(i).length }}/{{ rowCount(i) }}</span>
+        <span class="chip-n t-num">{{ ei + 1 }}</span>
+        <Icon v-if="e.indices.length > 1" name="superset" :size="16" class="chip-link" />
+        <span class="chip-name">{{ e.indices.map(i => shortName(items[i].exerciseId)).join(' + ') }}</span>
+        <Icon v-if="entryComplete(e)" name="checkBold" :size="15" class="chip-check" />
+        <span v-else class="chip-count t-num">{{ entryDone(e) }}/{{ entryTotal(e) }}</span>
       </button>
     </div>
 
@@ -52,17 +53,53 @@
         <button class="btn btn-sm btn-soft" @click="dismissTip">Got it</button>
       </div>
 
+      <div v-if="group" class="ss-card" :key="'ss' + group.indices[0]">
+        <div class="ss-head t-small">
+          <Icon name="superset" :size="18" />
+          <span><b>Superset.</b> One set of each, back to back, then rest {{ restLabel(groupRest).replace(' rest', '') }}.</span>
+        </div>
+        <div class="ss-tabs" role="tablist" aria-label="Exercises in this superset">
+          <button
+            v-for="(gi, k) in group.indices" :key="gi" class="ss-tab" role="tab"
+            :aria-selected="gi === current" :class="{ on: gi === current, done: isComplete(gi) }"
+            @click="go(gi, 'swap')"
+          >
+            <span class="ss-letter">{{ letters[k] }}</span>
+            <span class="ss-name">{{ shortName(items[gi].exerciseId) }}</span>
+            <Icon v-if="isComplete(gi)" name="checkBold" :size="15" />
+          </button>
+        </div>
+        <div class="ss-grid t-num" :style="{ gridTemplateColumns: `28px repeat(${groupRounds}, minmax(0, 1fr))` }" aria-label="Rounds">
+          <span />
+          <span v-for="r in groupRounds" :key="'h' + r" class="ss-rh">Round {{ r }}</span>
+          <template v-for="(gi, k) in group.indices" :key="'row' + gi">
+            <span class="ss-letter sm">{{ letters[k] }}</span>
+            <button
+              v-for="r in groupRounds" :key="gi + ':' + r" class="ss-cell"
+              :class="{ done: !!planLogged(gi)[r - 1], now: gi === current && r === planLogged(gi).length + 1, off: r > rowCount(gi) }"
+              :disabled="!planLogged(gi)[r - 1] && gi === current"
+              :aria-label="planLogged(gi)[r - 1] ? `Edit ${letters[k]}, round ${r}` : `${letters[k]}, round ${r}`"
+              @click="planLogged(gi)[r - 1] ? openEdit(planLogged(gi)[r - 1]) : go(gi, 'swap')"
+            >{{ planLogged(gi)[r - 1] ? setText(planLogged(gi)[r - 1]) : (gi === current && r === planLogged(gi).length + 1 ? 'now' : '') }}</button>
+          </template>
+        </div>
+      </div>
+
       <Transition :name="slideDir" mode="out-in">
         <section :key="current + ':' + item.exerciseId" class="ex">
           <div class="row ex-top">
+            <button v-if="thumb" class="thumb" aria-label="How to do it" @click="infoOpen = true">
+              <img :src="thumb" alt="" @error="(e) => (e.target.parentElement.style.display = 'none')">
+            </button>
             <div class="grow">
-              <h1 class="t-title">{{ ex?.name || item.exerciseId }}</h1>
+              <h1 class="t-title" :class="{ 'in-ss': !!group }" @click="infoOpen = true">{{ ex?.name || item.exerciseId }}</h1>
               <div class="t-small t-muted ex-meta">
                 <span>{{ prescription({ ...item, sets: rowCount(current) }, ex) }}</span>
                 <span v-if="restSecs">{{ restLabel(restSecs) }}</span>
                 <span v-if="item.exerciseId !== item.originalExerciseId" class="t-faint">replaces {{ name(item.originalExerciseId) }}</span>
               </div>
             </div>
+            <button class="icon-btn info-btn" aria-label="How to do it" @click="infoOpen = true"><Icon name="info" /></button>
             <button class="icon-btn" aria-label="Exercise options" @click="exMenuOpen = true"><Icon name="more" /></button>
           </div>
 
@@ -72,11 +109,6 @@
             <button v-for="r in machine" :key="r.label" class="pill ms" @click="msOpen = true">
               {{ r.label }} <b class="t-num">{{ r.value }}</b>
             </button>
-          </div>
-
-          <div v-if="item.group" class="superset t-small">
-            <Icon name="superset" :size="18" />
-            <span>Superset with {{ groupMates.map(name).join(' and ') }}. Rest after the last one.</span>
           </div>
 
           <div class="hint" :class="`k-${sugg.kind}`">
@@ -111,7 +143,7 @@
           </div>
 
           <!-- Sets -->
-          <div class="sets" aria-label="Sets">
+          <div v-if="!group" class="sets" aria-label="Sets">
             <button
               v-for="s in logged(current)" :key="s.id" class="set done" :class="{ extra: !fillsPlannedSet(s) }"
               :aria-label="`${setName(s)}: ${setText(s)}. Tap to edit`" @click="openEdit(s)"
@@ -220,7 +252,7 @@
     <Sheet v-model="exMenuOpen" :title="ex?.name">
       <div class="group">
         <button class="group-row" @click="exMenuOpen = false; swapOpen = true"><Icon name="swap" /><span class="grow">Swap for another exercise</span></button>
-        <button class="group-row" @click="exMenuOpen = false; router.push(`/exercise/${item.exerciseId}`)"><Icon name="info" /><span class="grow">How to do it</span></button>
+        <button class="group-row" @click="exMenuOpen = false; infoOpen = true"><Icon name="info" /><span class="grow">How to do it</span></button>
         <button class="group-row" @click="exMenuOpen = false; msOpen = true"><Icon name="settings" /><span class="grow">Machine settings</span></button>
         <button class="group-row" @click="exMenuOpen = false; openNote()"><Icon name="note" /><span class="grow">{{ state.data.exerciseNotes[item.exerciseId] ? 'Edit your note' : 'Add a note for next time' }}</span></button>
         <button class="group-row" @click="addSet(); exMenuOpen = false"><Icon name="plus" /><span class="grow">Add a set</span></button>
@@ -237,6 +269,14 @@
     />
     <ExercisePicker v-model="addOpen" title="Add an exercise" @pick="doAdd" />
     <MachineSettingsSheet v-if="item" v-model="msOpen" :exercise-id="item.exerciseId" />
+
+    <!-- Quick look at how to do the current exercise -->
+    <Sheet v-model="infoOpen" :title="ex?.name">
+      <ExerciseDetails v-if="ex" :ex="ex" in-sheet />
+      <RouterLink :to="`/exercise/${item?.exerciseId}`" class="btn btn-ghost btn-block full-link" @click="infoOpen = false">
+        Your history and notes for this exercise
+      </RouterLink>
+    </Sheet>
 
     <!-- Note -->
     <Sheet v-model="noteOpen" :title="ex?.name">
@@ -319,17 +359,18 @@ import Stepper from '../ui/Stepper.vue'
 import Segmented from '../ui/Segmented.vue'
 import ExercisePicker from '../ui/ExercisePicker.vue'
 import MachineSettingsSheet from '../ui/MachineSettingsSheet.vue'
+import ExerciseDetails from '../ui/ExerciseDetails.vue'
 import { plateStyle } from '../ui/plates.js'
 import { toast, hideToast } from '../ui/toast.js'
 import {
-  state, persist, getSession, exercisesById, suggestionFor, historyFor, logSet, updateSet, deleteSet,
+  state, persist, getSession, exercisesById, imageUrl, suggestionFor, historyFor, logSet, updateSet, deleteSet,
   swapExercise, addItemToSession, finishSession, discardSession, setExerciseNote, setEasyDay
 } from '../store.js'
 import {
   unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, DEFAULT_PLATES
 } from '../lib/training.js'
 import { prescription, restLabel, dayTitle, mmss, fmtDate } from '../lib/format.js'
-import { effectiveRest, nextInGroup } from '../lib/supersets.js'
+import { effectiveRest } from '../lib/supersets.js'
 import { rest, startRest, stopRest, addRest } from '../lib/restTimer.js'
 import { tap, buzz, keepAwake } from '../lib/native.js'
 
@@ -355,8 +396,40 @@ function go (i, dir) {
 }
 watch(current, (i) => {
   if (session.value) { session.value.currentIndex = i; persist() }
-  nextTick(() => chips[i]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }))
+  nextTick(() => chips[entryOf(i)]?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' }))
 })
+
+// ── Strip entries: a superset is one entry ─────────────────
+const entries = computed(() => {
+  const out = []
+  items.value.forEach((it, i) => {
+    const last = out[out.length - 1]
+    if (it.group && last?.group === it.group && last.indices[last.indices.length - 1] === i - 1) last.indices.push(i)
+    else out.push({ group: it.group || null, indices: [i] })
+  })
+  return out
+})
+const entryOf = (i) => entries.value.findIndex(e => e.indices.includes(i))
+const entryComplete = (e) => e.indices.every(isComplete)
+// Supersets count rounds; single exercises count sets
+const entryDone = (e) => (e.indices.length > 1 ? Math.min(...e.indices.map(i => planLogged(i).length)) : planLogged(e.indices[0]).length)
+const entryTotal = (e) => Math.max(...e.indices.map(rowCount))
+function goEntry (ei, dir) {
+  const e = entries.value[ei]
+  if (!e) return
+  if (e.indices.includes(current.value)) return
+  go(e.indices.find(i => !isComplete(i)) ?? e.indices[0], dir)
+}
+
+const group = computed(() => {
+  const e = entries.value[entryOf(current.value)]
+  return e && e.indices.length > 1 ? e : null
+})
+const letters = ['A', 'B', 'C', 'D', 'E']
+const groupRounds = computed(() => (group.value ? Math.max(...group.value.indices.map(rowCount)) : 0))
+const groupRest = computed(() => (group.value ? effectiveRest(items.value, group.value.indices[group.value.indices.length - 1]) : 0))
+const thumb = computed(() => (ex.value?.images?.[0] ? imageUrl(ex.value.images[0]) : ''))
+const infoOpen = ref(false)
 
 const chips = []
 const shortName = (id) => name(id).replace(/^(Barbell|Dumbbell|Cable|Machine|Smith Machine|EZ-Bar)\s+/i, '')
@@ -370,7 +443,7 @@ const rowCount = (i) => {
   const planned = Math.max(1, (it.sets || 1) + (it.extraSets || 0) - (it.removedSets || 0))
   return Math.max(planned, planLogged(i).length)
 }
-const isComplete = (i) => planLogged(i).length >= rowCount(i)
+function isComplete (i) { return planLogged(i).length >= rowCount(i) }
 const plannedSets = computed(() => items.value.reduce((t, _, i) => t + rowCount(i), 0))
 const doneSets = computed(() => (session.value?.sets || []).filter(fillsPlannedSet).length)
 const progressPct = computed(() => (plannedSets.value ? Math.min(100, (doneSets.value / plannedSets.value) * 100) : 0))
@@ -544,7 +617,9 @@ const canLog = computed(() => {
 const logLabel = computed(() => {
   if (draft.value.type === 'drop') return 'Log drop set'
   const n = planLogged(current.value).length + 1
-  return n > rowCount(current.value) ? 'Log an extra set' : `Log set ${n}`
+  if (n > rowCount(current.value)) return 'Log an extra set'
+  if (group.value) return `Log ${letters[group.value.indices.indexOf(current.value)]}, round ${n}`
+  return `Log set ${n}`
 })
 
 function logNow () {
@@ -581,18 +656,38 @@ function logNow () {
   if (editingFinished.value || wasDrop) return
 
   // Where to next, and what the rest timer should say
-  let next = i
-  if (it.group) next = nextInGroup(items.value, i)
-  else if (isComplete(i)) {
-    const after = items.value.findIndex((_, j) => j > i && !isComplete(j))
-    const before = items.value.findIndex((_, j) => !isComplete(j))
-    next = after >= 0 ? after : (before >= 0 ? before : i)
+  const e = entries.value[entryOf(i)]
+  const firstOpenAfter = (from) => {
+    const after = items.value.findIndex((_, j) => j > from && !isComplete(j))
+    const any = items.value.findIndex((_, j) => !isComplete(j))
+    return after >= 0 ? after : (any >= 0 ? any : i)
   }
-  const secs = effectiveRest(items.value, i)
-  const nextLabel = allDone.value ? '' : `${name(items.value[next].exerciseId)}, set ${planLogged(next).length + 1}`
-  if (secs && !allDone.value) startRest(secs, nextLabel)
+  let next = i
+  let secs = effectiveRest(items.value, i)
+  let sameGroup = false
+  if (e.indices.length > 1) {
+    // Superset: go to the partner that still has sets left; rest only when a round is finished
+    const pos = e.indices.indexOf(i)
+    const order = [...e.indices.slice(pos + 1), ...e.indices.slice(0, pos + 1)]
+    const partner = order.find(j => !isComplete(j))
+    if (partner != null) {
+      next = partner
+      sameGroup = true
+      const roundDone = partner < i || partner === i
+      secs = roundDone ? groupRest.value : 0
+    } else {
+      next = firstOpenAfter(e.indices[e.indices.length - 1])
+      secs = groupRest.value
+    }
+  } else if (isComplete(i)) {
+    next = firstOpenAfter(i)
+  }
+  const label = sameGroup
+    ? `${name(items.value[next].exerciseId)}, round ${planLogged(next).length + 1}`
+    : `${name(items.value[next].exerciseId)}, set ${planLogged(next).length + 1}`
+  if (secs && !allDone.value) startRest(secs, allDone.value ? '' : label)
   else stopRest()
-  if (next !== i) setTimeout(() => go(next, 'slide-next'), it.group ? 0 : 350)
+  if (next !== i) setTimeout(() => go(next, sameGroup ? 'swap' : 'slide-next'), sameGroup ? 120 : 350)
 }
 
 // ── Edit a logged set ──────────────────────────────────────
@@ -649,10 +744,11 @@ function swipeStart (e) {
 function swipeEnd (e) {
   const t = e.changedTouches[0]
   const dx = t.clientX - sx; const dy = t.clientY - sy
-  if (e.target.closest?.('.inputs, .sets, .seg, .warm, .tags')) return // don't hijack controls
+  if (e.target.closest?.('.inputs, .sets, .seg, .warm, .tags, .ss-card')) return // don't hijack controls
   if (Math.abs(dx) > 70 && Math.abs(dy) < 50 && Date.now() - st < 600) {
-    if (dx < 0) go(current.value + 1, 'slide-next')
-    else go(current.value - 1, 'slide-prev')
+    const ei = entryOf(current.value)
+    if (dx < 0) goEntry(ei + 1, 'slide-next')
+    else goEntry(ei - 1, 'slide-prev')
   }
 }
 
@@ -704,7 +800,7 @@ let clock = null
 onMounted(() => {
   clock = setInterval(() => { now.value = Date.now() }, 1000)
   if (!editingFinished.value) keepAwake(true)
-  nextTick(() => chips[current.value]?.scrollIntoView({ inline: 'center', block: 'nearest' }))
+  nextTick(() => chips[entryOf(current.value)]?.scrollIntoView({ inline: 'center', block: 'nearest' }))
 })
 onBeforeUnmount(() => { clearInterval(clock); clearInterval(holdTimer); keepAwake(false) })
 const elapsed = computed(() => {
@@ -794,8 +890,45 @@ function discard () {
 .tip .btn { white-space: nowrap; }
 .tip { display: flex; gap: 12px; align-items: center; margin-top: 8px; padding: 12px 12px 12px 16px; border-radius: 14px; background: var(--card); border: 1.5px dashed var(--line); }
 
-.ex-top { align-items: flex-start; margin-top: 8px; }
-.ex-top h1 { margin-top: 4px; }
+.ex-top { align-items: flex-start; margin-top: 8px; gap: 8px; }
+.ex-top h1 { margin-top: 4px; cursor: pointer; }
+.ex-top h1.in-ss { font-size: 24px; }
+.thumb { flex: 0 0 auto; width: 64px; height: 48px; margin-top: 4px; border-radius: 10px; overflow: hidden; background: var(--card-2); }
+.thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.info-btn { margin-right: -10px; }
+.full-link { margin-top: 18px; }
+
+/* Superset: one card that shows both exercises and the rounds */
+.ss-card { margin-top: 10px; padding: 12px; border-radius: 16px; background: var(--card); border: 2px solid var(--plate-bg); }
+.ss-head { display: flex; gap: 8px; align-items: flex-start; color: var(--ink-2); padding: 0 4px; }
+.ss-head b { color: var(--ink); }
+.ss-tabs { display: flex; gap: 6px; margin-top: 10px; }
+.ss-tab {
+  flex: 1 1 0; min-width: 0; display: flex; align-items: center; gap: 8px;
+  min-height: 48px; padding: 0 10px 0 6px; border-radius: 12px;
+  background: var(--card-2); color: var(--ink-2); font-weight: 600; font-size: 15px; text-align: left;
+}
+.ss-tab.on { background: var(--ink); color: var(--paper); }
+.ss-tab.done:not(.on) { color: var(--ok); }
+.ss-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-letter {
+  flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center;
+  font-family: var(--font-num); font-weight: 700; font-size: 17px;
+  background: var(--card); color: var(--ink);
+}
+.ss-tab.on .ss-letter { background: var(--plate-bg); color: var(--plate-fg); }
+.ss-letter.sm { width: 24px; height: 24px; font-size: 14px; background: var(--card-2); align-self: center; }
+.ss-grid { display: grid; gap: 6px; margin-top: 12px; align-items: center; }
+.ss-rh { font-family: var(--font); font-size: 12px; font-weight: 600; color: var(--ink-3); text-align: center; }
+.ss-cell {
+  min-height: 38px; border-radius: 10px; font-size: 16px; font-weight: 600;
+  border: 1.5px dashed var(--line); color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 4px;
+}
+.ss-cell.done { border: 1.5px solid transparent; background: var(--ok-soft); color: var(--ink); }
+.ss-cell.now { border: 1.5px solid var(--ink); color: var(--ink); font-family: var(--font); font-size: 13px; }
+.ss-cell.off { visibility: hidden; }
+.chip-link { margin-left: -4px; }
+.chip.ss { max-width: 280px; }
 .ex-meta { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 4px; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .pill.ms b { color: var(--ink); }
@@ -882,6 +1015,8 @@ function discard () {
 :root[data-theme="dark"] .rest:not(.done) .rest-btn.strong { background: rgba(21,32,46,0.18); }
 
 /* Slide between exercises */
+.swap-enter-active, .swap-leave-active { transition: opacity 110ms ease; }
+.swap-enter-from, .swap-leave-to { opacity: 0; }
 .slide-next-enter-active, .slide-next-leave-active,
 .slide-prev-enter-active, .slide-prev-leave-active { transition: transform 180ms ease, opacity 180ms ease; }
 .slide-next-enter-from, .slide-prev-leave-to { transform: translateX(28px); opacity: 0; }
