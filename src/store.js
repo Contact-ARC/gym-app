@@ -1,6 +1,6 @@
 // App-wide state. Small enough that a reactive object beats pulling in Pinia.
 import { reactive, computed, toRaw } from 'vue'
-import { loadData, saveData, emptyData, parseBackup } from './lib/storage.js'
+import { loadData, saveData, emptyData, parseBackup, onSaveError } from './lib/storage.js'
 import { DEFAULT_ROUTINES_URL, SUPPORTED_ROUTINE_SCHEMA, APP_VERSION } from './config.js'
 import { pickActiveRoutine, compareVersions, dateKey, suggestNext, detectPRs, sessionVolume, resolvePlan, plannedSetsFor, applyTrack } from './lib/training.js'
 import { challengeProgress, weekStreak } from './lib/stats.js'
@@ -10,6 +10,8 @@ export const state = reactive({
   ready: false,
   data: emptyData(),
   routineStatus: { loading: false, error: null, lastAttempt: null },
+  saveError: null, // set while saving to the phone keeps failing
+  notice: null, // one-off message for the app shell to show (e.g. data restored from a backup)
   today: dateKey() // refreshed when the app comes back to the foreground
 })
 
@@ -36,7 +38,26 @@ function emit (kind, payload) {
 }
 
 export async function initStore () {
-  state.data = await loadData()
+  const { data, status } = await loadData()
+  state.data = data
+  if (status === 'unreadable') {
+    // The data file is damaged: fall back to the newest automatic backup rather than starting empty
+    try {
+      const { listAutoBackups, readBackup, backupDate } = await import('./lib/backup.js')
+      const [latest] = await listAutoBackups()
+      if (latest) {
+        state.data = parseBackup(await readBackup(latest))
+        const d = backupDate(latest.name)
+        state.notice = { key: 'Your data file was damaged, so the app loaded your automatic backup from {when}.', vars: { when: d ? dateKey(d) : latest.name } }
+        await persist()
+      } else {
+        state.notice = { key: "Your data file couldn't be read. A copy was kept; import a backup from Settings if you have one." }
+      }
+    } catch {
+      state.notice = { key: "Your data file couldn't be read. A copy was kept; import a backup from Settings if you have one." }
+    }
+  }
+  onSaveError((err) => { state.saveError = err ? String(err.message || err) : null })
   state.ready = true
   refreshRoutines() // background; cached copy is used meanwhile
 }

@@ -13,7 +13,7 @@ import './styles/base.css'
 
 import App from './App.vue'
 import router from './router.js'
-import { initStore, state, days, activeSession, startSession } from './store.js'
+import { initStore, state, days, activeSession, startSession, persist } from './store.js'
 import { closeTopOverlay } from './ui/overlay.js'
 import { t, tn, setLang, deviceLang } from './i18n/index.js'
 import { initCrew } from './lib/crew.js'
@@ -30,6 +30,8 @@ initStore().then(() => {
   initCrew()
   initAutoBackup()
   resumeRest()
+  // Write everything out when the app goes to the background (it may be closed from there)
+  CapApp.addListener('pause', () => persist()).catch(() => {})
 
   // Android back: close an open sheet first, then go back, then exit from the home screen
   CapApp.addListener('backButton', ({ canGoBack }) => {

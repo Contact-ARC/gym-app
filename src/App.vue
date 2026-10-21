@@ -37,6 +37,20 @@
   </Sheet>
 
   <WelcomeSheet />
+
+  <!-- Saving to the phone keeps failing -->
+  <div v-if="state.saveError" class="save-err" role="alert">
+    <span class="grow t-small">{{ t("Couldn't save to the phone. Your changes are kept while the app stays open.") }}</span>
+    <button class="btn btn-sm btn-primary" @click="persist">{{ t('Try again') }}</button>
+  </div>
+
+  <!-- One-off notices (data restored from a backup, …) -->
+  <Sheet :model-value="!!state.notice" :title="t('About your data')" @update:model-value="(v) => !v && (state.notice = null)">
+    <p v-if="state.notice" class="t-body">{{ t(state.notice.key, state.notice.vars) }}</p>
+    <template #actions>
+      <button class="btn btn-primary btn-lg" @click="state.notice = null">{{ t('OK') }}</button>
+    </template>
+  </Sheet>
 </template>
 
 <script setup>
@@ -125,6 +139,11 @@ watch(
 <style scoped>
 .news { margin: 14px 0 0 20px; }
 .news li { margin-bottom: 8px; font-size: 16px; }
+.save-err {
+  position: fixed; left: 12px; right: 12px; top: calc(var(--safe-top) + 8px); z-index: 2600;
+  display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-card);
+  background: var(--err-soft); color: var(--ink); box-shadow: var(--shadow-float);
+}
 .ch { margin-top: 14px; background: var(--card-2); border-radius: var(--r-card); }
 .ch .t-small { margin-top: 4px; }
 .up { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }

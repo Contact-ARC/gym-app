@@ -79,34 +79,69 @@ export function migrate (data) {
   return out
 }
 
-export async function loadData () {
-  try {
-    const res = await Filesystem.readFile({ path: FILE, directory: Directory.Data, encoding: Encoding.UTF8 })
-    return migrate(JSON.parse(res.data))
-  } catch (e) {
-    // First run, or main file missing — try the temp file in case a rename was interrupted
-    try {
-      const res = await Filesystem.readFile({ path: TMP, directory: Directory.Data, encoding: Encoding.UTF8 })
-      return migrate(JSON.parse(res.data))
-    } catch {
-      return emptyData()
-    }
-  }
+async function exists (path) {
+  try { await Filesystem.stat({ path, directory: Directory.Data }); return true } catch { return false }
 }
+
+async function readJSON (path) {
+  const res = await Filesystem.readFile({ path, directory: Directory.Data, encoding: Encoding.UTF8 })
+  const text = typeof res.data === 'string' ? res.data : await res.data.text()
+  const obj = JSON.parse(text)
+  if (!obj || typeof obj !== 'object' || !Array.isArray(obj.sessions)) throw new Error('not a data file')
+  return obj
+}
+
+/**
+ * Load the data file.
+ * @returns {{ data, status: 'ok'|'new'|'unreadable' }}
+ *   new: first run (no file at all). unreadable: a file exists but can't be read; it's kept as
+ *   gym-data.broken-<time>.json so nothing is overwritten, and the store tries an automatic backup.
+ */
+export async function loadData () {
+  const hasMain = await exists(FILE)
+  const hasTmp = await exists(TMP)
+  if (!hasMain && !hasTmp) return { data: emptyData(), status: 'new' }
+  // The main file first; the temp file holds the newest data if the app was closed mid-save
+  for (let attempt = 0; attempt < 2; attempt++) {
+    for (const path of [FILE, TMP]) {
+      try { return { data: migrate(await readJSON(path)), status: 'ok' } } catch { /* try the next */ }
+    }
+    await new Promise(r => setTimeout(r, 400)) // storage can be slow right after the phone wakes
+  }
+  try {
+    await Filesystem.copy({ from: hasMain ? FILE : TMP, to: `gym-data.broken-${Date.now()}.json`, directory: Directory.Data, toDirectory: Directory.Data })
+  } catch { /* nothing more we can do */ }
+  return { data: emptyData(), status: 'unreadable' }
+}
+
+let errorHandler = null
+/** Called with an Error when a save fails twice in a row, and with null once saving works again. */
+export function onSaveError (fn) { errorHandler = fn }
 
 let queue = Promise.resolve()
 
 /** Serialised, atomic save. Safe to call after every logged set. */
 export function saveData (data) {
   const json = JSON.stringify(data)
-  queue = queue.then(async () => {
+  const write = async () => {
     await Filesystem.writeFile({ path: TMP, directory: Directory.Data, data: json, encoding: Encoding.UTF8 })
     try {
       await Filesystem.deleteFile({ path: FILE, directory: Directory.Data })
     } catch { /* didn't exist yet */ }
     await Filesystem.rename({ from: TMP, to: FILE, directory: Directory.Data, toDirectory: Directory.Data })
+  }
+  queue = queue.then(async () => {
+    try {
+      await write()
+    } catch (first) {
+      console.warn('Save failed, retrying', first)
+      await new Promise(r => setTimeout(r, 500))
+      await write() // a second failure is reported below
+    }
+    errorHandler?.(null)
   }).catch(err => {
     console.error('Save failed', err)
+    errorHandler?.(err)
   })
   return queue
 }

@@ -850,8 +850,13 @@ const energyOptions = computed(() => [1, 2, 3, 4, 5].map(n => ({ label: [t('Low'
 
 function leave () {
   saveSessionNotes()
-  if (editingFinished.value) { markSessionEdited(route.params.id); router.replace(`/summary/${route.params.id}`) }
-  else router.push('/')
+  if (editingFinished.value) {
+    markSessionEdited(route.params.id)
+    toast(t('Changes saved'))
+    // Came from the summary? Step back to it, so Back afterwards doesn't land on the editor again
+    if (window.history.state?.back === `/summary/${route.params.id}`) router.back()
+    else router.replace(`/summary/${route.params.id}`)
+  } else router.push('/')
 }
 function finish () {
   saveSessionNotes()

@@ -32,6 +32,7 @@ const EXTRA = [
   'Seat', 'Back pad', 'Leg pad', 'Pulley height', 'Handle', 'Bench angle', 'Grip', 'Foot position',
   'Shoulders', 'Arms', 'Legs', 'Core', 'body|Back', 'body|Front',
   'warm-up', 'drop', 'to failure', 'max reps',
+  'Your data file was damaged, so the app loaded your automatic backup from {when}.', "Your data file couldn't be read. A copy was kept; import a backup from Settings if you have one.",
   'Last: {last}. Hit {hi} on every set with reps to spare → add {jump}, aim for {lo}+.', 'Last: {last}. Hit {hi} on every set → add {jump}, aim for {lo}+.',
   "There's no crew with that code. Check it with whoever sent it.", 'That code is already in use. Try again.', 'That crew is full (50 people).',
   'Crew codes are 6 letters or numbers.', 'Pick a name between 1 and 30 characters.', "This phone isn't in that crew any more.", 'That was too much data to send.'
