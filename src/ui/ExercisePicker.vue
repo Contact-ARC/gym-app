@@ -29,13 +29,19 @@
       </button>
       <div v-if="!filtered.length" class="group-row t-muted">{{ t('No exercise matches “{q}”.', { q }) }}</div>
     </div>
+    <button v-if="allowCreate" class="btn btn-soft btn-block create" @click="startCreate">
+      <Icon name="plus" />{{ q.trim() ? t('Create “{q}”', { q: q.trim() }) : t('Create your own exercise') }}
+    </button>
   </Sheet>
+  <CustomExerciseSheet v-if="allowCreate" v-model="createOpen" :start-name="createName" @saved="(id) => emit('pick', id)" />
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
 import Sheet from './Sheet.vue'
 import Toggle from './Toggle.vue'
+import Icon from './Icon.vue'
+import CustomExerciseSheet from './CustomExerciseSheet.vue'
 import { state, exercisesById } from '../store.js'
 import { muscleLabel } from '../lib/format.js'
 import { canDoAtGym } from '../lib/training.js'
@@ -47,7 +53,8 @@ const props = defineProps({
   suggestedIds: { type: Array, default: () => [] },
   suggestedLabel: { type: String, default: '' },
   excludeId: String,
-  onlyIds: Array
+  onlyIds: Array,
+  allowCreate: Boolean
 })
 const emit = defineEmits(['update:modelValue', 'pick'])
 const q = ref('')
@@ -60,9 +67,9 @@ const name = (e) => tx(e, 'name') || e.name
 const all = computed(() => {
   let list = Object.values(exercisesById.value)
   if (props.onlyIds) list = list.filter(e => props.onlyIds.includes(e.id))
-  return list.filter(e => e.id !== props.excludeId && atGym(e)).sort((a, b) => name(a).localeCompare(name(b), i18n.lang))
+  return list.filter(e => e.id !== props.excludeId && !e.hidden && atGym(e)).sort((a, b) => name(a).localeCompare(name(b), i18n.lang))
 })
-const suggested = computed(() => props.suggestedIds.map(id => exercisesById.value[id]).filter(e => e && e.id !== props.excludeId && atGym(e)))
+const suggested = computed(() => props.suggestedIds.map(id => exercisesById.value[id]).filter(e => e && e.id !== props.excludeId && !e.hidden && atGym(e)))
 const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 const filtered = computed(() => {
   const term = norm(q.value.trim())
@@ -70,6 +77,14 @@ const filtered = computed(() => {
   return all.value.filter(e => norm(name(e)).includes(term) || norm(e.name).includes(term) || (e.primary || []).some(m => norm(muscleLabel(m)).includes(term)))
 })
 const musclesOf = (ex) => [...(ex.primary || [])].map(muscleLabel).join(', ')
+
+const createOpen = ref(false)
+const createName = ref('')
+function startCreate () {
+  createName.value = q.value.trim()
+  emit('update:modelValue', false)
+  createOpen.value = true
+}
 
 function pick (id) {
   emit('pick', id)
@@ -79,4 +94,5 @@ function pick (id) {
 
 <style scoped>
 .gym-toggle { display: flex; align-items: center; gap: 12px; margin: 14px 2px 0; }
+.create { margin-top: 14px; }
 </style>

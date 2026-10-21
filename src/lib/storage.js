@@ -20,7 +20,9 @@ export function emptyData () {
       increments: { ...DEFAULT_INCREMENTS.kg },
       bar: DEFAULT_BAR.kg,
       theme: 'system',
-      level: 'standard' // standard | beginner (routine track)
+      level: 'standard', // standard | beginner (routine track)
+      heightCm: null,
+      sex: null // null | male | female: only for the body-fat estimate and DOTS
     },
     settings: {
       routinesUrl: null, // null = use DEFAULT_ROUTINES_URL from config.js
@@ -33,11 +35,14 @@ export function emptyData () {
       equipment: {}, // { [tag]: false } for equipment your gym doesn't have
       lang: null, // null = follow the phone (en | es)
       autoBackup: 'weekly', // off | weekly | workout
-      volumeTarget: [10, 20] // hard sets per muscle per week
+      volumeTarget: [10, 20], // hard sets per muscle per week
+      lifts: { squat: 'barbell-back-squat', bench: 'barbell-bench-press', deadlift: 'barbell-deadlift' }, // powerlifting total
+      plBasis: 'e1rm' // e1rm | actual
     },
     sessions: [], // [{ id, startedAt, finishedAt, routineMonth, dayId, dayName, items:[], sets:[], notes }]
     activeSessionId: null,
-    nextDayIndex: 0,
+    nextDayIndex: 0, // before 0.5; nextDayKey since
+    nextDayKey: null, // key of the next day in the rotation (r-A, p-<plan>-<day>)
     exerciseNotes: {}, // { [exerciseId]: string }
     cache: { manifest: null, routine: null, exercises: null, fetchedAt: null },
     routineArchive: {}, // { [month]: routine }
@@ -48,12 +53,19 @@ export function emptyData () {
     tips: {}, // first-time hints already shown
     // v0.4
     autoBackup: { lastAt: null, lastFile: null, lastError: null, where: null },
-    body: { entries: [], photos: [] }, // entries: [{ id, date, weight, unit, waist, chest, arm, thigh, hips, mUnit }]; photos: [{ id, date, file, pose }]
+    body: { entries: [], photos: [] }, // entries: [{ id, date, weight, unit, waist, chest, arm, thigh, hips, neck, mUnit, bodyFat }]; photos: [{ id, date, file, pose }]
     challenges: {}, // { [routineMonth]: { manual: number, doneAt } }
     reportsSeen: {}, // { [month]: true } month reports already shown
     restState: null, // { endsAt, total, label } while a rest timer runs
     updateSeen: null, // app version whose "ready to download" popup was already shown
-    crew: { code: null, name: '', memberId: null, key: null, shareFeed: true, queue: [], lastSync: null, url: null, anonKey: null }
+    crew: { code: null, name: '', memberId: null, key: null, shareFeed: true, queue: [], lastSync: null, url: null, anonKey: null },
+    // v0.5
+    customExercises: [], // your own exercises: { id: 'my-…', name, primary, secondary, logType, loadUnit, incrementGroup, perSide, images, hidden }
+    routineEdits: {}, // { [dayId]: { baseMonth, base: <repo day when you changed it>, ops: [], pending, updatedAt } }
+    plans: [], // My routines: [{ id, name, days: [{ id, label, name, items }], use, lastUse }]
+    planNotices: [], // plan ids whose time ran out, to mention once
+    editNotices: [], // [{ dayId, month, skipped }] changes that no longer applied after a new month
+    goals: [] // [{ id, type, target, unit, exerciseId, reps, basis, start, createdAt, by, pinned, doneAt }]
   }
 }
 
@@ -72,10 +84,21 @@ export function migrate (data) {
     body: { entries: [...(data.body?.entries || [])], photos: [...(data.body?.photos || [])] },
     challenges: { ...(data.challenges || {}) },
     reportsSeen: { ...(data.reportsSeen || {}) },
-    crew: { ...base.crew, ...(data.crew || {}), queue: [...(data.crew?.queue || [])] }
+    crew: { ...base.crew, ...(data.crew || {}), queue: [...(data.crew?.queue || [])] },
+    customExercises: [...(data.customExercises || [])],
+    routineEdits: { ...(data.routineEdits || {}) },
+    plans: [...(data.plans || [])],
+    planNotices: [...(data.planNotices || [])],
+    editNotices: [...(data.editNotices || [])],
+    goals: [...(data.goals || [])]
   }
+  out.settings.lifts = { ...base.settings.lifts, ...(data.settings?.lifts || {}) }
   if (!Array.isArray(out.settings.volumeTarget) || out.settings.volumeTarget.length !== 2) out.settings.volumeTarget = base.settings.volumeTarget
-  // if (out.schemaVersion < 2) { ...transform...; out.schemaVersion = 2 }
+  if ((data.schemaVersion || 1) < 2) {
+    // 0.5: the rotation remembers a day by key instead of its position in the list
+    const d = data.cache?.routine?.days?.[data.nextDayIndex || 0]
+    out.nextDayKey = d ? `r-${d.id}` : null
+  }
   out.schemaVersion = DATA_SCHEMA_VERSION
   return out
 }

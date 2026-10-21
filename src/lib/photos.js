@@ -25,6 +25,12 @@ function toJpegBase64 (img, maxSide, quality) {
   return cv.toDataURL('image/jpeg', quality).split(',')[1]
 }
 
+/** A small JPEG data URL (for your own exercises' photos, which travel inside the data file and backups). */
+export async function imageDataUrl (fileObj, maxSide = 480, quality = 0.76) {
+  const img = await loadImage(fileObj)
+  return 'data:image/jpeg;base64,' + toJpegBase64(img, maxSide, quality)
+}
+
 /** Resize and store a picked image. Returns { file, thumb } paths. */
 export async function savePhoto (fileObj, id) {
   const img = await loadImage(fileObj)

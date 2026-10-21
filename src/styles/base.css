@@ -230,3 +230,14 @@ textarea.field { resize: none; line-height: 1.4; }
 
 /* Quiet destructive link-style buttons (e.g. "Delete this workout") */
 .btn-ghost.t-err { color: var(--err); }
+
+/* Small labels on day rows: Routine / Yours / Edited */
+.tag {
+  display: inline-flex; align-items: center; gap: 4px; flex: 0 0 auto;
+  padding: 2px 8px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; line-height: 1.3;
+  background: var(--card-2); color: var(--ink-2);
+}
+.tag-mine { background: var(--info-soft); color: var(--info); }
+.tag-edit { background: var(--warn-soft); color: var(--warn); }
+.tags-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }

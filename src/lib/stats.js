@@ -35,9 +35,11 @@ export function finished (sessions) {
  * Week streak: consecutive Mon–Sun weeks with at least `min` workouts.
  * This week only adds to the streak once it's reached the minimum; until then the streak
  * from previous weeks is still alive (you have until Sunday).
+ * `min` can be a function of the week (YYYY-MM-DD of its Monday), so a weekly goal only counts from the week it was set.
  * @returns {{ weeks:number, thisWeek:number, min:number, safe:boolean, best:number }}
  */
 export function weekStreak (sessions, today = new Date(), min = STREAK_MIN) {
+  const minOf = typeof min === 'function' ? min : () => min
   const counts = {}
   for (const s of finished(sessions)) {
     const k = weekKey(s.startedAt)
@@ -45,21 +47,22 @@ export function weekStreak (sessions, today = new Date(), min = STREAK_MIN) {
   }
   const thisKey = weekKey(today)
   const thisWeek = counts[thisKey] || 0
+  const thisMin = minOf(thisKey)
   let weeks = 0
   let w = weekStart(today)
-  if (thisWeek >= min) weeks = 1
+  if (thisWeek >= thisMin) weeks = 1
   w = addDays(w, -7)
-  while ((counts[dateKey(w)] || 0) >= min) { weeks++; w = addDays(w, -7) }
+  while ((counts[dateKey(w)] || 0) >= minOf(dateKey(w))) { weeks++; w = addDays(w, -7) }
 
   // Best ever, for the report and the crew board
   let best = 0; let run = 0; let prev = null
   for (const k of Object.keys(counts).sort()) {
-    if (counts[k] < min) { run = 0; prev = k; continue }
+    if (counts[k] < minOf(k)) { run = 0; prev = k; continue }
     run = prev && dateKey(addDays(new Date(prev + 'T00:00:00'), 7)) === k && run > 0 ? run + 1 : 1
     best = Math.max(best, run)
     prev = k
   }
-  return { weeks, thisWeek, min, safe: thisWeek >= min, best: Math.max(best, weeks) }
+  return { weeks, thisWeek, min: thisMin, safe: thisWeek >= thisMin, best: Math.max(best, weeks) }
 }
 
 /** Sessions that started inside [from, to). */

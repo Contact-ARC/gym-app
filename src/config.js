@@ -11,7 +11,7 @@ export const DEFAULT_ROUTINES_URL =
 export const APP_VERSION = __APP_VERSION__
 
 // Data file format version. Bump + add a migration in storage.js when the shape changes.
-export const DATA_SCHEMA_VERSION = 1
+export const DATA_SCHEMA_VERSION = 2
 
 // Routine/exercise file format versions this app understands.
 export const SUPPORTED_ROUTINE_SCHEMA = 1

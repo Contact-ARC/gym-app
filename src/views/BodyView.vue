@@ -19,11 +19,51 @@
           <div class="t-num kv">{{ change30 > 0 ? '+' : '' }}{{ fmtNum(change30, 1) }}</div>
         </div>
       </div>
-      <div v-if="weightPoints.length > 1" class="chart">
+      <Segmented v-if="bfPoints.length > 1 && weightPoints.length > 1" v-model="chartMode" class="chart-mode" :options="[{ label: t('Weight'), value: 'weight' }, { label: t('Body fat'), value: 'bf' }]" :label="t('Chart')" />
+      <div v-if="(chartMode === 'bf' ? bfPoints : weightPoints).length > 1" class="chart">
         <Line :data="lineData" :options="lineOptions" />
       </div>
       <button class="btn btn-primary btn-block add" @click="openEntry()"><Icon name="plus" />{{ t('Log weight or measurements') }}</button>
     </div>
+
+    <!-- Body composition -->
+    <section>
+      <div class="row sec-row">
+        <h2 class="section-h grow">{{ t('Body composition') }}</h2>
+        <button class="btn btn-sm btn-ghost" @click="openAbout"><Icon name="height" :size="18" />{{ t('Height and sex') }}</button>
+      </div>
+      <button v-if="!p.heightCm" class="card card-pad row comp-empty" @click="openAbout">
+        <Icon name="height" />
+        <span class="grow t-small">{{ t('Add your height to see BMI, lean mass and FFMI, and to estimate body fat from your measurements.') }}</span>
+        <Icon name="chevronRight" class="chev" />
+      </button>
+      <div v-else class="comp">
+        <div class="cbox">
+          <div class="t-tiny t-muted">{{ t('Body fat') }}</div>
+          <div class="t-num cv">{{ bf ? fmtNum(bf.value, 1) + '%' : '–' }}</div>
+          <div class="t-tiny t-muted">{{ bf ? (bf.source === 'entered' ? t('entered {when}', { when: shortDate(bf.date) }) : t('estimated {when}', { when: shortDate(bf.date) })) : bfHint }}</div>
+        </div>
+        <div class="cbox">
+          <div class="t-tiny t-muted">{{ t('Lean mass') }}</div>
+          <div class="t-num cv">{{ lean != null ? fmtNum(lean, 1) : '–' }}<span v-if="lean != null" class="cu"> {{ unit }}</span></div>
+          <div class="t-tiny t-muted">{{ t('weight without fat') }}</div>
+        </div>
+        <div class="cbox">
+          <div class="t-tiny t-muted">{{ t('FFMI') }}</div>
+          <div class="t-num cv">{{ ff ? fmtNum(ff.normalized, 1) : '–' }}</div>
+          <div class="t-tiny t-muted">{{ ff ? ffmiLabel(ff.normalized) : t('needs body fat') }}</div>
+        </div>
+        <div class="cbox">
+          <div class="t-tiny t-muted">{{ t('BMI') }}</div>
+          <div class="t-num cv">{{ bmiV != null ? fmtNum(bmiV, 1) : '–' }}</div>
+          <div class="t-tiny t-muted">{{ t("doesn't know muscle from fat") }}</div>
+        </div>
+      </div>
+      <p v-if="p.heightCm" class="t-tiny t-muted foot">
+        {{ t('FFMI is lean mass for your height: around 20 is typical for men who train, 25 is a very muscular natural lifter (women: about 3 lower). Measurement estimates of body fat can be 3–4 points off; watch the trend.') }}
+      </p>
+      <RouterLink to="/goals" class="btn btn-ghost btn-sm goals-link"><Icon name="goal" :size="18" />{{ t('Set a body goal') }}</RouterLink>
+    </section>
 
     <!-- Measurements -->
     <section v-if="measureRows.length">
@@ -76,6 +116,9 @@
       <input id="b-date" v-model="draft.date" type="date" class="field" :max="state.today">
       <div class="label mt">{{ t('Weight') }}</div>
       <Stepper v-model="draft.weight" :label="t('Weight')" :unit="unit" :step="0.1" :min="0" decimals size="md" />
+      <label class="label mt" for="b-bf">{{ t('Body fat (%, optional)') }}</label>
+      <input id="b-bf" v-model.number="draft.bodyFat" type="number" inputmode="decimal" step="0.1" min="2" max="70" class="field t-num bf-in" :placeholder="t('From a smart scale, calipers or a scan')">
+      <p class="t-tiny t-muted mt-s">{{ t('Leave it empty and the app estimates it from your waist and neck (and hips for women), once your height and sex are set.') }}</p>
       <div class="label mt">{{ t('Measurements ({u}, optional)', { u: mUnit }) }}</div>
       <div class="mgrid">
         <label v-for="k in MEASUREMENTS" :key="k" class="mfield">
@@ -83,11 +126,27 @@
           <input v-model.number="draft[k]" type="number" inputmode="decimal" step="0.1" min="0" class="field t-num" :aria-label="measureLabel(k)">
         </label>
       </div>
-      <p class="t-tiny t-muted mt-s">{{ t('Waist at the belly button, arm and thigh at the widest point, relaxed.') }}</p>
+      <p class="t-tiny t-muted mt-s">{{ t("Waist at the belly button (women: the narrowest point), neck just below the Adam's apple, hips, arm and thigh at the widest point, relaxed.") }}</p>
       <template #actions>
         <button v-if="draft.id" class="btn btn-danger btn-lg" @click="removeEntry"><Icon name="trash" />{{ t('Delete') }}</button>
         <button v-else class="btn btn-soft btn-lg" @click="entryOpen = false">{{ t('Cancel') }}</button>
         <button class="btn btn-primary btn-lg" :disabled="!canSave" @click="saveEntry">{{ t('Save') }}</button>
+      </template>
+    </Sheet>
+
+    <!-- Height and sex -->
+    <Sheet v-model="aboutOpen" :title="t('Height and sex')">
+      <Stepper v-if="unit === 'kg'" v-model="about.cm" :label="t('Height')" unit="cm" :step="1" :min="100" :max="230" size="md" />
+      <div v-else class="grid2">
+        <Stepper v-model="about.ft" :label="t('Feet')" unit="ft" :step="1" :min="3" :max="7" size="md" />
+        <Stepper v-model="about.inch" :label="t('Inches')" unit="in" :step="1" :min="0" :max="11" size="md" />
+      </div>
+      <div class="label mt">{{ t('Sex') }} <span class="t-faint">{{ t('(optional)') }}</span></div>
+      <Segmented v-model="about.sex" :options="sexOptions" allow-none :label="t('Sex')" />
+      <p class="t-tiny t-muted mt-s">{{ t('Only used for the body-fat estimate and the DOTS score, which use different formulas for men and women. It stays on this phone.') }}</p>
+      <template #actions>
+        <button class="btn btn-soft btn-lg" @click="aboutOpen = false">{{ t('Cancel') }}</button>
+        <button class="btn btn-primary btn-lg" @click="saveAbout">{{ t('Save') }}</button>
       </template>
     </Sheet>
 
@@ -141,7 +200,9 @@ import Stepper from '../ui/Stepper.vue'
 import Segmented from '../ui/Segmented.vue'
 import Toggle from '../ui/Toggle.vue'
 import { toast } from '../ui/toast.js'
-import { state, saveBodyEntry, deleteBodyEntry, addPhotoRecord, removePhotoRecord, MEASUREMENTS, newId } from '../store.js'
+import { state, persist, saveBodyEntry, deleteBodyEntry, addPhotoRecord, removePhotoRecord, MEASUREMENTS, newId, goalsWithProgress } from '../store.js'
+import { latestBodyFat, bodyFatSeries, avgWeight, leanMass, ffmi, bmi, CM_PER_IN } from '../lib/body.js'
+import { goalTitle } from '../lib/goalText.js'
 import { fmtNum, relativeDay, fmtDate } from '../lib/format.js'
 import { convertLoad } from '../lib/training.js'
 import { savePhoto, photoUrl, deletePhotoFiles } from '../lib/photos.js'
@@ -156,7 +217,7 @@ const unit = computed(() => state.data.profile.unit)
 const mUnit = computed(() => (unit.value === 'lb' ? 'in' : 'cm'))
 const shortDate = (d) => new Date(d + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' })
 
-const MEASURE_LABELS = { waist: 'Waist', chest: 'Chest', arm: 'Arm', thigh: 'Thigh', hips: 'Hips' }
+const MEASURE_LABELS = { waist: 'Waist', neck: 'Neck', chest: 'Chest', arm: 'Arm', thigh: 'Thigh', hips: 'Hips' }
 const measureLabel = (k) => t('measure|' + MEASURE_LABELS[k])
 const POSES = { front: 'pose|Front', side: 'pose|Side', back: 'pose|Back' }
 const poseLabel = (p) => t(POSES[p] || POSES.front)
@@ -178,11 +239,54 @@ const change30 = computed(() => {
   const last = pts[pts.length - 1]
   return base === last ? null : last.w - base.w
 })
+// ── Body composition ──
+const p = computed(() => state.data.profile)
+const bf = computed(() => latestBodyFat(state.data.body.entries, p.value))
+const bfPoints = computed(() => bodyFatSeries(state.data.body.entries, p.value).map(x => ({ date: x.date, w: x.bf.value })))
+const avgW = computed(() => avgWeight(state.data.body.entries, unit.value))
+const lean = computed(() => (bf.value && avgW.value ? leanMass(avgW.value, bf.value.value) : null))
+const kg = computed(() => (avgW.value ? convertLoad(avgW.value, unit.value, 'kg') : null))
+const ff = computed(() => (bf.value && kg.value ? ffmi(kg.value, bf.value.value, p.value.heightCm) : null))
+const bmiV = computed(() => (kg.value ? bmi(kg.value, p.value.heightCm) : null))
+const bfHint = computed(() => {
+  if (!p.value.sex) return t('enter it, or set your sex for an estimate')
+  return t('enter it, or log waist and neck')
+})
+function ffmiLabel (v) {
+  const adj = p.value.sex === 'female' ? 3 : 0
+  if (v < 18 - adj) return t('below average')
+  if (v < 20 - adj) return t('average')
+  if (v < 22 - adj) return t('above average')
+  if (v < 25 - adj) return t('very muscular')
+  return t('exceptional')
+}
+const chartMode = ref('weight')
+
+// ── Height and sex ──
+const aboutOpen = ref(false)
+const about = reactive({ cm: 175, ft: 5, inch: 9, sex: null })
+const sexOptions = computed(() => [{ label: t('Male'), value: 'male' }, { label: t('Female'), value: 'female' }])
+function openAbout () {
+  const cm = p.value.heightCm || 175
+  const totalIn = Math.round(cm / CM_PER_IN)
+  Object.assign(about, { cm: Math.round(cm), ft: Math.floor(totalIn / 12), inch: totalIn % 12, sex: p.value.sex || null })
+  aboutOpen.value = true
+}
+function saveAbout () {
+  p.value.heightCm = unit.value === 'kg' ? about.cm : Math.round(((about.ft || 0) * 12 + (about.inch || 0)) * CM_PER_IN * 10) / 10
+  p.value.sex = about.sex || null
+  persist()
+  aboutOpen.value = false
+  toast(t('Saved'))
+}
+
+const series = computed(() => (chartMode.value === 'bf' && bfPoints.value.length > 1 ? bfPoints.value : weightPoints.value))
+const seriesUnit = computed(() => (series.value === bfPoints.value ? '%' : unit.value))
 const lineData = computed(() => ({
-  labels: weightPoints.value.map(p => shortDate(p.date)),
+  labels: series.value.map(p => shortDate(p.date)),
   datasets: [{
-    label: t('Weight'),
-    data: weightPoints.value.map(p => p.w),
+    label: seriesUnit.value === '%' ? t('Body fat') : t('Weight'),
+    data: series.value.map(p => p.w),
     borderColor: ct.value.series[0], backgroundColor: ct.value.series[0],
     borderWidth: 2, tension: 0.25, pointRadius: 3, pointHoverRadius: 6, pointBorderWidth: 2, pointBorderColor: ct.value.surface
   }]
@@ -191,7 +295,7 @@ const lineOptions = computed(() => ({
   responsive: true,
   maintainAspectRatio: false,
   interaction: { mode: 'index', intersect: false },
-  plugins: { legend: { display: false }, tooltip: { padding: 10, cornerRadius: 10, callbacks: { label: (c) => `${fmtNum(c.parsed.y, 1)} ${unit.value}` } } },
+  plugins: { legend: { display: false }, tooltip: { padding: 10, cornerRadius: 10, callbacks: { label: (c) => `${fmtNum(c.parsed.y, 1)} ${seriesUnit.value}` } } },
   scales: {
     x: { ticks: { color: ct.value.ink, maxRotation: 0, autoSkip: true, maxTicksLimit: 5 }, grid: { display: false }, border: { display: false } },
     y: { ticks: { color: ct.value.ink, maxTicksLimit: 5 }, grid: { color: ct.value.grid }, border: { display: false } }
@@ -219,14 +323,19 @@ function openEntry (e = null) {
   Object.keys(draft).forEach(k => delete draft[k])
   Object.assign(draft, e
     ? { ...e, weight: e.weight != null ? inUnit(e) : null }
-    : { id: null, date: state.today, weight: prev?.weight ?? null })
+    : { id: null, date: state.today, weight: prev?.weight ?? null, bodyFat: null })
   entryOpen.value = true
 }
-const canSave = computed(() => !!draft.date && (draft.weight > 0 || MEASUREMENTS.some(k => draft[k] > 0)))
+const canSave = computed(() => !!draft.date && (draft.weight > 0 || draft.bodyFat > 0 || MEASUREMENTS.some(k => draft[k] > 0)))
 function saveEntry () {
-  saveBodyEntry({ ...draft, weight: draft.weight > 0 ? draft.weight : null, unit: unit.value, mUnit: mUnit.value })
+  const bfv = draft.bodyFat > 0 && draft.bodyFat < 70 ? draft.bodyFat : null
+  const saved = saveBodyEntry({ ...draft, weight: draft.weight > 0 ? draft.weight : null, bodyFat: bfv, unit: unit.value, mUnit: mUnit.value })
   entryOpen.value = false
-  toast(t('Saved'))
+  const g = saved.reached?.[0]
+  if (g) {
+    const gp = goalsWithProgress.value.find(x => x.goal.id === g.id)?.p
+    toast(t('Goal reached: {goal}', { goal: goalTitle(g, gp?.target ?? g.target, gp?.unit ?? g.unit) }), { actionLabel: t('Goals'), action: () => router.push('/goals') })
+  } else toast(t('Saved'))
 }
 function removeEntry () {
   deleteBodyEntry(draft.id)
@@ -319,6 +428,17 @@ async function removePhoto () {
 .when { width: 70px; flex: 0 0 auto; }
 .mt { margin-top: 18px; }
 .mt-s { margin-top: 10px; }
+.sec-row { align-items: flex-end; }
+.sec-row .btn { margin-bottom: 4px; }
+.comp-empty { width: 100%; text-align: left; gap: 12px; }
+.comp { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.cbox { background: var(--card); border-radius: var(--r-card); padding: 14px 16px; min-width: 0; }
+.cv { font-size: 28px; font-weight: 700; line-height: 1.15; }
+.cu { font-size: 16px; font-weight: 600; color: var(--ink-2); margin-left: 4px; }
+.goals-link { margin-top: 6px; }
+.chart-mode { margin-top: 14px; }
+.bf-in { text-align: left; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .mgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 10px; }
 .mfield { display: flex; flex-direction: column; gap: 4px; }
 .mfield .field { text-align: center; font-size: 18px; }

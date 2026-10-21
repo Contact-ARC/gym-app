@@ -48,6 +48,53 @@
 
   <WelcomeSheet />
 
+  <!-- The routine changed a day you'd adjusted: what to do with your changes -->
+  <Sheet :model-value="!!dayChange" :title="dayChange ? t('Day {id} changed', { id: dayChange.dayId }) : ''" @update:model-value="(v) => !v && laterDayChange()">
+    <template v-if="dayChange">
+      <p class="t-body">
+        <template v-if="dayChange.kind === 'gone'">{{ tn(dayChange.count, "This month's routine doesn't have a day {id} any more. You had {n} change to it.", "This month's routine doesn't have a day {id} any more. You had {n} changes to it.", { id: dayChange.dayId }) }}</template>
+        <template v-else>{{ tn(dayChange.count, 'It was {from} and now it\'s {to}. You had {n} change for the old version.', 'It was {from} and now it\'s {to}. You had {n} changes for the old version.', { from: chName(dayChange.fromName, dayChange.fromNameEs), to: chName(dayChange.toName, dayChange.toNameEs) }) }}</template>
+      </p>
+      <div class="group choices">
+        <button class="group-row" @click="resolveChange('mine')">
+          <Icon name="mine" />
+          <div class="grow">
+            <div class="t-h3">{{ t('Save the old day {id} as mine', { id: dayChange.dayId }) }}</div>
+            <div class="t-tiny t-muted">{{ t('With your changes, in My routines. The new day {id} starts as the routine has it.', { id: dayChange.dayId }) }}</div>
+          </div>
+        </button>
+        <button v-if="dayChange.kind !== 'gone'" class="group-row" @click="resolveChange('fit')">
+          <Icon name="adjust" />
+          <div class="grow">
+            <div class="t-h3">{{ t('Apply what still fits') }}</div>
+            <div class="t-tiny t-muted">{{ t('Keeps the changes that make sense on the new day, like extra exercises.') }}</div>
+          </div>
+        </button>
+        <button class="group-row" @click="resolveChange('drop')">
+          <Icon name="trash" />
+          <div class="grow">
+            <div class="t-h3">{{ t('Drop my changes') }}</div>
+            <div class="t-tiny t-muted">{{ t('Use the new day as the routine has it.') }}</div>
+          </div>
+        </button>
+      </div>
+    </template>
+  </Sheet>
+
+  <!-- Plans whose time ran out -->
+  <Sheet :model-value="!!endedPlans.length" :title="tn(endedPlans.length, 'Back in My routines', 'Back in My routines')" @update:model-value="(v) => !v && dismissPlanNotices()">
+    <p class="t-body t-muted">{{ tn(endedPlans.length, 'Its time on Train is up. It\'s kept in My routines for whenever you want it again.', 'Their time on Train is up. They\'re kept in My routines for whenever you want them again.') }}</p>
+    <div class="group choices">
+      <div v-for="p in endedPlans" :key="p.id" class="group-row">
+        <span class="grow t-h3 truncate">{{ p.name || t('Untitled') }}</span>
+        <button class="btn btn-sm btn-soft" @click="useAgain(p)">{{ t('Use again') }}</button>
+      </div>
+    </div>
+    <template #actions>
+      <button class="btn btn-primary btn-lg" @click="dismissPlanNotices">{{ t('OK') }}</button>
+    </template>
+  </Sheet>
+
   <!-- Saving to the phone keeps failing -->
   <div v-if="state.saveError" class="save-err" role="alert">
     <span class="grow t-small">{{ t("Couldn't save to the phone. Your changes are kept while the app stays open.") }}</span>
@@ -64,20 +111,24 @@
 </template>
 
 <script setup>
-import { computed, watch, watchEffect } from 'vue'
+import { computed, ref, watch, watchEffect } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import BottomNav from './ui/BottomNav.vue'
 import RestPill from './ui/RestPill.vue'
 import Toast from './ui/Toast.vue'
 import Sheet from './ui/Sheet.vue'
 import WelcomeSheet from './views/WelcomeSheet.vue'
-import { state, newRoutineToAnnounce, markRoutineSeen, days, persist, updateAvailable } from './store.js'
+import {
+  state, newRoutineToAnnounce, markRoutineSeen, nextDay, persist, updateAvailable, pendingDayChanges, resolveDayChange,
+  planById, usePlan, dismissPlanNotices
+} from './store.js'
+import { toast } from './ui/toast.js'
 import Icon from './ui/Icon.vue'
 import { openUrl } from './lib/native.js'
 import { scheduleReminders } from './lib/reminders.js'
 import { dayTitle, monthName } from './lib/format.js'
 import { rest } from './lib/restTimer.js'
-import { t, tx, setLang, deviceLang, i18n } from './i18n/index.js'
+import { t, tn, tx, setLang, deviceLang, i18n } from './i18n/index.js'
 import { monthKey, shiftMonth, sessionsInMonth } from './lib/stats.js'
 
 const route = useRoute()
@@ -95,7 +146,7 @@ const announce = computed(() => {
 
 const updatePrompt = computed(() => {
   const u = updateAvailable.value
-  if (!u || route.meta.hideNav || announce.value || !state.data.welcomed) return null
+  if (!u || route.meta.hideNav || announce.value || !state.data.welcomed || dayChange.value) return null
   return state.data.updateSeen === u.version ? null : u
 })
 function dismissUpdate () {
@@ -111,7 +162,7 @@ function downloadUpdate () {
 
 // Month report: first time the app opens in a new month, if last month had workouts
 const reportToShow = computed(() => {
-  if (route.meta.hideNav || announce.value || updatePrompt.value || !state.data.welcomed) return null
+  if (route.meta.hideNav || announce.value || updatePrompt.value || dayChange.value || !state.data.welcomed) return null
   const last = shiftMonth(monthKey(new Date(state.today + 'T12:00:00')), -1)
   if (state.data.reportsSeen[last]) return null
   return sessionsInMonth(state.data.sessions, last).length ? last : null
@@ -122,6 +173,41 @@ function seeReport (open) {
   state.data.reportsSeen[m] = true
   persist()
   if (open) router.push(`/report/${m}`)
+}
+
+// ── The routine changed a day you'd adjusted ──
+// Asked on Train-side screens (not mid-workout, not over the month's announcement); "later" waits until you ask from the day
+const laterChange = ref(null)
+const dayChange = computed(() => {
+  const list = pendingDayChanges.value
+  if (state.reviewDayChange) return list.find(c => c.dayId === state.reviewDayChange) || null
+  if (route.meta.hideNav || announce.value || route.meta.tab !== 'home') return null
+  return list.find(c => c.dayId !== laterChange.value) || null
+})
+function laterDayChange () {
+  laterChange.value = dayChange.value?.dayId || null
+  state.reviewDayChange = null
+}
+const chName = (en, es) => dayTitle(i18n.lang === 'es' && es ? es : en, '')
+function resolveChange (choice) {
+  const c = dayChange.value
+  if (!c) return
+  const name = dayTitle(chName(c.fromName, c.fromNameEs), c.dayId) + ' (' + monthName(c.baseMonth, { month: 'short' }) + ')'
+  const plan = resolveDayChange(c.dayId, choice, name)
+  state.reviewDayChange = null
+  if (plan) toast(t('Saved to My routines'), { actionLabel: t('Open'), action: () => router.push(`/plan/${plan.id}`) })
+  else toast(choice === 'fit' ? t('Your changes that fit are on the new day') : t('Changes dropped'))
+}
+
+// ── Plans whose time ran out ──
+const endedPlans = computed(() => {
+  if (route.meta.hideNav || announce.value || dayChange.value) return []
+  return state.data.planNotices.map(planById).filter(Boolean)
+})
+function useAgain (p) {
+  const last = p.lastUse || {}
+  usePlan(p.id, { mode: last.mode || 'add', until: last.until || 'month', weeks: last.weeks || 4 })
+  toast(t('{name} is on Train again', { name: p.name }))
 }
 
 // In a workout the bottom is busy (rest timer, log button), so messages drop in from the top
@@ -151,11 +237,11 @@ watchEffect(() => {
 // Keep the weekly reminders in sync with the settings and the next day in the rotation
 let remTimer = null
 watch(
-  () => [JSON.stringify(state.data.settings.reminders), state.data.nextDayIndex, days.value.length, i18n.lang],
+  () => [JSON.stringify(state.data.settings.reminders), nextDay.value?.key, nextDay.value?.name, i18n.lang],
   () => {
     clearTimeout(remTimer)
     remTimer = setTimeout(() => {
-      const d = days.value[state.data.nextDayIndex] || days.value[0]
+      const d = nextDay.value
       const body = d ? t('Next up: day {id}, {name}', { id: d.id, name: dayTitle(tx(d, 'name'), d.id) }) : t('Time to train')
       scheduleReminders(state.data.settings.reminders, body)
     }, 800)
@@ -176,4 +262,6 @@ watch(
 .ch { margin-top: 14px; background: var(--card-2); border-radius: var(--r-card); }
 .ch .t-small { margin-top: 4px; }
 .up { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+.choices { margin-top: 16px; background: var(--card-2); }
+.choices .group-row { align-items: flex-start; }
 </style>

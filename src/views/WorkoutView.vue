@@ -274,9 +274,9 @@
     <ExercisePicker
       v-model="swapOpen" :title="t('Swap exercise')"
       :suggested-ids="swapSuggestions" :suggested-label="t('Works the same muscles')"
-      :exclude-id="item?.exerciseId" @pick="doSwap"
+      :exclude-id="item?.exerciseId" allow-create @pick="doSwap"
     />
-    <ExercisePicker v-model="addOpen" :title="t('Add an exercise')" @pick="doAdd" />
+    <ExercisePicker v-model="addOpen" :title="t('Add an exercise')" allow-create @pick="doAdd" />
     <MachineSettingsSheet v-if="item" v-model="msOpen" :exercise-id="item.exerciseId" />
 
     <!-- Quick look at how to do the current exercise -->

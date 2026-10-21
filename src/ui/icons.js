@@ -60,5 +60,19 @@ export {
   mdiTapeMeasure as measure,
   mdiLogout as leave,
   mdiAccountPlusOutline as join,
-  mdiCrown as crown
+  mdiCrown as crown,
+  mdiAccountOutline as mine,
+  mdiBookshelf as routines,
+  mdiBullseyeArrow as goal,
+  mdiChevronUp as moveUp,
+  mdiChevronDown as moveDown,
+  mdiUndo as undo,
+  mdiCalendarRange as range,
+  mdiHumanMaleHeight as height,
+  mdiBackupRestore as restore,
+  mdiPin as pin,
+  mdiPinOutline as pinOff,
+  mdiPlaylistEdit as adjust,
+  mdiWeightLifter as lifter,
+  mdiCheckCircleOutline as doneCircle
 } from '@mdi/js'

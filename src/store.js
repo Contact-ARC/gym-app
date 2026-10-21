@@ -3,7 +3,12 @@ import { reactive, computed, toRaw } from 'vue'
 import { loadData, saveData, emptyData, parseBackup, onSaveError } from './lib/storage.js'
 import { DEFAULT_ROUTINES_URL, SUPPORTED_ROUTINE_SCHEMA, APP_VERSION } from './config.js'
 import { pickActiveRoutine, compareVersions, dateKey, suggestNext, detectPRs, sessionVolume, resolvePlan, plannedSetsFor, applyTrack } from './lib/training.js'
-import { challengeProgress, weekStreak } from './lib/stats.js'
+import { challengeProgress, weekStreak, weekKey, STREAK_MIN } from './lib/stats.js'
+import {
+  buildDays, planDayView, parseKey, planActive, planExpired, makeUse, snapshotDay, reconcileEdit, applyEdits, withRefs,
+  editedOldDay, planFromDays, sessionChanges, changesToOps, applyChangesToPlanDay, dayFromSession, uid as rid
+} from './lib/routines.js'
+import { weeklyTarget, goalProgress } from './lib/goals.js'
 import { t } from './i18n/index.js'
 import { reportError } from './lib/errors.js'
 
@@ -13,12 +18,16 @@ export const state = reactive({
   routineStatus: { loading: false, error: null, errorKind: null, lastAttempt: null }, // errorKind: offline | server | data
   saveError: null, // set while saving to the phone keeps failing
   notice: null, // one-off message for the app shell to show (e.g. data restored from a backup)
+  reviewDayChange: null, // day id whose "the routine changed this day" choice was asked for from its screen
   today: dateKey() // refreshed when the app comes back to the foreground
 })
 
 export function touchToday () {
   const k = dateKey()
-  if (k !== state.today) state.today = k
+  if (k !== state.today) {
+    state.today = k
+    expirePlans()
+  }
 }
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) touchToday() })
@@ -70,6 +79,8 @@ export async function initStore () {
     }
   }
   onSaveError((err) => { state.saveError = err ? String(err.message || err) : null })
+  expirePlans()
+  reconcileEdits()
   state.ready = true
   refreshRoutines() // background; cached copy is used meanwhile
 }
@@ -84,18 +95,55 @@ export const routinesUrl = computed(() => {
 
 export const routine = computed(() => state.data.cache.routine)
 export const manifest = computed(() => state.data.cache.manifest)
+/** Every exercise: the repo's library plus your own (ids starting with "my-"). Hidden ones stay for history. */
 export const exercisesById = computed(() => {
   const map = {}
   for (const ex of state.data.cache.exercises?.exercises || []) map[ex.id] = ex
+  for (const ex of state.data.customExercises || []) map[ex.id] = { ...ex, custom: true }
   return map
 })
-export const days = computed(() => routine.value?.days || [])
+
+/**
+ * This month's days: the repo's days (with your changes and the beginner track applied),
+ * then the days from My routines you're using. Each has a stable `key` (r-A, p-<plan>-<day>).
+ */
+export const days = computed(() => buildDays({
+  routine: routine.value,
+  level: state.data.profile.level,
+  edits: state.data.routineEdits,
+  plans: state.data.plans,
+  today: state.today
+}))
+export const routineReplaced = computed(() => state.data.plans.some(p => planActive(p, state.today) && p.use.mode === 'replace'))
+
+/** A day by key, including ones not showing this month (a plan you aren't using, a replaced repo day). */
+export function findDay (key) {
+  const d = days.value.find(x => x.key === key)
+  if (d) return d
+  const k = parseKey(key)
+  if (k?.source === 'mine') {
+    const p = planById(k.planId)
+    const pd = p?.days.find(x => x.id === k.dayId)
+    return pd ? { ...planDayView(p, pd), inactive: true } : null
+  }
+  if (k?.source === 'routine' && routine.value) {
+    const r = buildDays({ routine: routine.value, level: state.data.profile.level, edits: state.data.routineEdits, today: state.today })
+    const rd = r.find(x => x.key === key)
+    return rd ? { ...rd, inactive: true } : null
+  }
+  return null
+}
+export const dayIndexOf = (key) => days.value.findIndex(d => d.key === key)
+
+/** Next day in the rotation (first one after a new month or when the remembered day is gone). */
+export const nextDayIndex = computed(() => Math.max(0, dayIndexOf(state.data.nextDayKey)))
+export const nextDay = computed(() => days.value[nextDayIndex.value] || null)
 
 /** A routine item as the user will do it (beginner track swaps in its overrides). */
 export function trackItem (item) {
   return applyTrack(item, state.data.profile.level)
 }
-export const hasBeginnerTrack = computed(() => days.value.some(d => d.items.some(i => i.beginner)))
+export const hasBeginnerTrack = computed(() => (routine.value?.days || []).some(d => d.items.some(i => i.beginner)))
 
 // ── Monthly challenge (from the routine file) ────────────
 export const challenge = computed(() => routine.value?.challenge || null)
@@ -116,9 +164,14 @@ export function bumpChallenge (delta) {
   persist()
 }
 
+/** Workouts a week that keep the streak going: your "workouts per week" goal from the week you set it, otherwise 2. */
+export const weeklyMin = computed(() => weeklyTarget(state.data.goals) || STREAK_MIN)
 export const streak = computed(() => {
   const [y, m, d] = state.today.split('-').map(Number)
-  return weekStreak(state.data.sessions, new Date(y, m - 1, d, 12))
+  const g = state.data.goals.find(x => x.type === 'weekly' && !x.archived)
+  const from = g?.createdAt ? weekKey(g.createdAt) : null
+  const min = g ? (wk) => (!from || wk >= from ? weeklyMin.value : STREAK_MIN) : STREAK_MIN
+  return weekStreak(state.data.sessions, new Date(y, m - 1, d, 12), min)
 })
 
 /** Today's targets from the routine: week number, reps in reserve, deload, set changes. */
@@ -132,7 +185,7 @@ export const isDeloadWeek = computed(() => todayPlan.value.deload)
 /** Exercise photos live in the routines repo; paths in exercises.json are relative to it. */
 export function imageUrl (path) {
   if (!path) return ''
-  return /^https?:/.test(path) ? path : routinesUrl.value + path
+  return /^(https?|data):/.test(path) ? path : routinesUrl.value + path
 }
 
 export const updateAvailable = computed(() => {
@@ -211,9 +264,9 @@ async function doRefresh () {
     const prevMonth = state.data.cache.routine?.month
     state.data.cache = { manifest: man, routine: rt, exercises: ex, fetchedAt: new Date().toISOString() }
     state.data.routineArchive[rt.month] = rt
-    // New month → start the A/B/C rotation again from Day A
-    if (prevMonth && prevMonth !== rt.month) state.data.nextDayIndex = 0
-    if (state.data.nextDayIndex >= rt.days.length) state.data.nextDayIndex = 0
+    // New month → start the rotation again from the first day
+    if (prevMonth && prevMonth !== rt.month) state.data.nextDayKey = null
+    reconcileEdits()
     st.error = null
     st.errorKind = null
     await persist()
@@ -279,29 +332,41 @@ export function suggestionFor (item, sessionId = null) {
   })
 }
 
-export function startSession (dayIndex) {
+// Your own days don't follow the repo's week plan (deload weeks, reps in reserve)
+const OWN_PLAN = { week: 1, rir: null, focus: '', deload: false, setDelta: 0, loadFactor: 1, applyTo: 'all', source: null }
+
+/** Start a day by key (or by its position in this month's days). */
+export function startSession (keyOrIndex) {
   if (activeSession.value) return activeSession.value.id
-  const day = days.value[dayIndex]
+  const key = typeof keyOrIndex === 'number' ? days.value[keyOrIndex]?.key : keyOrIndex
+  const day = key ? findDay(key) : null
   if (!day) return null
+  const idx = dayIndexOf(key)
+  const plan = day.source === 'routine' ? { ...todayPlan.value } : { ...OWN_PLAN }
   const session = {
     id: uid(),
     startedAt: new Date().toISOString(),
     finishedAt: null,
     routineMonth: routine.value?.month || null,
-    dayIndex,
+    dayIndex: idx >= 0 ? idx : 0,
+    dayKey: key,
+    source: day.source,
+    planId: day.planId || null,
     dayId: day.id,
     dayName: day.name,
     dayNameEs: day.es?.name || null,
     items: day.items.map((raw, i) => {
       const it = trackItem(plain(raw))
+      delete it.added // added by your changes to the day, not during this workout
+      delete it.swappedFrom
       return {
         ...it,
-        sets: plannedSetsFor(it, i, todayPlan.value),
+        sets: plannedSetsFor(it, i, plan),
         routineSets: it.sets,
         originalExerciseId: it.exerciseId
       }
     }),
-    plan: { ...todayPlan.value },
+    plan,
     sets: [],
     notes: ''
   }
@@ -321,6 +386,7 @@ export function startFreeSession (name = t('Free session')) {
     routineMonth: routine.value?.month || null,
     dayIndex: null,
     dayId: 'free',
+    source: 'free',
     dayName: name,
     items: [],
     sets: [],
@@ -337,8 +403,8 @@ export function addItemToSession (sessionId, exerciseId) {
   if (!s) return
   const ex = exercisesById.value[exerciseId]
   const item = ex?.logType === 'time'
-    ? { exerciseId, originalExerciseId: exerciseId, sets: 3, durationSec: [30, 45], restSec: 60 }
-    : { exerciseId, originalExerciseId: exerciseId, sets: 3, repRange: [8, 12], restSec: 90 }
+    ? { exerciseId, originalExerciseId: exerciseId, sets: 3, durationSec: [30, 45], restSec: 60, added: true }
+    : { exerciseId, originalExerciseId: exerciseId, sets: 3, repRange: [8, 12], restSec: 90, added: true }
   s.items.push(item)
   persist()
 }
@@ -404,11 +470,13 @@ export function finishSession (sessionId, rating = null) {
   if (!s) return null
   if (rating && (rating.effort || rating.energy)) s.rating = rating
   s.finishedAt = new Date().toISOString()
-  if (s.dayIndex != null && days.value.length) {
-    state.data.nextDayIndex = (s.dayIndex + 1) % days.value.length
-  }
+  // Next in the rotation: the day after this one (workouts started before 0.5 have no key)
+  const key = s.dayKey || (s.dayIndex != null && s.dayId !== 'free' ? `r-${s.dayId}` : null)
+  const i = key ? dayIndexOf(key) : -1
+  if (i >= 0 && days.value.length) state.data.nextDayKey = days.value[(i + 1) % days.value.length].key
   const firstFinish = !s.postedAt
   if (state.data.activeSessionId === sessionId) state.data.activeSessionId = null
+  checkGoals()
   persist()
   emit('finished', { session: s, firstFinish })
   return s
@@ -491,12 +559,12 @@ export const todayKey = () => dateKey()
 
 // ── Body: weight, measurements, progress photos ──────────
 
-export const MEASUREMENTS = ['waist', 'chest', 'arm', 'thigh', 'hips']
+export const MEASUREMENTS = ['waist', 'neck', 'chest', 'arm', 'thigh', 'hips']
 
 export function saveBodyEntry (entry) {
   const list = state.data.body.entries
   const clean = { ...entry }
-  for (const k of ['weight', ...MEASUREMENTS]) {
+  for (const k of ['weight', 'bodyFat', ...MEASUREMENTS]) {
     clean[k] = clean[k] == null || clean[k] === '' || !isFinite(clean[k]) ? null : Number(clean[k])
   }
   if (!clean.id) clean.id = uid()
@@ -507,8 +575,9 @@ export function saveBodyEntry (entry) {
   // Keep the profile's bodyweight in step with the newest weigh-in (used for bodyweight exercises)
   const latest = [...list].reverse().find(e => e.weight != null)
   if (latest && latest.unit === state.data.profile.unit) state.data.profile.bodyweight = latest.weight
+  const reached = checkGoals()
   persist()
-  return clean
+  return { ...clean, reached }
 }
 
 export function deleteBodyEntry (id) {
@@ -528,3 +597,326 @@ export function removePhotoRecord (id) {
 }
 
 export const newId = uid
+
+// ── Your changes to this month's days ────────────────────
+
+/** Check your changes against a new month's routine (same workout → carry them over; different → ask). */
+export function reconcileEdits () {
+  const rt = routine.value
+  if (!rt?.days) return
+  let changed = false
+  for (const [dayId, e] of Object.entries(state.data.routineEdits)) {
+    if (e.pending?.month === rt.month) continue
+    const newDay = rt.days.find(d => d.id === dayId)
+    const r = reconcileEdit(plain(e), newDay, rt.month)
+    if (r.kind === 'same') continue
+    changed = true
+    if (r.kind === 'rebase') {
+      const skip = new Set(r.skipped.map(o => JSON.stringify(o)))
+      e.ops = plain(e.ops).filter(o => !skip.has(JSON.stringify(o)))
+      if (r.skipped.length) state.data.editNotices.push({ dayId, month: rt.month, skipped: r.skipped.length, name: newDay.name, nameEs: newDay.es?.name || null })
+      e.base = snapshotDay(plain(newDay))
+      e.baseMonth = rt.month
+      e.pending = null
+      if (!e.ops.length) delete state.data.routineEdits[dayId]
+    } else {
+      e.pending = { month: rt.month, kind: r.kind, toName: newDay?.name || null, toNameEs: newDay?.es?.name || null }
+    }
+  }
+  if (changed) persist()
+}
+
+/** Days whose changes are waiting for a decision because the repo changed the workout. */
+export const pendingDayChanges = computed(() => Object.entries(state.data.routineEdits)
+  .filter(([, e]) => e.pending && e.pending.month === routine.value?.month)
+  .map(([dayId, e]) => ({ dayId, ...e.pending, fromName: e.base?.name, fromNameEs: e.base?.es?.name, baseMonth: e.baseMonth, count: e.ops.length })))
+
+export function routineEdit (dayId) {
+  return state.data.routineEdits[dayId] || null
+}
+
+/** Change a repo day: fn receives the current edit list and returns the new one. */
+export function changeRoutineDay (dayId, fn) {
+  const rt = routine.value
+  const day = rt?.days.find(d => d.id === dayId)
+  if (!day) return
+  let e = state.data.routineEdits[dayId]
+  if (!e || e.pending || e.baseMonth !== rt.month) {
+    state.data.routineEdits[dayId] = { baseMonth: rt.month, base: snapshotDay(plain(day)), ops: [], pending: null }
+    e = state.data.routineEdits[dayId]
+  }
+  e.ops = fn(plain(e.ops))
+  e.updatedAt = new Date().toISOString()
+  if (!e.ops.length) delete state.data.routineEdits[dayId]
+  persist()
+}
+
+export function undoRoutineEdit (dayId, index) {
+  changeRoutineDay(dayId, ops => {
+    const op = ops[index]
+    // Undoing an added exercise also drops the moves and changes made to it
+    if (op?.op === 'add') return ops.filter((o, i) => i !== index && o.ref !== op.ref)
+    return ops.filter((_, i) => i !== index)
+  })
+}
+
+export function resetRoutineDay (dayId) {
+  delete state.data.routineEdits[dayId]
+  persist()
+}
+
+/**
+ * The repo changed a day you'd adjusted.
+ *   mine: save the old version (with your changes) to My routines · fit: keep the changes that still apply · drop
+ */
+export function resolveDayChange (dayId, choice, planName = '') {
+  const e = state.data.routineEdits[dayId]
+  if (!e) return null
+  let plan = null
+  if (choice === 'mine') {
+    const old = editedOldDay(plain(e), state.data.profile.level)
+    plan = planFromDays(planName || old.name, [old], { kind: 'day', month: e.baseMonth, dayId })
+    state.data.plans.push(plan)
+    delete state.data.routineEdits[dayId]
+  } else if (choice === 'fit') {
+    const rt = routine.value
+    const newDay = rt?.days.find(d => d.id === dayId)
+    if (!newDay) delete state.data.routineEdits[dayId]
+    else {
+      const { skipped } = applyEdits(withRefs(newDay.items), plain(e.ops))
+      const skip = new Set(skipped.map(o => JSON.stringify(o)))
+      e.ops = plain(e.ops).filter(o => !skip.has(JSON.stringify(o)))
+      e.base = snapshotDay(plain(newDay))
+      e.baseMonth = rt.month
+      e.pending = null
+      if (!e.ops.length) delete state.data.routineEdits[dayId]
+    }
+  } else delete state.data.routineEdits[dayId]
+  persist()
+  return plan
+}
+
+export function dismissEditNotice () {
+  state.data.editNotices.shift()
+  persist()
+}
+
+// ── My routines ──────────────────────────────────────────
+
+export const planById = (id) => state.data.plans.find(p => p.id === id) || null
+export const isPlanActive = (p) => planActive(p, state.today)
+
+function addPlan (plan) {
+  state.data.plans.push(plan)
+  persist()
+  return planById(plan.id)
+}
+
+/** Save one of this month's days (as you do it now, with your changes) to My routines. */
+export function saveDayAsMine (key, name) {
+  const d = findDay(key)
+  if (!d) return null
+  return addPlan(planFromDays(name, [plain(d)], { kind: 'day', month: routine.value?.month || null, dayId: d.id }))
+}
+
+/** Keep a copy of this month's whole routine (with your changes). */
+export function copyMonthToMine (name) {
+  const r = buildDays({ routine: routine.value, level: state.data.profile.level, edits: state.data.routineEdits, today: state.today })
+  if (!r.length) return null
+  return addPlan(planFromDays(name, plain(r), { kind: 'month', month: routine.value.month }))
+}
+
+/** A badge letter not taken by this month's days or the plan's other days (E after A–D). */
+export function freeDayLetter (plan = null) {
+  const used = new Set([...days.value.map(d => d.id), ...(routine.value?.days || []).map(d => d.id), ...(plan?.days || []).map(d => d.label)])
+  return 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').find(l => !used.has(l)) || '•'
+}
+
+export function newPlan (name, firstDay = { label: 'E', name: '', items: [] }) {
+  return addPlan(planFromDays(name, [firstDay], { kind: 'new' }))
+}
+
+export function addPlanDay (planId, day) {
+  const p = planById(planId)
+  if (!p) return null
+  const d = planFromDays('', [day]).days[0]
+  p.days.push(d)
+  persist()
+  return d
+}
+
+export function deletePlanDay (planId, dayId) {
+  const p = planById(planId)
+  if (!p) return
+  p.days = plain(p.days).filter(d => d.id !== dayId)
+  persist()
+}
+
+/** Use a plan: { mode: 'add'|'replace', until: 'month'|'date'|'forever', weeks, endsOn }. */
+export function usePlan (planId, opts) {
+  const p = planById(planId)
+  if (!p) return
+  p.use = makeUse(opts, state.today)
+  p.lastUse = { mode: opts.mode, until: opts.until, weeks: opts.weeks || null }
+  state.data.planNotices = state.data.planNotices.filter(id => id !== planId)
+  persist()
+}
+
+export function stopPlan (planId) {
+  const p = planById(planId)
+  if (!p) return
+  p.use = null
+  persist()
+}
+
+/** Back to this month's routine: plans that replaced it go back to My routines (nothing is deleted). */
+export function restoreRoutine () {
+  for (const p of state.data.plans) if (planActive(p, state.today) && p.use.mode === 'replace') p.use = null
+  persist()
+}
+
+export function deletePlan (planId) {
+  state.data.plans = plain(state.data.plans).filter(p => p.id !== planId)
+  state.data.planNotices = state.data.planNotices.filter(id => id !== planId)
+  persist()
+}
+
+export function duplicatePlan (planId, name) {
+  const p = planById(planId)
+  if (!p) return null
+  return addPlan(planFromDays(name, plain(p.days), { kind: 'copy', planId }))
+}
+
+/** Plans whose time ran out go back to My routines; mention it once. */
+export function expirePlans () {
+  let changed = false
+  for (const p of state.data.plans) {
+    if (planExpired(p, state.today)) {
+      p.lastUse = { ...(p.lastUse || {}), mode: p.use.mode, until: p.use.until }
+      p.use = null
+      if (!state.data.planNotices.includes(p.id)) state.data.planNotices.push(p.id)
+      changed = true
+    }
+  }
+  if (changed) persist()
+}
+
+export function dismissPlanNotices () {
+  state.data.planNotices = []
+  persist()
+}
+
+// ── "Keep these changes?" after a workout ────────────────
+
+export function workoutChanges (session) {
+  if (!session || session.changesHandled) return []
+  return sessionChanges(plain(session))
+}
+
+/**
+ * how: 'always' (this day from now on) or 'mine' (save as a day in My routines). Returns the new plan for 'mine'.
+ */
+export function keepWorkoutChanges (sessionId, how, name = '') {
+  const s = getSession(sessionId)
+  if (!s) return null
+  const changes = sessionChanges(plain(s))
+  let plan = null
+  if (how === 'always') {
+    if (s.source === 'mine') {
+      const k = parseKey(s.dayKey)
+      const d = planById(k?.planId)?.days.find(x => x.id === k.dayId)
+      if (d) applyChangesToPlanDay(d, changes)
+    } else if (s.source !== 'free' && s.routineMonth === routine.value?.month) {
+      changeRoutineDay(s.dayId, ops => changesToOps(ops, changes))
+    }
+  } else if (how === 'mine') {
+    if (s.source === 'free' || !s.dayKey) {
+      plan = planFromDays(name, [{ ...dayFromSession(plain(s), name), label: freeDayLetter() }], { kind: 'session' })
+    } else {
+      // The day as it was, with the workout's changes on top
+      const d = findDay(s.dayKey)
+      if (d) {
+        plan = planFromDays(name, [plain(d)], { kind: 'day', month: routine.value?.month || null, dayId: d.id })
+        const pd = plan.days[0]
+        const idOf = {}
+        d.items.forEach((it, i) => { if (pd.items[i]) idOf[it.ref] = 'm:' + pd.items[i].id })
+        const mapped = changes.map(c => ({ ...c, ref: c.ref ? idOf[c.ref] : c.ref, after: c.after?.ref ? { ...c.after, ref: idOf[c.after.ref] } : c.after }))
+        applyChangesToPlanDay(pd, mapped)
+      } else plan = planFromDays(name, [{ ...dayFromSession(plain(s), name), label: freeDayLetter() }], { kind: 'session' })
+    }
+    state.data.plans.push(plan)
+  }
+  s.changesHandled = how
+  persist()
+  return plan ? planById(plan.id) : null
+}
+
+// ── Your own exercises ───────────────────────────────────
+
+export function saveCustomExercise (ex) {
+  const list = state.data.customExercises
+  const clean = plain(ex)
+  if (!clean.id) clean.id = 'my-' + rid()
+  const i = list.findIndex(e => e.id === clean.id)
+  if (i >= 0) list[i] = clean
+  else list.push(clean)
+  persist()
+  return clean.id
+}
+
+/** "Delete" hides it: workouts and records that used it keep its name. */
+export function hideCustomExercise (id, hidden = true) {
+  const ex = state.data.customExercises.find(e => e.id === id)
+  if (!ex) return
+  ex.hidden = hidden
+  persist()
+}
+
+// ── Goals ────────────────────────────────────────────────
+
+export const goalCtx = computed(() => ({
+  sessions: state.data.sessions,
+  entries: state.data.body.entries,
+  profile: state.data.profile,
+  lifts: state.data.settings.lifts,
+  plBasis: state.data.settings.plBasis,
+  today: new Date(state.today + 'T12:00:00')
+}))
+
+export const goalsWithProgress = computed(() => state.data.goals
+  .filter(g => !g.archived)
+  .map(g => ({ goal: g, p: goalProgress(g, goalCtx.value) })))
+
+export function saveGoal (goal) {
+  const list = state.data.goals
+  const clean = plain(goal)
+  if (!clean.id) { clean.id = rid(); clean.createdAt = new Date().toISOString() }
+  if (clean.pinned == null) clean.pinned = list.filter(g => g.pinned && !g.doneAt).length < 2
+  // Only one "workouts per week" goal at a time
+  if (clean.type === 'weekly') state.data.goals = plain(list).filter(g => g.type !== 'weekly' || g.id === clean.id)
+  const l = state.data.goals
+  const i = l.findIndex(g => g.id === clean.id)
+  if (i >= 0) l[i] = clean
+  else l.push(clean)
+  checkGoals()
+  persist()
+  return clean.id
+}
+
+export function deleteGoal (id) {
+  state.data.goals = plain(state.data.goals).filter(g => g.id !== id)
+  persist()
+}
+
+/** Mark goals you've just reached. Returns them (for a celebration). */
+export function checkGoals () {
+  const reached = []
+  for (const g of state.data.goals) {
+    if (g.doneAt || g.archived || g.type === 'weekly') continue
+    if (goalProgress(g, goalCtx.value).done) {
+      g.doneAt = new Date().toISOString()
+      reached.push(g)
+    }
+  }
+  return reached
+}

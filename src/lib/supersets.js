@@ -5,10 +5,8 @@
 export function effectiveRest (items, i) {
   const it = items[i]
   if (!it) return 0
-  if (it.group) {
-    const groupIdx = items.map((x, j) => (x.group === it.group ? j : -1)).filter(j => j >= 0)
-    if (i !== groupIdx[groupIdx.length - 1]) return 0
-  }
+  // A superset is a run of neighbours sharing a group (the workout screen groups them the same way)
+  if (it.group && items[i + 1]?.group === it.group) return 0
   return it.restSec ?? 90
 }
 
@@ -31,4 +29,10 @@ export function supersetNext (indices, i, counts, rows) {
   const pos = indices.indexOf(i)
   const cyclic = [...indices.slice(pos + 1), ...indices.slice(0, pos + 1)]
   return { next: cyclic.find(j => open.includes(j) && counts[j] === low), rest: false, done: false }
+}
+
+/** Is item i really in a superset (a neighbour shares its group)? */
+export function inSuperset (items, i) {
+  const g = items[i]?.group
+  return !!g && (items[i - 1]?.group === g || items[i + 1]?.group === g)
 }

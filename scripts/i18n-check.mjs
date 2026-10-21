@@ -35,6 +35,12 @@ const EXTRA = [
   'Your data file was damaged, so the app loaded your automatic backup from {when}.', "Your data file couldn't be read. A copy was kept; import a backup from Settings if you have one.",
   'Last: {last}. Hit {hi} on every set with reps to spare → add {jump}, aim for {lo}+.', 'Last: {last}. Hit {hi} on every set → add {jump}, aim for {lo}+.',
   "There's no crew with that code. Check it with whoever sent it.", 'That code is already in use. Try again.', 'That crew is full (50 people).',
+  // 0.5: goal types, help lines and lift names shown through a variable
+  'Lift a weight', 'More reps', 'Hold longer', 'Lift a multiple of your bodyweight', 'Powerlifting total', 'DOTS score', 'Bodyweight', 'Body fat',
+  'Waist', 'Lean mass', 'Workouts per week', 'Strength', 'Body', 'Habit', 'Squat', 'Bench press', 'Deadlift', 'measure|Neck', 'filter|Yours',
+  'Bench 100 kg, squat 140 kg for 5…', '10 pull-ups, 30 push-ups…', 'A 2-minute plank, a longer carry…', 'Squat twice your bodyweight…',
+  'Squat + bench + deadlift', 'Compares lifters of different bodyweights', 'Gain or lose, with a 7-day average', 'Entered or estimated from measurements',
+  'From your measurements', 'Weight without fat: build muscle', 'Also sets what keeps your streak going',
   'Crew codes are 6 letters or numbers.', 'Pick a name between 1 and 30 characters.', "This phone isn't in that crew any more.", 'That was too much data to send.'
 ]
 for (const k of EXTRA) keys.add(k)

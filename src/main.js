@@ -13,7 +13,7 @@ import './styles/base.css'
 
 import App from './App.vue'
 import router from './router.js'
-import { initStore, state, days, activeSession, startSession, persist, autoRefresh } from './store.js'
+import { initStore, state, nextDay, activeSession, startSession, persist, autoRefresh } from './store.js'
 import { closeTopOverlay } from './ui/overlay.js'
 import { t, tn, setLang, deviceLang } from './i18n/index.js'
 import { initCrew } from './lib/crew.js'
@@ -55,8 +55,7 @@ initStore().then(() => {
     if (what === 'progress') return router.push('/progress')
     if (what === 'start-next') {
       if (activeSession.value) return router.push(`/workout/${activeSession.value.id}`)
-      const i = days.value[state.data.nextDayIndex] ? state.data.nextDayIndex : 0
-      const id = days.value.length ? startSession(i) : null
+      const id = nextDay.value ? startSession(nextDay.value.key) : null
       router.push(id ? `/workout/${id}` : '/')
     }
   }

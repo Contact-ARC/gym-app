@@ -127,3 +127,15 @@ test('workout length: under a minute stays below 1, long sessions are capped', (
   assert.equal(sessionMinutes(s(95)), 2)
   assert.equal(sessionMinutes(s(6 * 3600)), 240)
 })
+
+test('week streak: a higher weekly target only counts from the week it was set', () => {
+  const s = [
+    at('2026-10-05T18:00'), at('2026-10-07T18:00'), at('2026-10-09T18:00'), // 3
+    at('2026-10-12T18:00'), at('2026-10-14T18:00'), at('2026-10-16T18:00'), // 3
+    at('2026-10-19T18:00'), at('2026-10-20T18:00'), at('2026-10-21T18:00'), at('2026-10-22T18:00') // 4, goal of 4 set this week
+  ]
+  const min = (wk) => (wk >= '2026-10-19' ? 4 : 2)
+  const st = weekStreak(s, new Date(2026, 9, 23), min)
+  assert.equal(st.weeks, 3); assert.equal(st.min, 4); assert.equal(st.safe, true)
+  assert.equal(weekStreak(s, new Date(2026, 9, 23), 4).weeks, 1) // the old way: earlier weeks lost
+})

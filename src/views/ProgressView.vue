@@ -20,6 +20,14 @@
           <div class="t-tiny t-muted truncate">{{ months.length ? monthName(months[0], { month: 'long' }) : t('After your first month') }}</div>
         </div>
       </RouterLink>
+      <RouterLink to="/goals" class="qcard wide">
+        <Icon name="goal" />
+        <div class="grow">
+          <div class="t-h3">{{ t('Goals') }}</div>
+          <div class="t-tiny t-muted truncate">{{ goalsLine }}</div>
+        </div>
+        <Icon name="chevronRight" class="chev" />
+      </RouterLink>
     </div>
 
     <div v-if="!finishedSessions.length" class="card card-pad empty">
@@ -106,6 +114,39 @@
         <RouterLink :to="`/exercise/${exerciseId}`" class="btn btn-ghost btn-sm table-btn">{{ t('Rep records and history') }}</RouterLink>
       </div>
 
+      <!-- Powerlifting: squat, bench, deadlift, total, DOTS -->
+      <template v-if="pl.any">
+        <div class="row vol-h">
+          <h2 class="section-h grow">{{ t('Powerlifting') }}</h2>
+          <button class="btn btn-sm btn-ghost pl-change" @click="liftsOpen = true">{{ t('Change lifts') }}</button>
+        </div>
+        <Segmented :model-value="plBasis" :options="[{ label: t('Estimated max'), value: 'e1rm' }, { label: t('Actually lifted'), value: 'actual' }]" :label="t('Count it as')" @update:model-value="setBasis" />
+        <div class="group pl">
+          <button v-for="k in ['squat', 'bench', 'deadlift']" :key="k" class="group-row" @click="pl.ids[k] && exercisesById[pl.ids[k]] ? select(pl.ids[k]) : (liftsOpen = true)">
+            <div class="grow">
+              <div class="t-h3">{{ t(LIFT_LABELS[k]) }}</div>
+              <div class="t-tiny t-muted truncate">{{ pl.ids[k] && exercisesById[pl.ids[k]] ? exName(pl.ids[k]) : t('Choose the exercise') }}</div>
+            </div>
+            <div class="right">
+              <div class="t-num pl-v">{{ pl[k] ? fmtLoad(pl[k], unit) : '–' }}</div>
+              <div v-if="pl[k] && bwKg" class="t-tiny t-muted t-num">{{ t('{x}× bodyweight', { x: fmtNum(convertLoad(pl[k], unit, 'kg') / bwKg, 2) }) }}</div>
+            </div>
+          </button>
+          <div class="group-row total">
+            <span class="grow t-h3">{{ t('Total') }}</span>
+            <span class="t-num pl-v">{{ pl.complete ? fmtLoad(pl.total, unit) : '–' }}</span>
+          </div>
+          <div class="group-row">
+            <div class="grow">
+              <div class="t-h3">{{ t('DOTS') }}</div>
+              <div class="t-tiny t-muted">{{ dotsHint }}</div>
+            </div>
+            <span class="t-num pl-v">{{ dotsV != null ? fmtNum(dotsV, 1) : '–' }}</span>
+          </div>
+        </div>
+        <p class="t-tiny t-muted explain">{{ t('Your best in the last 12 weeks. Bodyweight is your 7-day average from Body.') }}</p>
+      </template>
+
       <!-- Weekly volume per muscle against the target range -->
       <div class="row vol-h">
         <h2 class="section-h grow">{{ t('Hard sets per muscle') }}</h2>
@@ -144,6 +185,23 @@
     </template>
 
     <ExercisePicker v-model="pickerOpen" :title="t('Show progress for')" :only-ids="loggedIds" @pick="select" />
+
+    <Sheet v-model="liftsOpen" :title="t('Your powerlifting lifts')">
+      <p class="t-small t-muted">{{ t('Pick the exercise that counts for each lift. Create your own if it isn\'t in the list.') }}</p>
+      <div class="group lifts">
+        <button v-for="k in ['squat', 'bench', 'deadlift']" :key="k" class="group-row" @click="liftKey = k; liftPickOpen = true">
+          <div class="grow">
+            <div class="t-tiny t-muted">{{ t(LIFT_LABELS[k]) }}</div>
+            <div class="t-h3">{{ pl.ids[k] && exercisesById[pl.ids[k]] ? exName(pl.ids[k]) : t('Choose the exercise') }}</div>
+          </div>
+          <Icon name="chevronRight" class="chev" />
+        </button>
+      </div>
+      <template #actions>
+        <button class="btn btn-primary btn-lg" @click="liftsOpen = false">{{ t('Done') }}</button>
+      </template>
+    </Sheet>
+    <ExercisePicker v-model="liftPickOpen" :title="t(LIFT_LABELS[liftKey] || 'Squat')" allow-create @pick="setLift" />
   </div>
 </template>
 
@@ -157,7 +215,10 @@ import {
 import Icon from '../ui/Icon.vue'
 import Segmented from '../ui/Segmented.vue'
 import ExercisePicker from '../ui/ExercisePicker.vue'
-import { state, finishedSessions, exercisesById, historyFor, days, streak } from '../store.js'
+import Sheet from '../ui/Sheet.vue'
+import { state, persist, finishedSessions, exercisesById, historyFor, days, streak, goalsWithProgress, goalCtx } from '../store.js'
+import { plTotal, bodyweight } from '../lib/goals.js'
+import { dots } from '../lib/body.js'
 import { bestE1RM, heaviest, fmtLoad, unitFor, dateKey, convertLoad, detectPRs } from '../lib/training.js'
 import { muscleLabel, monthName, fmtNum, prText, relativeDay, fmtDate } from '../lib/format.js'
 import { muscleVolume, monthsWithWorkouts } from '../lib/stats.js'
@@ -174,6 +235,41 @@ const showTable = ref(false)
 const pickerOpen = ref(false)
 const unit = computed(() => state.data.profile.unit)
 const exName = (id) => tx(exercisesById.value[id], 'name') || id
+
+// ── Goals summary ──
+const goalsLine = computed(() => {
+  const all = goalsWithProgress.value
+  if (!all.length) return t('Set a target for a lift, your body or your week')
+  const open = all.filter(g => !g.goal.doneAt).length
+  const done = all.length - open
+  return [open ? tn(open, '{n} in progress', '{n} in progress') : '', done ? tn(done, '{n} reached', '{n} reached') : ''].filter(Boolean).join(' · ')
+})
+
+// ── Powerlifting ──
+const LIFT_LABELS = { squat: 'Squat', bench: 'Bench press', deadlift: 'Deadlift' }
+const plBasis = computed(() => state.data.settings.plBasis || 'e1rm')
+const pl = computed(() => {
+  const ids = state.data.settings.lifts || {}
+  const r = plTotal(state.data.sessions, ids, { basis: plBasis.value, unit: unit.value, today: new Date(state.today + 'T12:00:00') })
+  const logged = new Set(loggedIds.value)
+  return { ...r, ids, any: ['squat', 'bench', 'deadlift'].some(k => ids[k] && logged.has(ids[k])) }
+})
+const bwKg = computed(() => bodyweight(goalCtx.value, 'kg'))
+const dotsV = computed(() => (pl.value.complete && bwKg.value ? dots(convertLoad(pl.value.total, unit.value, 'kg'), bwKg.value, state.data.profile.sex) : null))
+const dotsHint = computed(() => {
+  if (!pl.value.complete) return t('Needs all three lifts')
+  if (!bwKg.value) return t('Log your weight in Body')
+  if (!state.data.profile.sex) return t('Set your sex in Body to see it')
+  return t('Compares lifters of different bodyweights')
+})
+function setBasis (v) { state.data.settings.plBasis = v; persist() }
+const liftsOpen = ref(false)
+const liftPickOpen = ref(false)
+const liftKey = ref('squat')
+function setLift (id) {
+  state.data.settings.lifts = { ...state.data.settings.lifts, [liftKey.value]: id }
+  persist()
+}
 
 // ── Heatmap: 12 columns (weeks), 7 rows (Mon–Sun) ──
 const trainedSet = computed(() => new Set(finishedSessions.value.map(s => dateKey(s.startedAt))))
@@ -374,6 +470,13 @@ const records = computed(() => loggedIds.value.map(id => {
 .quick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; }
 .qcard { display: flex; align-items: center; gap: 10px; padding: 14px; background: var(--card); border-radius: var(--r-card); min-width: 0; }
 .qcard:active { background: var(--press); }
+.qcard.wide { grid-column: 1 / -1; }
+.pl { margin-top: 10px; }
+.pl .right { text-align: right; }
+.pl-v { font-size: 20px; font-weight: 700; }
+.pl .total { background: var(--card-2); }
+.pl-change { margin-bottom: 4px; }
+.lifts { margin-top: 12px; background: var(--card-2); }
 .streak-row { gap: 8px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
 .t-warn { color: var(--warn); }
 .pr { align-items: flex-start; text-align: left; }

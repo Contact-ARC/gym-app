@@ -5,7 +5,11 @@ export default createRouter({
   history: createWebHashHistory(),
   routes: [
     { path: '/', name: 'home', component: HomeView, meta: { tab: 'home' } },
-    { path: '/day/:index', name: 'day', component: () => import('./views/DayView.vue'), meta: { tab: 'home' } },
+    { path: '/day/:key', name: 'day', component: () => import('./views/DayView.vue'), meta: { tab: 'home' } },
+    { path: '/edit/:key', name: 'edit-day', component: () => import('./views/DayEditView.vue'), meta: { tab: 'home' } },
+    { path: '/routines', name: 'routines', component: () => import('./views/RoutinesView.vue'), meta: { tab: 'home' } },
+    { path: '/plan/:id', name: 'plan', component: () => import('./views/PlanView.vue'), meta: { tab: 'home' } },
+    { path: '/goals', name: 'goals', component: () => import('./views/GoalsView.vue'), meta: { tab: 'progress' } },
     { path: '/library', name: 'library', component: () => import('./views/LibraryView.vue'), meta: { tab: 'library' } },
     { path: '/exercise/:id', name: 'exercise', component: () => import('./views/ExerciseView.vue'), meta: { tab: 'library' } },
     { path: '/workout/:id', name: 'workout', component: () => import('./views/WorkoutView.vue'), meta: { hideNav: true } },

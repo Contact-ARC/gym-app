@@ -1,6 +1,7 @@
 import { t, tn, locale, i18n } from '../i18n/index.js'
 import { state } from '../store.js'
 import { fmtLoad } from './training.js'
+import { planActive, daysBetween } from './routines.js'
 
 export function prescription (item, exercise = null) {
   if (!item) return ''
@@ -135,3 +136,29 @@ export function prText (p, unit) {
 
 /** Most telling record first: reps, heaviest, estimated max, time. */
 export const PR_ORDER = { reps: 0, load: 1, e1rm: 2, time: 3 }
+
+/** "12 Dec" from a YYYY-MM-DD key. */
+export function shortDay (key) {
+  if (!key) return ''
+  return new Date(key + 'T12:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' })
+}
+
+/** When a plan from My routines shows on Train. */
+export function planStatus (p) {
+  const u = p?.use
+  if (!u || !planActive(p, state.today)) return t('Not in use')
+  if (u.until === 'month') return t('In use this month')
+  if (u.until === 'date') {
+    const left = daysBetween(state.today, u.endsOn)
+    if (left <= 3) return left === 0 ? t('In use, last day today') : tn(left, 'In use, ends tomorrow', 'In use, {n} days left')
+    return t('In use until {date}', { date: shortDay(u.endsOn) })
+  }
+  return t('In use every month')
+}
+
+/** Plan days, in words: "2 days" / "Day E". */
+export function planDaysLine (p) {
+  const n = p?.days?.length || 0
+  const ex = (p?.days || []).reduce((t, d) => t + (d.items?.length || 0), 0)
+  return n === 1 ? tn(ex, '{n} exercise', '{n} exercises') : tn(n, '{n} day', '{n} days')
+}

@@ -45,6 +45,31 @@
       <span v-if="session.easy" class="pill pill-warn">{{ t('Lighter day') }}</span>
     </div>
 
+    <!-- Goals reached in this workout -->
+    <section v-if="reachedGoals.length" class="card card-pad goals-hit">
+      <div class="row">
+        <span class="g-icon"><Icon name="goal" :size="22" /></span>
+        <div class="grow">
+          <div class="t-tiny t-muted up">{{ tn(reachedGoals.length, 'Goal reached', 'Goals reached') }}</div>
+          <div v-for="g in reachedGoals" :key="g.goal.id" class="t-h3">{{ goalTitle(g.goal, g.p.target, g.p.unit) }}</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Changes made during the workout -->
+    <section v-if="justFinished && changes.length" class="card card-pad keep">
+      <div class="t-h3">{{ isFree ? t('Save this workout as one of your days?') : t('Keep these changes?') }}</div>
+      <ul v-if="!isFree" class="ch-list t-small">
+        <li v-for="(c, i) in changes" :key="i">{{ changeText(c) }}</li>
+      </ul>
+      <p v-else class="t-small t-muted ch-p">{{ t('It goes to My routines with the exercises and sets you did, ready to do again.') }}</p>
+      <div class="keep-acts">
+        <button class="btn btn-soft" @click="keep('today')">{{ isFree ? t('No thanks') : t('Just today') }}</button>
+        <button v-if="canAlways" class="btn btn-primary" @click="keep('always')">{{ session.source === 'mine' ? t('Update my day') : t('Always for day {id}', { id: session.dayId }) }}</button>
+        <button class="btn" :class="isFree ? 'btn-primary' : 'btn-soft'" @click="openMine">{{ t('Save as mine') }}</button>
+      </div>
+    </section>
+
     <ChallengeCard v-if="justFinished" compact />
 
     <section>
@@ -77,6 +102,16 @@
       <button class="btn btn-ghost grow t-err" @click="confirmDelete = true"><Icon name="trash" :size="18" />{{ t('Delete') }}</button>
     </div>
 
+    <Sheet v-model="mineOpen" :title="t('Save as mine')">
+      <label class="label" for="sm-name">{{ t('Name') }}</label>
+      <input id="sm-name" v-model="mineName" class="field" type="text" maxlength="40">
+      <p class="t-small t-muted mt">{{ isFree ? t('A new day in My routines with what you did today.') : t('A copy of this day with today\'s changes, in My routines. The routine\'s day stays as it is.') }}</p>
+      <template #actions>
+        <button class="btn btn-soft btn-lg" @click="mineOpen = false">{{ t('Cancel') }}</button>
+        <button class="btn btn-primary btn-lg" :disabled="!mineName.trim()" @click="keep('mine')">{{ t('Save') }}</button>
+      </template>
+    </Sheet>
+
     <Sheet v-model="confirmDelete" :title="t('Delete this workout?')">
       <p class="t-body">{{ t("It will be removed from your history and charts. This can't be undone.") }}</p>
       <template #actions>
@@ -101,7 +136,12 @@ import PlateBadge from '../ui/PlateBadge.vue'
 import ChallengeCard from '../ui/ChallengeCard.vue'
 import { plateStyle, plateHex } from '../ui/plates.js'
 import { toast } from '../ui/toast.js'
-import { state, getSession, sessionSummary, exercisesById, deleteSession, streak } from '../store.js'
+import {
+  state, getSession, sessionSummary, exercisesById, deleteSession, streak, workoutChanges, keepWorkoutChanges, routine,
+  planById, goalsWithProgress
+} from '../store.js'
+import { parseKey } from '../lib/routines.js'
+import { goalTitle } from '../lib/goalText.js'
 import { fmtLoad, unitFor } from '../lib/training.js'
 import { fmtDate, fmtNum, fmtMins, dayTitle, prText, PR_ORDER, sessionTitle } from '../lib/format.js'
 import { shareText } from '../lib/native.js'
@@ -121,6 +161,43 @@ const prGroups = computed(() => {
   const m = new Map()
   for (const p of sum.value.prs) { if (!m.has(p.exerciseId)) m.set(p.exerciseId, []); m.get(p.exerciseId).push(p) }
   return [...m].map(([id, prs]) => ({ id, prs: prs.sort((a, b) => PR_ORDER[a.type] - PR_ORDER[b.type]) }))
+})
+
+// ── Changes made during the workout ──
+const changes = computed(() => workoutChanges(session.value))
+const isFree = computed(() => session.value?.source === 'free' || session.value?.dayId === 'free')
+const canAlways = computed(() => {
+  const s = session.value
+  if (!s || isFree.value) return false
+  if (s.source === 'mine') return !!planById(parseKey(s.dayKey)?.planId)
+  return s.routineMonth === routine.value?.month
+})
+function changeText (c) {
+  if (c.kind === 'swap') return t('{a} → {b}', { a: name(c.from), b: name(c.to) })
+  if (c.kind === 'sets') return t('{name}: {a} → {b} sets', { name: name(c.exerciseId), a: c.from, b: c.to })
+  return t('Added {name}', { name: name(c.exerciseId) })
+}
+const mineOpen = ref(false)
+const mineName = ref('')
+function openMine () {
+  const s = session.value
+  mineName.value = isFree.value ? t('My day') : t('{day} (mine)', { day: sessionTitle(s) })
+  mineOpen.value = true
+}
+function keep (how) {
+  const plan = how === 'today' ? null : keepWorkoutChanges(session.value.id, how, mineName.value.trim())
+  if (how === 'today') keepWorkoutChanges(session.value.id, 'today')
+  mineOpen.value = false
+  if (how === 'always') toast(session.value.source === 'mine' ? t('Your day is updated') : t('Day {id} will have these changes from now on', { id: session.value.dayId }))
+  else if (plan) toast(t('Saved to My routines'), { actionLabel: t('Open'), action: () => router.push(`/plan/${plan.id}`) })
+}
+
+// Goals this workout reached
+const reachedGoals = computed(() => {
+  const s = session.value
+  if (!s?.finishedAt) return []
+  const from = s.startedAt; const to = new Date(new Date(s.finishedAt).getTime() + 120000).toISOString()
+  return goalsWithProgress.value.filter(g => g.goal.doneAt && g.goal.doneAt >= from && g.goal.doneAt <= to)
 })
 
 const TAGS = { warmup: 'warm-up', drop: 'drop', failure: 'to failure', amrap: 'max reps' }
@@ -209,5 +286,16 @@ function del () {
 .link { font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 .check { flex-wrap: wrap; gap: 8px; margin-top: 14px; }
 .what-h { align-items: flex-end; }
+.keep { margin-top: 16px; }
+.ch-list { margin: 10px 0 0 20px; }
+.ch-list li + li { margin-top: 4px; }
+.ch-p { margin-top: 6px; }
+.keep-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.keep-acts .btn { flex: 1 1 auto; }
+.mt { margin-top: 12px; }
+.goals-hit { margin-top: 16px; background: var(--ok-soft); }
+.goals-hit .row { gap: 12px; align-items: flex-start; }
+.g-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--card); color: var(--ok); flex: 0 0 auto; }
+.up { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
 .what-h .btn { margin-bottom: 4px; }
 </style>

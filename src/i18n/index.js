@@ -26,6 +26,8 @@ export function deviceLang () {
 }
 
 export function t (key, vars) {
+  if (key == null) return ''
+  key = String(key)
   const dict = DICTS[i18n.lang]
   let s = (dict && dict[key]) || (key.includes('|') ? key.slice(key.indexOf('|') + 1) : key)
   if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m))

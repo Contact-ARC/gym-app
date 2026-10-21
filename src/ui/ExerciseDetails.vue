@@ -32,7 +32,7 @@
       <ul class="card card-pad bullets"><li v-for="(s, i) in setup" :key="i">{{ s }}</li></ul>
     </section>
 
-    <section>
+    <section v-if="steps?.length">
       <h2 class="section-h">{{ t('How to do it') }}</h2>
       <ol class="card card-pad steps">
         <li v-for="(s, i) in steps || []" :key="i">

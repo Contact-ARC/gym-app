@@ -4,6 +4,12 @@
       <button class="icon-btn" :aria-label="t('Back')" @click="router.back()"><Icon name="back" /></button>
     </div>
     <h1 class="t-title">{{ tx(ex, 'name') }}</h1>
+    <div v-if="ex.custom" class="row own">
+      <span class="tag tag-mine">{{ t('Your exercise') }}</span>
+      <span v-if="ex.hidden" class="tag tag-edit">{{ t('Deleted') }}</span>
+      <span class="grow" />
+      <button class="btn btn-sm btn-soft" @click="editOpen = true"><Icon name="edit" :size="18" />{{ t('Edit') }}</button>
+    </div>
     <ExerciseDetails :ex="ex" />
 
     <section>
@@ -74,7 +80,20 @@
       </div>
     </section>
 
+    <template v-if="ex.custom">
+      <button v-if="ex.hidden" class="btn btn-soft btn-block own-del" @click="hideCustomExercise(ex.id, false); toast(t('Exercise restored'))"><Icon name="restore" />{{ t('Restore this exercise') }}</button>
+      <button v-else class="btn btn-ghost btn-block t-err own-del" @click="delOpen = true"><Icon name="trash" />{{ t('Delete this exercise') }}</button>
+    </template>
+
     <MachineSettingsSheet v-model="msOpen" :exercise-id="ex.id" />
+    <CustomExerciseSheet v-if="ex.custom" v-model="editOpen" :exercise="ex" />
+    <Sheet v-model="delOpen" :title="t('Delete {name}?', { name: ex.name })">
+      <p class="t-body">{{ t("It won't show in lists or the exercise picker any more. Workouts, records and charts that used it keep it.") }}</p>
+      <template #actions>
+        <button class="btn btn-soft btn-lg" @click="delOpen = false">{{ t('Keep it') }}</button>
+        <button class="btn btn-danger btn-lg" @click="del">{{ t('Delete') }}</button>
+      </template>
+    </Sheet>
   </div>
 
   <div v-else class="page">
@@ -90,7 +109,9 @@ import Icon from '../ui/Icon.vue'
 import { toast } from '../ui/toast.js'
 import ExerciseDetails from '../ui/ExerciseDetails.vue'
 import MachineSettingsSheet from '../ui/MachineSettingsSheet.vue'
-import { state, exercisesById, historyFor, setExerciseNote } from '../store.js'
+import CustomExerciseSheet from '../ui/CustomExerciseSheet.vue'
+import Sheet from '../ui/Sheet.vue'
+import { state, exercisesById, historyFor, setExerciseNote, hideCustomExercise } from '../store.js'
 import { relativeDay } from '../lib/format.js'
 import { bestE1RM, heaviest, fmtLoad, unitFor, repRecords, bestSeconds } from '../lib/training.js'
 import { t, tx } from '../i18n/index.js'
@@ -101,6 +122,14 @@ const ex = computed(() => exercisesById.value[route.params.id])
 const unit = computed(() => unitFor(ex.value, state.data.profile))
 const machine = computed(() => state.data.machineSettings[ex.value?.id] || [])
 const msOpen = ref(false)
+const editOpen = ref(false)
+const delOpen = ref(false)
+function del () {
+  hideCustomExercise(ex.value.id)
+  delOpen.value = false
+  toast(t('Exercise deleted'))
+  router.back()
+}
 const alternatives = computed(() => (ex.value?.alternatives || []).map(id => exercisesById.value[id]).filter(Boolean))
 const history = computed(() => (ex.value ? historyFor(ex.value.id) : []))
 const best = computed(() => {
@@ -133,6 +162,8 @@ function setStr (s) {
 
 <style scoped>
 .settings-btn { width: 100%; }
+.own { margin-top: 8px; gap: 8px; }
+.own-del { margin-top: 24px; }
 .ms-list { display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .ms { font-size: 17px; }
 .stats { gap: 10px; }
