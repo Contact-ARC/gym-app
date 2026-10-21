@@ -396,6 +396,8 @@ export default {
   'nav|Tools': 'Cálculos',
   'volume|Building up': 'En camino',
   'Not yet': 'Aún no',
+  'Set the weight first': 'Primero pon el peso',
+  'Set the pin first': 'Primero pon la posición',
   'Next: {what}': 'Ahora: {what}',
   'Start a {t} rest': 'Empezar {t} de descanso',
   'Last week': 'La semana pasada',

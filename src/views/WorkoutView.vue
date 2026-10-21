@@ -621,13 +621,16 @@ function toggleWarm (k) {
 watch(current, () => { warmOpen.value = planLogged(current.value).length === 0 })
 
 // ── Logging ────────────────────────────────────────────────
+// Weighted exercises need a real weight (a 0 here would be saved as a bodyweight set and skew the history)
+const needsWeight = computed(() => showLoad.value && !isBodyweight.value && !isTimed.value && !(draft.value.load > 0))
 const canLog = computed(() => {
   if (isTimed.value) return draft.value.seconds > 0
-  const loadOk = !showLoad.value || isBodyweight.value || draft.value.load != null
+  const loadOk = !showLoad.value || isBodyweight.value || draft.value.load > 0
   const repsOk = split.value ? (draft.value.repsL > 0 || draft.value.repsR > 0) : draft.value.reps > 0
   return loadOk && repsOk
 })
 const logLabel = computed(() => {
+  if (needsWeight.value) return unit.value === 'pin' ? t('Set the pin first') : t('Set the weight first')
   if (draft.value.type === 'drop') return t('Log drop set')
   const n = planLogged(current.value).length + 1
   if (n > rowCount(current.value)) return t('Log an extra set')
