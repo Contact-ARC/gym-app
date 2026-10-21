@@ -178,7 +178,7 @@
         <div class="grow">
           <div>{{ routine ? tx(routine, 'title') : t('No routine loaded') }}</div>
           <div class="t-tiny" :class="state.routineStatus.error ? 't-err' : 't-muted'">
-            {{ state.routineStatus.error || t('Updated {when}', { when: state.data.cache.fetchedAt ? relativeDay(state.data.cache.fetchedAt) : t('never') }) }}
+            {{ t('Updated {when}', { when: state.data.cache.fetchedAt ? relativeDay(state.data.cache.fetchedAt) : t('never') }) }}<template v-if="state.routineStatus.error">{{ ' · ' + t('last check failed: {e}', { e: state.routineStatus.error }) }}</template>
           </div>
         </div>
         <span class="t-small t-muted">{{ state.routineStatus.loading ? t('Checking') : t('Check now') }}</span>
@@ -471,7 +471,7 @@ function saveCrewServer (reset) {
 // ── Routine ──
 async function checkRoutine () {
   await refreshRoutines()
-  toast(state.routineStatus.error ? t("Couldn't reach the routine") : t('Routine is up to date'))
+  toast(state.routineStatus.error ? t("Couldn't check: {e}", { e: state.routineStatus.error }) : t('Routine is up to date'))
 }
 const sourceOpen = ref(false)
 const urlDraft = ref('')

@@ -38,8 +38,11 @@
           <RouterLink to="/settings" class="btn btn-sm btn-ghost">{{ t('Settings') }}</RouterLink>
         </div>
       </div>
-      <div v-else-if="routine && state.routineStatus.error" class="t-small t-muted row offline">
-        <Icon name="offline" :size="18" />{{ t('Offline. Using the routine saved {when}.', { when: relativeDay(state.data.cache.fetchedAt) }) }}
+      <div v-else-if="routineWarning" class="t-small t-muted row offline">
+        <Icon name="offline" :size="18" />
+        <span class="grow">{{ routineWarning.kind === 'offline'
+          ? t("No connection, so the app couldn't check for a new routine. Using the one saved {when}.", { when: relativeDay(routineWarning.fetchedAt) })
+          : t("Couldn't check for a new routine. Using the one saved {when}. Details in Settings.", { when: relativeDay(routineWarning.fetchedAt) }) }}</span>
       </div>
 
       <RouterLink v-if="needsBackup" to="/settings#backup" class="note note-warn row note-btn">
@@ -156,7 +159,7 @@ import { plateStyle } from '../ui/plates.js'
 import {
   state, routine, days, currentWeek, isDeloadWeek, todayPlan, updateAvailable, refreshRoutines,
   activeSession, exercisesById, startSession, startFreeSession, finishedSessions, daysSinceBackup,
-  trackItem, streak
+  trackItem, streak, routineWarning
 } from '../store.js'
 import { openUrl } from '../lib/native.js'
 import { prescription, relativeDay, dayTitle, weekdayDate, monthName, sessionTitle } from '../lib/format.js'
@@ -231,6 +234,7 @@ const reportMonth = computed(() => {
 async function refresh () {
   await refreshRoutines()
   if (!state.routineStatus.error) toast(t('Routine is up to date'))
+  else toast(state.routineStatus.errorKind === 'offline' ? t("No connection. Try again when you're online.") : t("Couldn't check: {e}", { e: state.routineStatus.error }))
 }
 function start (i) {
   const id = startSession(i)

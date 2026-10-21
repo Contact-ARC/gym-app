@@ -13,7 +13,7 @@ import './styles/base.css'
 
 import App from './App.vue'
 import router from './router.js'
-import { initStore, state, days, activeSession, startSession, persist } from './store.js'
+import { initStore, state, days, activeSession, startSession, persist, autoRefresh } from './store.js'
 import { closeTopOverlay } from './ui/overlay.js'
 import { t, tn, setLang, deviceLang } from './i18n/index.js'
 import { initCrew } from './lib/crew.js'
@@ -34,6 +34,11 @@ initStore().then(() => {
   resumeRest()
   // Write everything out when the app goes to the background (it may be closed from there)
   CapApp.addListener('pause', () => persist()).catch(() => {})
+  // Check for a new routine / app version again on coming back, on reconnecting, and every half hour
+  CapApp.addListener('resume', () => autoRefresh()).catch(() => {})
+  window.addEventListener('online', () => autoRefresh())
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) autoRefresh() })
+  setInterval(autoRefresh, 30 * 60 * 1000)
 
   // Android back: close an open sheet first, then go back, then exit from the home screen
   CapApp.addListener('backButton', ({ canGoBack }) => {

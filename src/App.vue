@@ -27,6 +27,16 @@
     </template>
   </Sheet>
 
+  <!-- New app version: ask once per version (the banner on Home stays until you update) -->
+  <Sheet :model-value="!!updatePrompt" :title="t('Version {v} is ready', { v: updatePrompt?.version })" @update:model-value="(v) => !v && dismissUpdate()">
+    <p v-if="updatePrompt && tx(updatePrompt, 'notes')" class="t-body t-muted">{{ tx(updatePrompt, 'notes') }}</p>
+    <p class="t-small t-muted upd-note">{{ t('Download it from GitHub and install it over this one. Your workouts stay.') }}</p>
+    <template #actions>
+      <button class="btn btn-soft btn-lg" @click="dismissUpdate">{{ t('Later') }}</button>
+      <button class="btn btn-primary btn-lg" @click="downloadUpdate"><Icon name="download" />{{ t('Download') }}</button>
+    </template>
+  </Sheet>
+
   <!-- Last month's report, once, at the start of a new month -->
   <Sheet :model-value="!!reportToShow" :title="t('Your {month} in numbers', { month: monthName(reportToShow || '', { month: 'long' }) })" @update:model-value="(v) => !v && seeReport(false)">
     <p class="t-body t-muted">{{ t('A new month started. Here\'s how the last one went: workouts, records and your biggest gains.') }}</p>
@@ -61,7 +71,9 @@ import RestPill from './ui/RestPill.vue'
 import Toast from './ui/Toast.vue'
 import Sheet from './ui/Sheet.vue'
 import WelcomeSheet from './views/WelcomeSheet.vue'
-import { state, newRoutineToAnnounce, markRoutineSeen, days, persist } from './store.js'
+import { state, newRoutineToAnnounce, markRoutineSeen, days, persist, updateAvailable } from './store.js'
+import Icon from './ui/Icon.vue'
+import { openUrl } from './lib/native.js'
 import { scheduleReminders } from './lib/reminders.js'
 import { dayTitle, monthName } from './lib/format.js'
 import { rest } from './lib/restTimer.js'
@@ -81,9 +93,25 @@ const announce = computed(() => {
   return newRoutineToAnnounce.value
 })
 
+const updatePrompt = computed(() => {
+  const u = updateAvailable.value
+  if (!u || route.meta.hideNav || announce.value || !state.data.welcomed) return null
+  return state.data.updateSeen === u.version ? null : u
+})
+function dismissUpdate () {
+  if (!updatePrompt.value) return
+  state.data.updateSeen = updatePrompt.value.version
+  persist()
+}
+function downloadUpdate () {
+  const u = updatePrompt.value
+  dismissUpdate()
+  if (u) openUrl(u.downloadUrl)
+}
+
 // Month report: first time the app opens in a new month, if last month had workouts
 const reportToShow = computed(() => {
-  if (route.meta.hideNav || announce.value || !state.data.welcomed) return null
+  if (route.meta.hideNav || announce.value || updatePrompt.value || !state.data.welcomed) return null
   const last = shiftMonth(monthKey(new Date(state.today + 'T12:00:00')), -1)
   if (state.data.reportsSeen[last]) return null
   return sessionsInMonth(state.data.sessions, last).length ? last : null
@@ -144,6 +172,7 @@ watch(
   display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--r-card);
   background: var(--err-soft); color: var(--ink); box-shadow: var(--shadow-float);
 }
+.upd-note { margin-top: 12px; }
 .ch { margin-top: 14px; background: var(--card-2); border-radius: var(--r-card); }
 .ch .t-small { margin-top: 4px; }
 .up { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }

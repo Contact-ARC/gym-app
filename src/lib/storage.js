@@ -52,6 +52,7 @@ export function emptyData () {
     challenges: {}, // { [routineMonth]: { manual: number, doneAt } }
     reportsSeen: {}, // { [month]: true } month reports already shown
     restState: null, // { endsAt, total, label } while a rest timer runs
+    updateSeen: null, // app version whose "ready to download" popup was already shown
     crew: { code: null, name: '', memberId: null, key: null, shareFeed: true, queue: [], lastSync: null, url: null, anonKey: null }
   }
 }

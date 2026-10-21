@@ -10,7 +10,7 @@ import { reportError } from './lib/errors.js'
 export const state = reactive({
   ready: false,
   data: emptyData(),
-  routineStatus: { loading: false, error: null, lastAttempt: null },
+  routineStatus: { loading: false, error: null, errorKind: null, lastAttempt: null }, // errorKind: offline | server | data
   saveError: null, // set while saving to the phone keeps failing
   notice: null, // one-off message for the app shell to show (e.g. data restored from a backup)
   today: dateKey() // refreshed when the app comes back to the foreground
@@ -151,30 +151,62 @@ export function markRoutineSeen () {
   persist()
 }
 
-async function getJSON (url) {
-  const res = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store' })
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText} — ${url}`)
-  return res.json()
+function fail (kind, message) {
+  const e = new Error(message)
+  e.kind = kind
+  return e
 }
 
-export async function refreshRoutines () {
+async function getJSON (url) {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 15000)
+  let res
+  try {
+    res = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now(), { cache: 'no-store', signal: ctrl.signal })
+  } catch {
+    // No connection, or it took too long (weak signal)
+    throw fail('offline', t('No connection'))
+  } finally {
+    clearTimeout(timer)
+  }
+  if (!res.ok) throw fail('server', t('GitHub answered {code}', { code: res.status }))
+  try { return await res.json() } catch { throw fail('data', t('A routine file is damaged: {file}', { file: url.split('/').pop().split('?')[0] })) }
+}
+
+let refreshing = null
+/** Download latest.json, this month's routine and the exercise list. One run at a time. */
+export function refreshRoutines () {
+  if (refreshing) return refreshing
+  refreshing = doRefresh().finally(() => { refreshing = null })
+  return refreshing
+}
+
+/** Check again if the last try failed or was a while ago (on reopening the app, reconnecting, every few hours). */
+export function autoRefresh () {
+  const st = state.routineStatus
+  const last = st.lastAttempt ? Date.now() - new Date(st.lastAttempt).getTime() : Infinity
+  if (st.error ? last > 30 * 1000 : last > 2 * 3600 * 1000) refreshRoutines()
+}
+
+async function doRefresh () {
   const st = state.routineStatus
   st.loading = true
-  st.error = null
   st.lastAttempt = new Date().toISOString()
   try {
     const base = routinesUrl.value
     const man = await getJSON(base + 'latest.json')
+    // The manifest alone is enough to know about app updates, even if the rest fails
+    state.data.cache.manifest = man
     const entry = pickActiveRoutine(man.routines)
-    if (!entry) throw new Error(t('latest.json has no routine in effect yet.'))
+    if (!entry) throw fail('data', t('latest.json has no routine in effect yet.'))
     const [rt, ex] = await Promise.all([
       getJSON(base + entry.file),
       getJSON(base + (man.exercisesFile || 'exercises.json'))
     ])
     if ((rt.schemaVersion || 1) > SUPPORTED_ROUTINE_SCHEMA || (ex.schemaVersion || 1) > SUPPORTED_ROUTINE_SCHEMA) {
-      throw new Error(t('This routine needs a newer app version. Check for an app update.'))
+      throw fail('data', t('This routine needs a newer app version. Check for an app update.'))
     }
-    if (!Array.isArray(rt.days) || !rt.days.length) throw new Error(t('Routine file has no days.'))
+    if (!Array.isArray(rt.days) || !rt.days.length) throw fail('data', t('Routine file has no days.'))
 
     const prevMonth = state.data.cache.routine?.month
     state.data.cache = { manifest: man, routine: rt, exercises: ex, fetchedAt: new Date().toISOString() }
@@ -182,13 +214,29 @@ export async function refreshRoutines () {
     // New month → start the A/B/C rotation again from Day A
     if (prevMonth && prevMonth !== rt.month) state.data.nextDayIndex = 0
     if (state.data.nextDayIndex >= rt.days.length) state.data.nextDayIndex = 0
+    st.error = null
+    st.errorKind = null
     await persist()
   } catch (e) {
     st.error = e.message || String(e)
+    st.errorKind = e.kind || 'data'
   } finally {
     st.loading = false
   }
 }
+
+/**
+ * Only worth mentioning on Home when the saved routine might really be out of date:
+ * older than a week, or from an earlier month (a new month's routine may be waiting).
+ */
+export const routineWarning = computed(() => {
+  const st = state.routineStatus
+  if (!st.error || st.loading || !routine.value) return null
+  const fetched = state.data.cache.fetchedAt
+  const old = !fetched || Date.now() - new Date(fetched).getTime() > 7 * 86400000
+  const newMonth = routine.value.month < state.today.slice(0, 7)
+  return old || newMonth ? { kind: st.errorKind, fetchedAt: fetched } : null
+})
 
 // ── Sessions ─────────────────────────────────────────────
 
