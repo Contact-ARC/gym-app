@@ -672,10 +672,8 @@ function logNow () {
   }
   if (planLogged(i).length === 1) warmOpen.value = false
   buzz(30)
-  toast(wasDrop ? t('Drop set of {name} logged', { name: name(it.exerciseId) }) : t('Set {n} of {name} logged', { n: planLogged(i).length, name: name(it.exerciseId) }), {
-    actionLabel: t('Undo'),
-    action: () => { deleteSet(session.value.id, row.id); stopRest(); go(i) }
-  })
+  const undo = { actionLabel: t('Undo'), action: () => { deleteSet(session.value.id, row.id); stopRest(); go(i) } }
+  toast(wasDrop ? t('Drop set of {name} logged', { name: name(it.exerciseId) }) : t('Set {n} of {name} logged', { n: planLogged(i).length, name: name(it.exerciseId) }), undo)
   if (editingFinished.value || wasDrop) return
 
   // Where to next, and what the rest timer should say
@@ -709,6 +707,15 @@ function logNow () {
     : t('{name}, set {n}', { name: name(items.value[next].exerciseId), n: planLogged(next).length + 1 })
   if (secs && !allDone.value) startRest(secs, allDone.value ? '' : label)
   else stopRest()
+  // In a superset, say what comes next so the round order is obvious
+  if (e.indices.length > 1) {
+    const L = (j) => letters[e.indices.indexOf(j)]
+    const doneMsg = t('{x}, round {n} logged.', { x: L(i), n: planLogged(i).length })
+    const nextMsg = sameGroup
+      ? (secs ? t('Round done. Rest, then {x}, round {n}.', { x: L(next), n: planLogged(next).length + 1 }) : t('Now {x}, round {n}.', { x: L(next), n: planLogged(next).length + 1 }))
+      : t('Superset done.')
+    toast(doneMsg + ' ' + nextMsg, undo)
+  }
   if (next !== i) setTimeout(() => go(next, sameGroup ? 'swap' : 'slide-next'), sameGroup ? 120 : 350)
 }
 
