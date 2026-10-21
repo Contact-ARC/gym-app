@@ -1140,5 +1140,27 @@ export default {
   "{n} week": "{n} semana",
   "{n} weeks": "{n} semanas",
   "{v} a week": "{v} a la semana",
-  "{x}× bodyweight": "{x}× tu peso"
+  "{x}× bodyweight": "{x}× tu peso",
+  // ── 0.5.1: rest notifications, louder chime, next-set weight ──
+  "Countdown and \"get ready\" notifications": "Notificaciones de cuenta atrás y «prepárate»",
+  "Get ready for your next set": "Prepárate para la siguiente serie",
+  "Get ready: {what}": "Prepárate: {what}",
+  "It follows your media volume. During a call, Android mutes it, so leave vibration on.": "Sigue el volumen multimedia. Durante una llamada Android lo silencia, así que deja la vibración activada.",
+  "Pops up when it's time for your next set": "Aparece cuando toca la siguiente serie",
+  "Rest countdown": "Cuenta atrás del descanso",
+  "Rest is over": "Fin del descanso",
+  "Rest is over 💪": "Se acabó el descanso 💪",
+  "Set {s} had only {n} rep left (aim: {target}). Drop to {next}.": "En la serie {s} te quedaba solo {n} repetición (objetivo: {target}). Baja a {next}.",
+  "Set {s} had only {n} reps left (aim: {target}). Drop to {next}.": "En la serie {s} te quedaban solo {n} repeticiones (objetivo: {target}). Baja a {next}.",
+  "Set {s} had {n} rep left (aim: {target}). Go up to {next}.": "En la serie {s} te quedaba {n} repetición (objetivo: {target}). Sube a {next}.",
+  "Set {s} had {n} reps left (aim: {target}). Go up to {next}.": "En la serie {s} te quedaban {n} repeticiones (objetivo: {target}). Sube a {next}.",
+  "Set {s} went to failure (aim: {target} left). Drop to {next}.": "La serie {s} llegó al fallo (objetivo: dejar {target}). Baja a {next}.",
+  "Set {s}: {did} reps, over the {lo}–{hi} range. Go up to {next}.": "Serie {s}: {did} repeticiones, por encima del rango {lo}–{hi}. Sube a {next}.",
+  "Set {s}: {did} reps, under the {lo}–{hi} range. Drop to {next}.": "Serie {s}: {did} repeticiones, por debajo del rango {lo}–{hi}. Baja a {next}.",
+  "Sound": "Sonido",
+  "Tap to go back to your workout": "Toca para volver a tu entrenamiento",
+  "The time left sits in your status bar while you rest, and a pop-up tells you which set is next when it ends": "El tiempo que queda aparece en la barra de estado mientras descansas, y al terminar un aviso te dice qué serie toca",
+  "The time left while you rest, in the status bar": "El tiempo que queda de descanso, en la barra de estado",
+  "sound|Loud": "Alto",
+  "sound|Soft": "Suave"
 }

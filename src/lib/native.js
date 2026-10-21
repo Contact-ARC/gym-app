@@ -1,5 +1,5 @@
 // Thin wrappers around Capacitor plugins with browser fallbacks, so `npm run dev` works too.
-import { Capacitor } from '@capacitor/core'
+import { Capacitor, registerPlugin } from '@capacitor/core'
 import { Haptics, ImpactStyle } from '@capacitor/haptics'
 import { LocalNotifications } from '@capacitor/local-notifications'
 import { KeepAwake } from '@capacitor-community/keep-awake'
@@ -31,9 +31,48 @@ export async function openUrl (url) {
   else window.open(url, '_blank', 'noopener')
 }
 
-// ── Notifications (rest timer while the app is in the background) ──
+// ── Notifications (rest timer) ──
+// Two of them: a quiet countdown that sits in the status bar while you rest (our own small
+// Android plugin, RestTimerPlugin.java, because the system draws the ticking clock), and a
+// "Get ready" alert that pops up when the rest is over (scheduled with local notifications).
 
 const REST_NOTIF_ID = 4242
+const RestTimer = registerPlugin('RestTimer')
+const DONE_CHANNEL = 'rest_ready'
+let channelReady = false
+
+/** Countdown notification until `endsAt` (ms). Safe to call again to update it. */
+export async function showRestCountdown (endsAt, title, body) {
+  if (!isNative) return
+  try {
+    await RestTimer.show({
+      endsAt, title, body: body || '',
+      channelName: t('Rest countdown'),
+      channelDescription: t('The time left while you rest, in the status bar')
+    })
+  } catch (e) { console.warn('Rest countdown failed', e) }
+}
+
+export async function hideRestCountdown () {
+  if (!isNative) return
+  try { await RestTimer.hide() } catch { /* not there */ }
+}
+
+// High importance: pops up over other apps, with the phone's notification sound and vibration
+async function ensureDoneChannel () {
+  if (channelReady) return
+  try {
+    await LocalNotifications.createChannel({
+      id: DONE_CHANNEL,
+      name: t('Rest is over'),
+      description: t('Pops up when it\'s time for your next set'),
+      importance: 4,
+      visibility: 1,
+      vibration: true
+    })
+    channelReady = true
+  } catch { /* older Android: no channels */ }
+}
 
 export async function ensureNotifyPermission () {
   if (!isNative) return false
@@ -46,14 +85,19 @@ export async function ensureNotifyPermission () {
   } catch { return false }
 }
 
-export async function scheduleRestNotification (at, body) {
+/** "Get ready" alert at `at` (ms). `what` is the set that's next, e.g. "Bench press, set 3". */
+export async function scheduleRestNotification (at, what) {
   if (!isNative) return
   try {
+    await ensureDoneChannel()
     await LocalNotifications.schedule({
       notifications: [{
         id: REST_NOTIF_ID,
-        title: t('Rest over'),
-        body: body || t('Time for your next set 💪'),
+        title: what ? t('Get ready: {what}', { what }) : t('Get ready for your next set'),
+        body: t('Rest is over 💪'),
+        channelId: DONE_CHANNEL,
+        smallIcon: 'ic_stat_rest',
+        iconColor: '#2457B5',
         schedule: { at: new Date(at), allowWhileIdle: true }
       }]
     })

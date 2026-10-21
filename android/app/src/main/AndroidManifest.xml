@@ -42,6 +42,9 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- The "Get ready" alert at the end of a rest has to arrive on time, not minutes late.
+         Granted at install (no prompt) on Android 13+; the app isn't on Google Play, whose policy limits it to alarm apps. -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Automatic backups to Documents/GymCrew. Only needed on Android 9 and older;
          newer versions let the app write its own files there without asking. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />

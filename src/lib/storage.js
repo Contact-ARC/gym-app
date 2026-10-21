@@ -29,6 +29,7 @@ export function emptyData () {
       restVibrate: true,
       restNotify: true,
       restSound: false,
+      restSoundLevel: 'loud', // soft | loud
       restWarn: true, // buzz with 10 seconds left
       textSize: 'normal', // normal | large
       reminders: { days: [], time: '18:00' }, // days: 1=Mon … 7=Sun

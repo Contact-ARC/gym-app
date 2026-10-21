@@ -112,7 +112,11 @@
             </button>
           </div>
 
-          <div class="hint" :class="`k-${sugg.kind}`">
+          <div v-if="adjustNow" class="hint adj" :class="`k-${adjustNow.kind}`" role="status">
+            <Icon :name="adjustNow.kind" :size="18" />
+            <span>{{ adjustText }}</span>
+          </div>
+          <div v-else class="hint" :class="`k-${sugg.kind}`">
             <Icon :name="suggIcon" :size="18" />
             <span>{{ sugg.text }}</span>
           </div>
@@ -384,7 +388,7 @@ import {
 } from '../store.js'
 import { t, tn, tx } from '../i18n/index.js'
 import {
-  unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, DEFAULT_PLATES
+  unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, DEFAULT_PLATES, nextSetAdjust
 } from '../lib/training.js'
 import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle } from '../lib/format.js'
 import { effectiveRest, supersetNext } from '../lib/supersets.js'
@@ -552,6 +556,28 @@ const sugg = computed(() => {
 })
 const suggIcon = computed(() => ({ up: 'up', down: 'down', deload: 'deload', start: 'start' }[sugg.value.kind] || 'same'))
 
+// ── Weight for the next set, from how the last one went ──
+const adjust = reactive({})
+const adjustNow = computed(() => {
+  const a = adjust[`${current.value}:${item.value?.exerciseId}`]
+  return a && a.set === planLogged(current.value).length + 1 ? a : null
+})
+const adjustText = computed(() => {
+  const a = adjustNow.value
+  if (!a) return ''
+  const next = `${fmtLoad(a.load, unit.value)} × ${a.reps}`
+  const n = a.set - 1
+  switch (a.why) {
+    case 'easy': return tn(a.rir, 'Set {s} had {n} rep left (aim: {target}). Go up to {next}.', 'Set {s} had {n} reps left (aim: {target}). Go up to {next}.', { s: n, target: a.target, next })
+    case 'hard': return a.rir === 0
+      ? t('Set {s} went to failure (aim: {target} left). Drop to {next}.', { s: n, target: a.target, next })
+      : tn(a.rir, 'Set {s} had only {n} rep left (aim: {target}). Drop to {next}.', 'Set {s} had only {n} reps left (aim: {target}). Drop to {next}.', { s: n, target: a.target, next })
+    case 'under': return t('Set {s}: {did} reps, under the {lo}–{hi} range. Drop to {next}.', { s: n, did: a.did, lo: a.range[0], hi: a.range[1], next })
+    case 'over': return t('Set {s}: {did} reps, over the {lo}–{hi} range. Go up to {next}.', { s: n, did: a.did, lo: a.range[0], hi: a.range[1], next })
+  }
+  return ''
+})
+
 // Same set number last time you did this exercise
 const lastSameSet = computed(() => {
   if (editingFinished.value || !item.value) return ''
@@ -664,6 +690,20 @@ function logNow () {
     ...(d.type ? { type: d.type } : {})
   })
   const wasDrop = d.type === 'drop'
+  const slot = `${i}:${it.exerciseId}`
+  // The next set of this exercise: suggest a weight from how this one went (not after drop, failure or max-rep sets)
+  if (!editingFinished.value && !d.type && planLogged(i).length < rowCount(i)) {
+    const adj = nextSetAdjust({
+      load: row.load, reps: row.reps, rir: row.rir, repRange: it.repRange,
+      targetRir: session.value.plan?.deload ? 3 : (session.value.plan?.rir ?? 2),
+      inc: inc.value, unit: unit.value, logType: ex.value?.logType
+    })
+    if (adj) {
+      d.load = adj.load
+      d.reps = adj.reps
+      adjust[slot] = { ...adj, set: planLogged(i).length + 1, rir: row.rir, did: row.reps, range: it.repRange, target: session.value.plan?.deload ? 3 : (session.value.plan?.rir ?? 2) }
+    } else delete adjust[slot]
+  } else delete adjust[slot]
   d.rir = null
   d.type = null
   if (wasDrop) {
@@ -672,7 +712,7 @@ function logNow () {
   }
   if (planLogged(i).length === 1) warmOpen.value = false
   buzz(30)
-  const undo = { actionLabel: t('Undo'), action: () => { deleteSet(session.value.id, row.id); stopRest(); go(i) } }
+  const undo = { actionLabel: t('Undo'), action: () => { deleteSet(session.value.id, row.id); delete adjust[slot]; stopRest(); go(i) } }
   toast(wasDrop ? t('Drop set of {name} logged', { name: name(it.exerciseId) }) : t('Set {n} of {name} logged', { n: planLogged(i).length, name: name(it.exerciseId) }), undo)
   if (editingFinished.value || wasDrop) return
 
@@ -994,6 +1034,8 @@ function discard () {
 .hint .icon { margin-top: 1px; color: var(--ink-2); }
 .hint.k-up .icon { color: var(--ok); }
 .hint.k-down .icon, .hint.k-deload .icon { color: var(--warn); }
+.hint.adj.k-up { background: var(--ok-soft); }
+.hint.adj.k-down { background: var(--warn-soft); }
 .mini-note { display: flex; gap: 6px; align-items: flex-start; margin: 10px 2px 0; }
 
 .warm { margin-top: 14px; overflow: hidden; }

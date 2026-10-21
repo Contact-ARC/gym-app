@@ -203,6 +203,40 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
   return { seconds: null, unit, ...result }
 }
 
+/**
+ * Weight for the next set of the same exercise, from the set you just finished.
+ * Uses how many reps you had left (rir) against the plan's target, and the routine's rep range:
+ * estimate today's max from that set, then pick the weight that leaves the target reps in reserve.
+ * Without a "reps left" answer it only reacts to reps outside the range.
+ * Small steps on purpose: up to +5% or −10% per set, and nothing under one weight jump.
+ * @returns {{ load:number, reps:number, kind:'up'|'down', why:'easy'|'hard'|'over'|'under' }|null}  null = keep the weight
+ */
+export function nextSetAdjust ({ load, reps, rir = null, repRange, targetRir = 2, inc, unit, logType = 'weight' }) {
+  if (!repRange || !reps || load == null || logType !== 'weight') return null
+  const [lo, hi] = repRange
+  const tr = targetRir ?? 2
+  const targetReps = Math.min(hi, Math.max(lo, reps))
+  if (rir == null && reps >= lo && reps <= hi) return null // in range, no effort info: nothing to go on
+  const why = rir != null ? null : (reps < lo ? 'under' : 'over')
+  // Machine pins aren't weights, so step one pin at a time
+  if (unit === 'pin') {
+    const up = reps > hi || (rir != null && rir >= tr + 2)
+    const down = reps < lo || (rir != null && rir === 0 && reps <= lo)
+    if (up === down) return null
+    const next = Math.max(1, load + (up ? 1 : -1))
+    return next === load ? null : { load: next, reps: targetReps, kind: up ? 'up' : 'down', why: why || (up ? 'easy' : 'hard') }
+  }
+  if (!(load > 0) || !inc) return null
+  const effRir = rir != null ? rir : (reps < lo ? 0 : tr)
+  const max = estimate1RM(load, reps, effRir)
+  let next = loadForReps(max, targetReps, tr)
+  next = Math.min(load * 1.05, Math.max(load * 0.9, next))
+  next = roundToIncrement(next, inc, next < load ? 'nearest' : 'down')
+  if (Math.abs(next - load) < inc - 1e-9) return null
+  const kind = next > load ? 'up' : 'down'
+  return { load: next, reps: targetReps, kind, why: why || (kind === 'up' ? 'easy' : 'hard') }
+}
+
 export function fmtLoad (load, unit) {
   if (load == null) return '—'
   if (unit === 'pin') return t('pin {n}', { n: load })

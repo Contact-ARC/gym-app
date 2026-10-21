@@ -210,3 +210,35 @@ test('equipment tags and gym filter', () => {
   assert.equal(isBarbellLift({ equipment: ['barbell', 'bench', 'bar pad'] }), true)
   assert.equal(isBarbellLift({ equipment: ['cable stack'], loadUnit: 'pin' }), false)
 })
+
+import { nextSetAdjust } from '../src/lib/training.js'
+
+test('next set: easy set (more reps left than planned) goes up a jump', () => {
+  const r = nextSetAdjust({ load: 60, reps: 8, rir: 4, repRange: [6, 8], targetRir: 2, inc: 2.5, unit: 'kg' })
+  assert.equal(r.kind, 'up'); assert.equal(r.why, 'easy'); assert.equal(r.reps, 8)
+  assert.equal(r.load, 62.5) // capped at +5%
+})
+
+test('next set: on target keeps the weight', () => {
+  assert.equal(nextSetAdjust({ load: 60, reps: 8, rir: 2, repRange: [6, 8], targetRir: 2, inc: 2.5, unit: 'kg' }), null)
+  assert.equal(nextSetAdjust({ load: 60, reps: 7, rir: null, repRange: [6, 8], inc: 2.5, unit: 'kg' }), null)
+})
+
+test('next set: a grinder below the range comes down', () => {
+  const r = nextSetAdjust({ load: 60, reps: 5, rir: 0, repRange: [6, 8], targetRir: 2, inc: 2.5, unit: 'kg' })
+  assert.equal(r.kind, 'down'); assert.equal(r.why, 'hard'); assert.equal(r.reps, 6)
+  assert.ok(r.load >= 54 && r.load <= 57.5, String(r.load))
+})
+
+test('next set: without "reps left", only reps outside the range count', () => {
+  assert.equal(nextSetAdjust({ load: 100, reps: 4, repRange: [6, 8], inc: 5, unit: 'kg' }).why, 'under')
+  const over = nextSetAdjust({ load: 100, reps: 11, repRange: [6, 8], inc: 5, unit: 'kg' })
+  assert.equal(over.why, 'over'); assert.equal(over.load, 105); assert.equal(over.reps, 8)
+})
+
+test('next set: pins move one at a time; bodyweight and timed are left alone', () => {
+  assert.deepEqual(nextSetAdjust({ load: 6, reps: 15, rir: 4, repRange: [10, 12], inc: 1, unit: 'pin' }), { load: 7, reps: 12, kind: 'up', why: 'easy' })
+  assert.equal(nextSetAdjust({ load: 6, reps: 8, rir: 0, repRange: [10, 12], inc: 1, unit: 'pin' }).load, 5)
+  assert.equal(nextSetAdjust({ load: 0, reps: 8, rir: 4, repRange: [6, 8], inc: 2, unit: 'kg', logType: 'bodyweight' }), null)
+  assert.equal(nextSetAdjust({ load: 20, reps: null, rir: null, repRange: null, inc: 2, unit: 'kg' }), null)
+})

@@ -114,12 +114,17 @@
         </div>
         <Toggle v-model="s.restSound" @update:model-value="(v) => { persist(); if (v) previewRestSound() }" />
       </div>
+      <div v-if="s.restSound" class="group-row col">
+        <span>{{ t('Sound') }}</span>
+        <Segmented v-model="s.restSoundLevel" :options="[{ label: t('sound|Soft'), value: 'soft' }, { label: t('sound|Loud'), value: 'loud' }]" :label="t('Sound')" @update:model-value="() => { persist(); previewRestSound() }" />
+        <span class="t-tiny t-muted">{{ t("It follows your media volume. During a call, Android mutes it, so leave vibration on.") }}</span>
+      </div>
       <div class="group-row">
         <div class="grow">
-          <div>{{ t('Notify when the app is closed') }}</div>
-          <div class="t-tiny t-muted">{{ t('So you hear it with the phone in your pocket') }}</div>
+          <div>{{ t('Countdown and "get ready" notifications') }}</div>
+          <div class="t-tiny t-muted">{{ t('The time left sits in your status bar while you rest, and a pop-up tells you which set is next when it ends') }}</div>
         </div>
-        <Toggle v-model="s.restNotify" @update:model-value="persist" />
+        <Toggle v-model="s.restNotify" @update:model-value="onRestNotify" />
       </div>
     </div>
 
@@ -283,7 +288,7 @@ import {
 import { APP_VERSION, DEFAULT_ROUTINES_URL } from '../config.js'
 import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT } from '../lib/training.js'
 import { previewRestSound } from '../lib/restTimer.js'
-import { isNative, shareBackupFile, openUrl, copyText } from '../lib/native.js'
+import { isNative, shareBackupFile, openUrl, copyText, hideRestCountdown, ensureNotifyPermission } from '../lib/native.js'
 import { relativeDay, fmtDate } from '../lib/format.js'
 import { parseBackup } from '../lib/storage.js'
 import { runAutoBackup, listAutoBackups, readBackup, shareBackupEntry, backupDate, exportCSV } from '../lib/backup.js'
@@ -295,6 +300,11 @@ const route = useRoute()
 const router = useRouter()
 const p = computed(() => state.data.profile)
 const s = computed(() => state.data.settings)
+async function onRestNotify (on) {
+  persist()
+  if (on) await ensureNotifyPermission()
+  else hideRestCountdown()
+}
 const themeItems = computed(() => [{ label: t('Light'), value: 'light' }, { label: t('Dark'), value: 'dark' }, { label: t('Auto'), value: 'system' }])
 
 function back () {
