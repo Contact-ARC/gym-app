@@ -4,7 +4,8 @@
 import { reactive } from 'vue'
 import { App } from '@capacitor/app'
 import { buzz, scheduleRestNotification, cancelRestNotification, ensureNotifyPermission, isNative } from './native.js'
-import { state } from '../store.js'
+import { state, persist } from '../store.js'
+import { t } from '../i18n/index.js'
 
 export const rest = reactive({
   endsAt: null, // ms timestamp
@@ -61,6 +62,26 @@ function tick () {
 /** Let Settings preview the sound (also unlocks audio on Android after a tap). */
 export function previewRestSound () { beep(880, 160); beep(1175, 260, 260) }
 
+// The running timer is saved with the data, so closing the app mid-rest doesn't lose it
+function save () {
+  const next = rest.endsAt ? { endsAt: rest.endsAt, total: rest.total, label: rest.label } : null
+  if (JSON.stringify(next) === JSON.stringify(state.data.restState ?? null)) return
+  state.data.restState = next
+  persist()
+}
+
+/** Pick up a rest that was running when the app was closed. Call once after the store loads. */
+export function resumeRest () {
+  const r = state.data.restState
+  if (!r?.endsAt || !state.data.activeSessionId) return
+  if (r.endsAt <= Date.now()) { state.data.restState = null; return }
+  Object.assign(rest, { endsAt: r.endsAt, total: r.total, label: r.label || '', done: false })
+  warned = r.endsAt - Date.now() <= 10500
+  tick()
+  clearInterval(ticker)
+  ticker = setInterval(tick, 250)
+}
+
 export async function startRest (seconds, label = '') {
   if (!seconds || seconds <= 0) return
   rest.total = seconds
@@ -68,6 +89,7 @@ export async function startRest (seconds, label = '') {
   rest.label = label
   rest.done = false
   warned = false
+  save()
   if (state.data.settings.restSound) { try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); audio.resume() } catch { /* ignore */ } }
   tick()
   clearInterval(ticker)
@@ -82,6 +104,7 @@ export function addRest (seconds) {
   rest.done = false
   if (rest.endsAt - Date.now() > 10500) warned = false
   tick()
+  save()
 }
 
 export function stopRest () {
@@ -91,13 +114,14 @@ export function stopRest () {
   rest.remaining = 0
   rest.done = false
   cancelRestNotification()
+  save()
 }
 
 if (isNative) {
   App.addListener('appStateChange', async ({ isActive }) => {
     inBackground = !isActive
     if (!isActive && rest.endsAt && !rest.done && state.data.settings.restNotify) {
-      await scheduleRestNotification(rest.endsAt, rest.label ? `Next: ${rest.label}` : null)
+      await scheduleRestNotification(rest.endsAt, rest.label ? t('Next: {what}', { what: rest.label }) : null)
     } else if (isActive) {
       await cancelRestNotification()
       tick()

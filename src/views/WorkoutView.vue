@@ -223,9 +223,17 @@
           </div>
         </div>
       </Transition>
-      <button v-if="editingFinished || !allDone || !isComplete(current)" class="btn btn-lg btn-block btn-plate log" :disabled="!canLog" @click="logNow">
-        <Icon name="check" />{{ logLabel }}
-      </button>
+      <div v-if="editingFinished || !allDone || !isComplete(current)" class="row log-row">
+        <button
+          v-if="!rest.endsAt && !editingFinished && manualRest" class="btn btn-lg rest-now"
+          :aria-label="t('Start a {t} rest', { t: restShort(manualRest) })" @click="startManualRest"
+        >
+          <Icon name="timer" /><span class="t-num">{{ restShort(manualRest) }}</span>
+        </button>
+        <button class="btn btn-lg btn-plate log grow" :disabled="!canLog" @click="logNow">
+          <Icon name="check" />{{ logLabel }}
+        </button>
+      </div>
       <button v-else class="btn btn-lg btn-block btn-primary log" @click="finishOpen = true">
         <Icon name="trophy" />{{ t('Finish workout') }}
       </button>
@@ -372,7 +380,7 @@ import {
   unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, DEFAULT_PLATES
 } from '../lib/training.js'
 import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle } from '../lib/format.js'
-import { effectiveRest } from '../lib/supersets.js'
+import { effectiveRest, supersetNext } from '../lib/supersets.js'
 import { rest, startRest, stopRest, addRest } from '../lib/restTimer.js'
 import { tap, buzz, keepAwake } from '../lib/native.js'
 
@@ -671,15 +679,14 @@ function logNow () {
   let secs = effectiveRest(items.value, i)
   let sameGroup = false
   if (e.indices.length > 1) {
-    // Superset: go to the partner that still has sets left; rest only when a round is finished
-    const pos = e.indices.indexOf(i)
-    const order = [...e.indices.slice(pos + 1), ...e.indices.slice(0, pos + 1)]
-    const partner = order.find(j => !isComplete(j))
-    if (partner != null) {
-      next = partner
+    // Superset: round by round (A1 B1 C1, rest, A2 B2 C2 …); rest only when a round is finished
+    const counts = Object.fromEntries(e.indices.map(j => [j, planLogged(j).length]))
+    const rows = Object.fromEntries(e.indices.map(j => [j, rowCount(j)]))
+    const res = supersetNext(e.indices, i, counts, rows)
+    if (!res.done) {
+      next = res.next
       sameGroup = true
-      const roundDone = partner < i || partner === i
-      secs = roundDone ? groupRest.value : 0
+      secs = res.rest ? groupRest.value : 0
     } else {
       next = firstOpenAfter(e.indices[e.indices.length - 1])
       secs = groupRest.value
@@ -693,6 +700,18 @@ function logNow () {
   if (secs && !allDone.value) startRest(secs, allDone.value ? '' : label)
   else stopRest()
   if (next !== i) setTimeout(() => go(next, sameGroup ? 'swap' : 'slide-next'), sameGroup ? 120 : 350)
+}
+
+// Rest by hand: the timer button next to Log starts this exercise's rest (the superset's, inside one)
+const manualRest = computed(() => {
+  if (!item.value) return 0
+  if (group.value) return groupRest.value || item.value.restSec || 90
+  return effectiveRest(items.value, current.value) || item.value.restSec || 90
+})
+function startManualRest () {
+  tap()
+  const n = planLogged(current.value).length + 1
+  startRest(manualRest.value, n <= rowCount(current.value) ? t('{name}, set {n}', { name: name(item.value.exerciseId), n }) : '')
 }
 
 // ── Edit a logged set ──────────────────────────────────────
@@ -1003,7 +1022,10 @@ function discard () {
   background: linear-gradient(to top, var(--paper) 78%, rgba(0,0,0,0));
   max-width: 640px; margin: 0 auto;
 }
-.log { box-shadow: var(--shadow-float); }
+.log { box-shadow: var(--shadow-float); min-width: 0; }
+.log-row { gap: 10px; flex-wrap: nowrap; }
+.rest-now { flex: 0 0 auto; padding: 0 16px; gap: 6px; background: var(--card); color: var(--ink); box-shadow: var(--shadow-float); }
+.rest-now .t-num { font-size: 20px; font-weight: 700; }
 .rest {
   margin-bottom: 10px; padding: 0 12px 12px; border-radius: 16px; overflow: hidden;
   background: var(--ink); color: var(--paper);

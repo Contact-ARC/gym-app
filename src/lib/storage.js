@@ -51,6 +51,7 @@ export function emptyData () {
     body: { entries: [], photos: [] }, // entries: [{ id, date, weight, unit, waist, chest, arm, thigh, hips, mUnit }]; photos: [{ id, date, file, pose }]
     challenges: {}, // { [routineMonth]: { manual: number, doneAt } }
     reportsSeen: {}, // { [month]: true } month reports already shown
+    restState: null, // { endsAt, total, label } while a rest timer runs
     crew: { code: null, name: '', memberId: null, key: null, shareFeed: true, queue: [], lastSync: null, url: null, anonKey: null }
   }
 }

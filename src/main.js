@@ -18,6 +18,7 @@ import { closeTopOverlay } from './ui/overlay.js'
 import { t, tn, setLang, deviceLang } from './i18n/index.js'
 import { initCrew } from './lib/crew.js'
 import { initAutoBackup } from './lib/backup.js'
+import { resumeRest } from './lib/restTimer.js'
 
 initStore().then(() => {
   setLang(state.data.settings.lang || deviceLang())
@@ -28,6 +29,7 @@ initStore().then(() => {
   app.mount('#app')
   initCrew()
   initAutoBackup()
+  resumeRest()
 
   // Android back: close an open sheet first, then go back, then exit from the home screen
   CapApp.addListener('backButton', ({ canGoBack }) => {

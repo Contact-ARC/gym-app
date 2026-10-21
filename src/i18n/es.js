@@ -396,6 +396,8 @@ export default {
   'nav|Tools': 'Cálculos',
   'volume|Building up': 'En camino',
   'Not yet': 'Aún no',
+  'Next: {what}': 'Ahora: {what}',
+  'Start a {t} rest': 'Empezar {t} de descanso',
   'Last week': 'La semana pasada',
   'pill|Next': 'Toca',
   'Time for your next set 💪': 'A por la siguiente serie 💪',
