@@ -5,6 +5,7 @@ import { DEFAULT_ROUTINES_URL, SUPPORTED_ROUTINE_SCHEMA, APP_VERSION } from './c
 import { pickActiveRoutine, compareVersions, dateKey, suggestNext, detectPRs, sessionVolume, resolvePlan, plannedSetsFor, applyTrack } from './lib/training.js'
 import { challengeProgress, weekStreak } from './lib/stats.js'
 import { t } from './i18n/index.js'
+import { reportError } from './lib/errors.js'
 
 export const state = reactive({
   ready: false,
@@ -25,8 +26,19 @@ if (typeof document !== 'undefined') {
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
 
+// Plain copy of data that may contain Vue proxies (JSON is enough: everything we store is JSON)
+export const plain = (x) => JSON.parse(JSON.stringify(toRaw(x)))
+
+/** Save everything. Never throws: a problem is reported (banner + error log) instead of stopping the caller. */
 export function persist () {
-  return saveData(structuredClone(toRaw(state.data)))
+  try {
+    return saveData(toRaw(state.data)) // saveData turns it into JSON straight away
+  } catch (e) {
+    console.error('Save failed', e)
+    state.saveError = String(e?.message || e)
+    reportError(e, 'save')
+    return Promise.resolve()
+  }
 }
 
 // Other modules (crew feed, automatic backups) react to finished or deleted workouts
@@ -233,7 +245,7 @@ export function startSession (dayIndex) {
     dayName: day.name,
     dayNameEs: day.es?.name || null,
     items: day.items.map((raw, i) => {
-      const it = trackItem(structuredClone(toRaw(raw)))
+      const it = trackItem(plain(raw))
       return {
         ...it,
         sets: plannedSetsFor(it, i, todayPlan.value),
@@ -303,7 +315,7 @@ export function updateSet (sessionId, setId, patch) {
 export function deleteSet (sessionId, setId) {
   const s = getSession(sessionId)
   if (!s) return
-  s.sets = s.sets.filter(x => x.id !== setId)
+  s.sets = toRaw(s.sets).filter(x => x.id !== setId)
   persist()
 }
 
@@ -312,7 +324,7 @@ export function swapExercise (sessionId, itemIndex, newExerciseId) {
   if (!s || !s.items[itemIndex]) return
   // Drop sets already logged for the old exercise in this slot
   const oldId = s.items[itemIndex].exerciseId
-  s.sets = s.sets.filter(x => !(x.itemIndex === itemIndex && x.exerciseId === oldId))
+  s.sets = toRaw(s.sets).filter(x => !(x.itemIndex === itemIndex && x.exerciseId === oldId))
   s.items[itemIndex].exerciseId = newExerciseId
   persist()
 }
@@ -361,7 +373,7 @@ export function markSessionEdited (sessionId) {
 }
 
 export function discardSession (sessionId) {
-  state.data.sessions = state.data.sessions.filter(s => s.id !== sessionId)
+  state.data.sessions = toRaw(state.data.sessions).filter(s => s.id !== sessionId)
   if (state.data.activeSessionId === sessionId) state.data.activeSessionId = null
   persist()
 }
@@ -396,7 +408,7 @@ export function setExerciseNote (exerciseId, text) {
 // ── Backup ───────────────────────────────────────────────
 
 export function exportJSON () {
-  const data = structuredClone(toRaw(state.data))
+  const data = plain(state.data)
   data.exportedAt = new Date().toISOString()
   data.exportedBy = `Gym Crew ${APP_VERSION}`
   return JSON.stringify(data, null, 2)
@@ -452,7 +464,7 @@ export function saveBodyEntry (entry) {
 }
 
 export function deleteBodyEntry (id) {
-  state.data.body.entries = state.data.body.entries.filter(e => e.id !== id)
+  state.data.body.entries = toRaw(state.data.body.entries).filter(e => e.id !== id)
   persist()
 }
 
@@ -463,7 +475,7 @@ export function addPhotoRecord (rec) {
 }
 
 export function removePhotoRecord (id) {
-  state.data.body.photos = state.data.body.photos.filter(p => p.id !== id)
+  state.data.body.photos = toRaw(state.data.body.photos).filter(p => p.id !== id)
   persist()
 }
 

@@ -19,6 +19,7 @@ import { t, tn, setLang, deviceLang } from './i18n/index.js'
 import { initCrew } from './lib/crew.js'
 import { initAutoBackup } from './lib/backup.js'
 import { resumeRest } from './lib/restTimer.js'
+import { installErrorHandlers } from './lib/errors.js'
 
 initStore().then(() => {
   setLang(state.data.settings.lang || deviceLang())
@@ -26,6 +27,7 @@ initStore().then(() => {
   // t() and tn() are available in every template without importing them
   app.config.globalProperties.t = t
   app.config.globalProperties.tn = tn
+  installErrorHandlers(app)
   app.mount('#app')
   initCrew()
   initAutoBackup()

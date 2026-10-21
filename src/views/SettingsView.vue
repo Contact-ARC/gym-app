@@ -288,6 +288,7 @@ import { relativeDay, fmtDate } from '../lib/format.js'
 import { parseBackup } from '../lib/storage.js'
 import { runAutoBackup, listAutoBackups, readBackup, shareBackupEntry, backupDate, exportCSV } from '../lib/backup.js'
 import { inCrew, crewConfig } from '../lib/crew.js'
+import { errorLog } from '../lib/errors.js'
 import { t, tx, i18n, LANGS, locale } from '../i18n/index.js'
 
 const route = useRoute()
@@ -498,7 +499,9 @@ async function copyDebug () {
     sessions: state.data.sessions.length,
     dataSchema: state.data.schemaVersion,
     autoBackup: state.data.autoBackup,
-    crew: { joined: inCrew.value, configured: !!crewConfig.value, queued: state.data.crew.queue.length }
+    crew: { joined: inCrew.value, configured: !!crewConfig.value, queued: state.data.crew.queue.length },
+    saveError: state.saveError,
+    errors: errorLog().slice(0, 10)
   }
   const ok = await copyText(JSON.stringify(info, null, 2))
   toast(ok ? t('Copied. Paste it into the group chat.') : t("Couldn't copy on this device"))

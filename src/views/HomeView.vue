@@ -67,7 +67,9 @@
         <div class="grow">
           <div class="t-small t-muted">{{ t('Workout in progress') }}</div>
           <div class="t-h2">{{ sessionTitle(activeSession) }}</div>
-          <div class="t-small t-muted">{{ tn(activeSession.sets.length, '{n} set logged', '{n} sets logged') }}</div>
+          <div class="t-small t-muted">
+            {{ tn(activeSession.sets.length, '{n} set logged', '{n} sets logged') }}<template v-if="startedEarlier">{{ ' · ' + t('started {when}', { when: relativeDay(activeSession.startedAt) }) }}</template>
+          </div>
         </div>
       </div>
       <span class="btn btn-lg btn-block btn-plate hero-btn"><Icon name="play" />{{ t('Continue') }}</span>
@@ -172,6 +174,8 @@ const greeting = computed(() => {
   return n ? `${part}, ${n}` : part
 })
 const beginner = computed(() => state.data.profile.level === 'beginner')
+// A workout left open from an earlier day: say so, so it's finished or discarded rather than continued by mistake
+const startedEarlier = computed(() => activeSession.value && dateKey(activeSession.value.startedAt) !== state.today)
 // The challenge's description is for the start of the month; after the first workout just show progress
 const challengeStarted = computed(() => !!routine.value && sessionsInMonth(state.data.sessions, routine.value.month).length > 0)
 
@@ -181,6 +185,7 @@ const nextItems = computed(() => (nextDay.value?.items || []).map(trackItem))
 const exName = (id) => tx(exercisesById.value[id], 'name') || id
 
 const lastDone = computed(() => {
+  void state.today // re-word "today"/"yesterday" when the date changes
   const out = {}
   for (const s of finishedSessions.value) {
     if (s.routineMonth === routine.value?.month && !out[s.dayId]) out[s.dayId] = relativeDay(s.startedAt)

@@ -318,9 +318,16 @@
           </div>
         </template>
       </div>
+      <p v-if="confirmingDelete" class="note note-warn t-body confirm-q" role="alert">{{ t('Delete this set?') }}</p>
       <template #actions>
-        <button class="btn btn-danger btn-lg" @click="removeEditing"><Icon name="trash" />{{ t('Delete') }}</button>
-        <button class="btn btn-primary btn-lg" @click="saveEdit">{{ t('Save') }}</button>
+        <template v-if="confirmingDelete">
+          <button class="btn btn-soft btn-lg" @click="confirmingDelete = false">{{ t('No') }}</button>
+          <button class="btn btn-danger btn-lg" @click="removeEditing"><Icon name="trash" />{{ t('Yes, delete') }}</button>
+        </template>
+        <template v-else>
+          <button class="btn btn-danger btn-lg" @click="confirmingDelete = true"><Icon name="trash" />{{ t('Delete') }}</button>
+          <button class="btn btn-primary btn-lg" @click="saveEdit">{{ t('Save') }}</button>
+        </template>
       </template>
     </Sheet>
 
@@ -721,27 +728,32 @@ function startManualRest () {
 const editOpen = ref(false)
 const editing = ref(null)
 const editDraft = reactive({ load: null, reps: null, repsL: null, repsR: null, seconds: null, rir: null, type: null })
+const confirmingDelete = ref(false)
 function openEdit (s) {
+  // A set of the other exercise in a superset: switch to it, so the weight unit and steps match
+  if (s.itemIndex != null && s.itemIndex !== current.value) go(s.itemIndex, 'swap')
+  confirmingDelete.value = false
   editing.value = s
   Object.assign(editDraft, { load: s.load, reps: s.reps, repsL: s.repsL ?? null, repsR: s.repsR ?? null, seconds: s.seconds, rir: s.rir ?? null, type: s.type ?? null })
   editOpen.value = true
 }
+// Close first, then save: the sheet reacts at once whatever the phone's storage is doing
 function saveEdit () {
   const patch = { ...editDraft }
   if (patch.repsL != null && patch.repsR != null) patch.reps = Math.min(patch.repsL, patch.repsR)
   if (!patch.type) { delete patch.type; delete editing.value.type }
-  updateSet(session.value.id, editing.value.id, patch)
   editOpen.value = false
+  tap()
+  updateSet(session.value.id, editing.value.id, patch)
   toast(t('Set updated'))
 }
 function removeEditing () {
-  const s = { ...editing.value }
-  deleteSet(session.value.id, s.id)
+  const id = editing.value.id
   editOpen.value = false
-  toast(t('Set deleted'), {
-    actionLabel: t('Undo'),
-    action: () => { session.value.sets.push(s); session.value.sets.sort((a, b) => a.ts.localeCompare(b.ts)); persist() }
-  })
+  confirmingDelete.value = false
+  buzz(30)
+  deleteSet(session.value.id, id)
+  toast(t('Set deleted'))
 }
 
 // ── Timed holds ────────────────────────────────────────────
@@ -1031,6 +1043,7 @@ function discard () {
   max-width: 640px; margin: 0 auto;
 }
 .log { box-shadow: var(--shadow-float); min-width: 0; }
+.confirm-q { margin-top: 14px; font-weight: 600; }
 .log-row { gap: 10px; flex-wrap: nowrap; }
 .rest-now { flex: 0 0 auto; padding: 0 16px; gap: 6px; background: var(--card); color: var(--ink); box-shadow: var(--shadow-float); }
 .rest-now .t-num { font-size: 20px; font-weight: 700; }
