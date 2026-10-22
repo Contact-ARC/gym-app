@@ -32,6 +32,8 @@
 
         <!-- Puts the rest countdown back if it's swiped away while time is left -->
         <receiver android:name=".RestCountdownReceiver" android:exported="false" />
+        <!-- Swaps the countdown for the "Get ready" alert when the rest is over -->
+        <receiver android:name=".RestAlarmReceiver" android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

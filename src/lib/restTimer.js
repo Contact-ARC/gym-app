@@ -1,13 +1,11 @@
 // Rest timer driven by an absolute end time, so it stays correct if the WebView is paused.
-// In the app: just the on-screen timer and the chime. Out of the app: a countdown notification
-// (armed here, posted by Android the moment you leave, ticking by itself) and a "Get ready" alert
-// at the end. The alert is scheduled as soon as the rest starts, so it fires whether or not the app
-// gets a chance to run when you leave; if you're still in the app at the end it's called off just before.
+// In the app: just the on-screen timer and the chime. Out of the app: a countdown notification and a
+// "Get ready" alert at the end, both armed here when the rest starts and then handled natively
+// (posted the moment you leave, alert from an exact alarm, skipped if you're back in the app).
 import { reactive } from 'vue'
 import { App } from '@capacitor/app'
 import {
-  buzz, scheduleRestNotification, cancelRestNotification, ensureNotifyPermission, isNative, armRestCountdown, disarmRestCountdown,
-  notificationStatus
+  buzz, ensureNotifyPermission, isNative, armRestCountdown, disarmRestCountdown, notificationStatus
 } from './native.js'
 import { state, persist } from '../store.js'
 import { t } from '../i18n/index.js'
@@ -74,16 +72,10 @@ function warnChime () {
   try { ding(1047, 0, 0.35, loud() ? 0.6 : 0.3) } catch { /* no audio */ }
 }
 
-let alertCancelled = false
 function tick () {
   if (!rest.endsAt) return
   const left = Math.max(0, Math.ceil((rest.endsAt - Date.now()) / 1000))
   rest.remaining = left
-  // In the app at the end: the app chimes itself, so the pop-up isn't needed
-  if (!inBackground && !alertCancelled && rest.endsAt - Date.now() < 1200) {
-    alertCancelled = true
-    cancelRestNotification()
-  }
   const st = state.data.settings
   if (!warned && left <= 10 && left > 0 && rest.total > 20) {
     warned = true
@@ -98,10 +90,9 @@ function tick () {
       if (st.restVibrate) { buzz(350); setTimeout(() => buzz(350), 600) }
       if (st.restSound) doneChime()
     }
+    // Time's up: the native side keeps the alarm for the "Get ready" alert (it may run a little late)
     disarmRestCountdown()
-    // Tidy up, but leave the "Get ready" alert alone: on some phones (OnePlus, Xiaomi…) the alarm
-    // behind it can arrive a few seconds late while the screen is off, and cancelling it here would lose it
-    setTimeout(() => { if (rest.done) stopRest({ keepAlert: true }) }, 4000)
+    setTimeout(() => { if (rest.done) stopRest() }, 4000)
   }
 }
 
@@ -114,9 +105,7 @@ export function previewRestSound () {
 /** Countdown (for when you leave the app) and the "Get ready" alert for the current rest, if notifications are on. */
 function notifyRest () {
   if (!rest.endsAt || !state.data.settings.restNotify) return
-  armRestCountdown(rest.endsAt, rest.label ? t('Next: {what}', { what: rest.label }) : t('Resting'), t('Tap to go back to your workout'))
-  alertCancelled = false
-  scheduleRestNotification(rest.endsAt, rest.label || null)
+  armRestCountdown(rest.endsAt, rest.label || null)
 }
 
 /** Check once per rest start whether Android will actually show them. */
@@ -176,30 +165,20 @@ export function addRest (seconds) {
   notifyRest()
 }
 
-/** Stop the rest. Skipping it early also calls off the "Get ready" alert; once the time is up it's left to show. */
-export function stopRest ({ keepAlert = false } = {}) {
-  const early = rest.endsAt && rest.endsAt - Date.now() > 1000
+/** Stop the rest. Skipped early, the native side also calls off the "Get ready" alert; once the time is up it's left alone. */
+export function stopRest () {
   clearInterval(ticker)
   ticker = null
   rest.endsAt = null
   rest.remaining = 0
   rest.done = false
-  if (!keepAlert && (early || !inBackground)) cancelRestNotification()
   disarmRestCountdown()
   save()
 }
 
 if (isNative) {
-  App.addListener('appStateChange', async ({ isActive }) => {
+  App.addListener('appStateChange', ({ isActive }) => {
     inBackground = !isActive
-    if (!isActive && rest.endsAt && !rest.done && alertCancelled && state.data.settings.restNotify) {
-      // Left the app in the last second, after the alert was called off: put it back
-      alertCancelled = false
-      await scheduleRestNotification(rest.endsAt, rest.label || null)
-    } else if (isActive) {
-      // Back in the app: clear an alert that already popped up
-      if (!rest.endsAt || rest.done || rest.endsAt <= Date.now()) await cancelRestNotification()
-      tick()
-    }
+    if (isActive) tick()
   })
 }

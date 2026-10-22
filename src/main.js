@@ -19,7 +19,7 @@ import { t, tn, setLang, deviceLang } from './i18n/index.js'
 import { initCrew } from './lib/crew.js'
 import { initAutoBackup } from './lib/backup.js'
 import { resumeRest } from './lib/restTimer.js'
-import { ensureDoneChannel } from './lib/native.js'
+import { ensureDoneChannel, cancelRestNotification } from './lib/native.js'
 import { installErrorHandlers } from './lib/errors.js'
 
 initStore().then(() => {
@@ -33,7 +33,8 @@ initStore().then(() => {
   initCrew()
   initAutoBackup()
   resumeRest()
-  ensureDoneChannel() // the "Get ready" channel, ready before the first rest
+  ensureDoneChannel() // the "Get ready" channel, with its name in the app's language
+  cancelRestNotification() // an alert scheduled the old way, before 0.5.3
   // Write everything out when the app goes to the background (it may be closed from there)
   CapApp.addListener('pause', () => persist()).catch(() => {})
   // Check for a new routine / app version again on coming back, on reconnecting, and every half hour

@@ -16,16 +16,17 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * Rest countdown in the notification shade, only while you're out of the app.
+ * Rest notifications, only while you're out of the app: a countdown, then a "Get ready" alert.
  *
- * The app "arms" it when a rest starts. Nothing shows while you stay in the app (it has its own
+ * The app "arms" them when a rest starts. Nothing shows while you stay in the app (it has its own
  * timer and chime). The moment you leave, this posts the countdown (Android's onPause, so it doesn't
  * depend on the app's JavaScript still running), and it disappears again when you come back.
- * Swiping it away while time is left brings it back (RestCountdownReceiver). It removes itself
- * when the time is up; the "Get ready" alert is a separate scheduled notification (native.js).
+ * Swiping it away while time is left brings it back (RestCountdownReceiver). At the end an exact
+ * alarm fires RestAlarmReceiver, which swaps the countdown for the alert unless you're in the app.
  *
  * JS: registerPlugin('RestTimer') →
- *   arm({ endsAt, title, body, channelName, channelDescription }), disarm(),
+ *   arm({ endsAt, title, body, alertTitle, alertBody, channelName, channelDescription, alertChannelName,
+ *         alertChannelDescription }), disarm(),
  *   show({ … }) / hide() (show right now, for the test in Settings),
  *   status() → { enabled, countdownChannel, readyChannel, exact, sdk }, openSettings()
  */
@@ -49,6 +50,10 @@ public class RestTimerPlugin extends Plugin {
         if (name != null) RestCountdown.channelName = name;
         String description = call.getString("channelDescription", null);
         if (description != null) RestCountdown.channelDescription = description;
+        String alertName = call.getString("alertChannelName", null);
+        if (alertName != null) RestAlarmReceiver.channelName = alertName;
+        String alertDescription = call.getString("alertChannelDescription", null);
+        if (alertDescription != null) RestAlarmReceiver.channelDescription = alertDescription;
     }
 
     @PluginMethod
@@ -62,15 +67,21 @@ public class RestTimerPlugin extends Plugin {
         armedEndsAt = endsAt;
         armedTitle = call.getString("title", "Resting");
         armedBody = call.getString("body", "");
-        if (inForeground) RestCountdown.cancel(getContext());
-        else RestCountdown.post(getContext(), armedEndsAt, armedTitle, armedBody); // e.g. +30 s from the notification's app
+        Context ctx = getContext();
+        RestAlarmReceiver.cancelShown(ctx);
+        RestAlarmReceiver.schedule(ctx, endsAt, call.getString("alertTitle", "Get ready"), call.getString("alertBody", ""));
+        if (inForeground) RestCountdown.cancel(ctx);
+        else RestCountdown.post(ctx, armedEndsAt, armedTitle, armedBody);
         call.resolve();
     }
 
+    /** The rest stopped. Skipped early: call off the alert too. Time's up: leave the alarm alone (it may run a little late). */
     @PluginMethod
     public void disarm(PluginCall call) {
+        Context ctx = getContext();
+        if (armedEndsAt != 0 && armedEndsAt - System.currentTimeMillis() > 1000) RestAlarmReceiver.unschedule(ctx);
         armedEndsAt = 0;
-        RestCountdown.cancel(getContext());
+        RestCountdown.cancel(ctx);
         call.resolve();
     }
 
@@ -105,6 +116,7 @@ public class RestTimerPlugin extends Plugin {
         super.handleOnResume();
         inForeground = true;
         RestCountdown.cancel(getContext());
+        RestAlarmReceiver.cancelShown(getContext()); // back in the app: the alert has done its job
         if (armedEndsAt != 0 && armedEndsAt <= System.currentTimeMillis()) armedEndsAt = 0;
     }
 
@@ -120,7 +132,7 @@ public class RestTimerPlugin extends Plugin {
         r.put("enabled", m != null && m.areNotificationsEnabled());
         if (Build.VERSION.SDK_INT >= 26 && m != null) {
             NotificationChannel countdown = m.getNotificationChannel(RestCountdown.CHANNEL_ID);
-            NotificationChannel ready = m.getNotificationChannel("rest_ready");
+            NotificationChannel ready = m.getNotificationChannel(RestAlarmReceiver.CHANNEL_ID);
             r.put("countdownChannel", countdown == null ? -1 : countdown.getImportance());
             r.put("readyChannel", ready == null ? -1 : ready.getImportance());
         }

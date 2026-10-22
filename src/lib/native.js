@@ -33,24 +33,40 @@ export async function openUrl (url) {
 }
 
 // ── Notifications (rest timer) ──
-// Two of them, both only for when you're out of the app:
+// Both only for when you're out of the app, and both handled by our own Android plugin
+// (RestTimerPlugin.java and friends), so they don't depend on the app's JavaScript running:
 //  • a countdown that pops up when you leave the app mid-rest and stays until the rest is over
-//    (our own Android plugin, RestTimerPlugin.java: Android draws the ticking clock, posts it the
-//    moment the app goes to the background, and puts it back if it's swiped away);
-//  • a "Get ready" alert when the rest is over (scheduled with local notifications; the app
-//    calls it off just before the end if you're still in it, since it chimes itself then).
+//    (Android draws the ticking clock; it comes back if swiped away);
+//  • a "Get ready" alert at the end, from an exact alarm, skipped if you're in the app (it chimes then).
 
 const REST_NOTIF_ID = 4242
 const RestTimer = registerPlugin('RestTimer')
 const DONE_CHANNEL = 'rest_ready'
 let channelReady = false
 
-const channelText = () => ({ channelName: t('Rest countdown'), channelDescription: t('The time left while you rest, when you leave the app') })
+const channelText = () => ({
+  channelName: t('Rest countdown'),
+  channelDescription: t('The time left while you rest, when you leave the app'),
+  alertChannelName: t('Rest is over'),
+  alertChannelDescription: t('Pops up when it\'s time for your next set')
+})
 
-/** Countdown until `endsAt` (ms), shown only while you're out of the app. Call again to change it. */
-export async function armRestCountdown (endsAt, title, body) {
+/**
+ * Rest until `endsAt` (ms): countdown while you're out of the app, then the "Get ready" alert.
+ * `what` is the set that's next ("Bench press, set 3"). Call again to change it (+30 s).
+ */
+export async function armRestCountdown (endsAt, what) {
   if (!isNative) return
-  try { await RestTimer.arm({ endsAt, title, body: body || '', ...channelText() }) } catch (e) { logError(e, 'rest countdown') }
+  try {
+    await RestTimer.arm({
+      endsAt,
+      title: what ? t('Next: {what}', { what }) : t('Resting'),
+      body: t('Tap to go back to your workout'),
+      alertTitle: what ? t('Get ready: {what}', { what }) : t('Get ready for your next set'),
+      alertBody: t('Rest is over 💪'),
+      ...channelText()
+    })
+  } catch (e) { logError(e, 'rest countdown') }
 }
 
 export async function disarmRestCountdown () {
@@ -121,25 +137,7 @@ export async function openNotificationSettings () {
   try { await RestTimer.openSettings() } catch (e) { logError(e, 'open notification settings') }
 }
 
-/** "Get ready" alert at `at` (ms). `what` is the set that's next, e.g. "Bench press, set 3". */
-export async function scheduleRestNotification (at, what) {
-  if (!isNative) return
-  try {
-    await ensureDoneChannel()
-    await LocalNotifications.schedule({
-      notifications: [{
-        id: REST_NOTIF_ID,
-        title: what ? t('Get ready: {what}', { what }) : t('Get ready for your next set'),
-        body: t('Rest is over 💪'),
-        channelId: DONE_CHANNEL,
-        smallIcon: 'ic_stat_rest',
-        iconColor: '#2457B5',
-        schedule: { at: new Date(at), allowWhileIdle: true }
-      }]
-    })
-  } catch (e) { logError(e, 'rest alert') }
-}
-
+/** Clear a "Rest over" alert left scheduled by 0.5.2 and older (the alert is native since 0.5.3). */
 export async function cancelRestNotification () {
   if (!isNative) return
   try { await LocalNotifications.cancel({ notifications: [{ id: REST_NOTIF_ID }] }) } catch { /* ignore */ }

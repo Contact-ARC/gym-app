@@ -299,7 +299,7 @@ import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT } from '../lib/
 import { previewRestSound } from '../lib/restTimer.js'
 import {
   isNative, shareBackupFile, openUrl, copyText, disarmRestCountdown, ensureNotifyPermission, notificationStatus, openNotificationSettings,
-  armRestCountdown, scheduleRestNotification
+  armRestCountdown
 } from '../lib/native.js'
 import { notifyText } from '../lib/notifyText.js'
 import { relativeDay, fmtDate } from '../lib/format.js'
@@ -331,8 +331,7 @@ onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible
 async function testNotify () {
   await ensureNotifyPermission()
   const at = Date.now() + 15000
-  await armRestCountdown(at, t('Test: next set'), t('Tap to go back to your workout'))
-  await scheduleRestNotification(at, t('Test: next set'))
+  await armRestCountdown(at, t('Test: next set'))
   toast(t('Test started: leave the app now. The countdown pops up, then the alert in 15 seconds.'))
   refreshNotif()
 }
