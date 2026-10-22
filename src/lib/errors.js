@@ -17,8 +17,8 @@ export function clearErrorLog () {
   try { localStorage.removeItem(KEY) } catch { /* ignore */ }
 }
 
-/** Record an error and tell the user something went wrong (at most every few seconds). */
-export function reportError (err, where = '') {
+/** Record an error for the bug report without bothering the user. */
+export function logError (err, where = '') {
   const msg = String(err?.message || err || 'Unknown error').slice(0, 300)
   const entry = { at: new Date().toISOString(), where, msg, stack: String(err?.stack || '').split('\n').slice(0, 4).join(' | ').slice(0, 500) }
   try {
@@ -26,6 +26,12 @@ export function reportError (err, where = '') {
     list.unshift(entry)
     localStorage.setItem(KEY, JSON.stringify(list.slice(0, MAX)))
   } catch { /* storage unavailable */ }
+  return msg
+}
+
+/** Record an error and tell the user something went wrong (at most every few seconds). */
+export function reportError (err, where = '') {
+  const msg = logError(err, where)
   if (Date.now() - lastToast > 4000) {
     lastToast = Date.now()
     try { toast(t('Something went wrong: {e}', { e: msg })) } catch { /* ignore */ }

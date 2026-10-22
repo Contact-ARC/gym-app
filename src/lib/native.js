@@ -7,6 +7,7 @@ import { Share } from '@capacitor/share'
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem'
 import { Browser } from '@capacitor/browser'
 import { t } from '../i18n/index.js'
+import { logError } from './errors.js'
 
 export const isNative = Capacitor.isNativePlatform()
 
@@ -50,7 +51,7 @@ export async function showRestCountdown (endsAt, title, body) {
       channelName: t('Rest countdown'),
       channelDescription: t('The time left while you rest, in the status bar')
     })
-  } catch (e) { console.warn('Rest countdown failed', e) }
+  } catch (e) { logError(e, 'rest countdown') }
 }
 
 export async function hideRestCountdown () {
@@ -58,8 +59,9 @@ export async function hideRestCountdown () {
   try { await RestTimer.hide() } catch { /* not there */ }
 }
 
-// High importance: pops up over other apps, with the phone's notification sound and vibration
-async function ensureDoneChannel () {
+// High importance: pops up over other apps, with the phone's notification sound and vibration.
+// Created at launch, so scheduling an alert is a single call (nothing to wait for while the app is closing).
+export async function ensureDoneChannel () {
   if (channelReady) return
   try {
     await LocalNotifications.createChannel({
@@ -74,6 +76,7 @@ async function ensureDoneChannel () {
   } catch { /* older Android: no channels */ }
 }
 
+/** Ask for notification permission if Android still allows asking. Returns true when granted. */
 export async function ensureNotifyPermission () {
   if (!isNative) return false
   try {
@@ -82,7 +85,28 @@ export async function ensureNotifyPermission () {
       p = await LocalNotifications.requestPermissions()
     }
     return p.display === 'granted'
-  } catch { return false }
+  } catch (e) { logError(e, 'notify permission'); return false }
+}
+
+/**
+ * Can the rest notifications show? { ok, permission, countdown, ready, exact, sdk } or null off the phone.
+ * ok is false when notifications are off for the app or one of the rest channels was switched off.
+ */
+export async function notificationStatus () {
+  if (!isNative) return null
+  let permission = 'unknown'
+  try { permission = (await LocalNotifications.checkPermissions()).display } catch { /* ignore */ }
+  let st = {}
+  try { st = await RestTimer.status() } catch (e) { st = { error: String(e?.message || e) } }
+  const off = (imp) => imp === 0
+  const ok = permission === 'granted' && st.enabled !== false && !off(st.countdownChannel) && !off(st.readyChannel)
+  return { ok, permission, countdown: st.countdownChannel, ready: st.readyChannel, exact: st.exact, sdk: st.sdk, error: st.error }
+}
+
+/** Android's notification settings for this app (to switch them back on). */
+export async function openNotificationSettings () {
+  if (!isNative) return
+  try { await RestTimer.openSettings() } catch (e) { logError(e, 'open notification settings') }
 }
 
 /** "Get ready" alert at `at` (ms). `what` is the set that's next, e.g. "Bench press, set 3". */
@@ -101,7 +125,7 @@ export async function scheduleRestNotification (at, what) {
         schedule: { at: new Date(at), allowWhileIdle: true }
       }]
     })
-  } catch (e) { console.warn('Notification schedule failed', e) }
+  } catch (e) { logError(e, 'rest alert') }
 }
 
 export async function cancelRestNotification () {

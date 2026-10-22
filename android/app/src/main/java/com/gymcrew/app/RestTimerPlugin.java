@@ -1,13 +1,17 @@
 package com.gymcrew.app;
 
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.net.Uri;
 import android.os.Build;
+import android.provider.Settings;
 
+import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
@@ -21,7 +25,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  * It removes itself when the time is up; the "Get ready" alert is a separate scheduled
  * notification (see native.js).
  *
- * JS: registerPlugin('RestTimer') → show({ endsAt, title, body, channelName, channelDescription }), hide()
+ * JS: registerPlugin('RestTimer') → show({ endsAt, title, body, channelName, channelDescription }), hide(),
+ *     status() → { enabled, countdownChannel, readyChannel, exact, sdk }, openSettings()
  */
 @CapacitorPlugin(name = "RestTimer")
 public class RestTimerPlugin extends Plugin {
@@ -49,12 +54,14 @@ public class RestTimerPlugin extends Plugin {
 
     @PluginMethod
     public void show(PluginCall call) {
-        Double endsAtValue = call.getDouble("endsAt");
-        if (endsAtValue == null) {
+        // A millisecond timestamp arrives as a Long, which PluginCall.getDouble() doesn't accept
+        // (it returns null for Longs), so read the raw number whatever its type
+        Object raw = call.getData().opt("endsAt");
+        if (!(raw instanceof Number)) {
             call.reject("endsAt is required");
             return;
         }
-        long endsAt = endsAtValue.longValue();
+        long endsAt = ((Number) raw).longValue();
         long left = endsAt - System.currentTimeMillis();
         NotificationManager m = manager();
         if (m == null) {
@@ -102,6 +109,53 @@ public class RestTimerPlugin extends Plugin {
             // Notifications turned off for the app: nothing to show
         }
         call.resolve();
+    }
+
+    /**
+     * Can the app show the rest notifications? enabled: notifications allowed for the app at all;
+     * *Channel: the channel's importance (0 = turned off by the user, -1 = not created yet);
+     * exact: alarms can fire on time.
+     */
+    @PluginMethod
+    public void status(PluginCall call) {
+        JSObject r = new JSObject();
+        NotificationManager m = manager();
+        r.put("enabled", m != null && m.areNotificationsEnabled());
+        if (Build.VERSION.SDK_INT >= 26 && m != null) {
+            NotificationChannel countdown = m.getNotificationChannel(CHANNEL_ID);
+            NotificationChannel ready = m.getNotificationChannel("rest_ready");
+            r.put("countdownChannel", countdown == null ? -1 : countdown.getImportance());
+            r.put("readyChannel", ready == null ? -1 : ready.getImportance());
+        }
+        boolean exact = true;
+        if (Build.VERSION.SDK_INT >= 31) {
+            AlarmManager am = (AlarmManager) getContext().getSystemService(Context.ALARM_SERVICE);
+            exact = am == null || am.canScheduleExactAlarms();
+        }
+        r.put("exact", exact);
+        r.put("sdk", Build.VERSION.SDK_INT);
+        call.resolve(r);
+    }
+
+    /** Open Android's notification settings for this app. */
+    @PluginMethod
+    public void openSettings(PluginCall call) {
+        Context ctx = getContext();
+        Intent i;
+        if (Build.VERSION.SDK_INT >= 26) {
+            i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
+            i.putExtra(Settings.EXTRA_APP_PACKAGE, ctx.getPackageName());
+        } else {
+            i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
+            i.setData(Uri.fromParts("package", ctx.getPackageName(), null));
+        }
+        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            ctx.startActivity(i);
+            call.resolve();
+        } catch (Exception e) {
+            call.reject("Couldn't open the settings");
+        }
     }
 
     @PluginMethod

@@ -1162,5 +1162,16 @@ export default {
   "The time left sits in your status bar while you rest, and a pop-up tells you which set is next when it ends": "El tiempo que queda aparece en la barra de estado mientras descansas, y al terminar un aviso te dice qué serie toca",
   "The time left while you rest, in the status bar": "El tiempo que queda de descanso, en la barra de estado",
   "sound|Loud": "Alto",
-  "sound|Soft": "Suave"
+  "sound|Soft": "Suave",
+  // ── 0.5.2: notification status ──
+  "Both rest notifications are switched off in Android's settings for Gym Crew.": "Las dos notificaciones del descanso están desactivadas en los ajustes de Android para Gym Crew.",
+  "Notifications are off for Gym Crew, so the rest countdown and the get-ready alert can't show.": "Las notificaciones de Gym Crew están desactivadas, así que no pueden aparecer la cuenta atrás ni el aviso de «prepárate».",
+  "Notifications are on, but Android may deliver the alert a little late (exact alarms are off).": "Las notificaciones están activadas, pero Android puede mostrar el aviso con algo de retraso (las alarmas exactas están desactivadas).",
+  "Notifications are on.": "Las notificaciones están activadas.",
+  "Test": "Probar",
+  "Test started: a 10-second countdown. Leave the app to see the pop-up.": "Prueba en marcha: una cuenta atrás de 10 segundos. Sal de la app para ver el aviso.",
+  "Test: next set": "Prueba: siguiente serie",
+  "The get-ready alert is switched off in Android's settings for Gym Crew.": "El aviso de «prepárate» está desactivado en los ajustes de Android para Gym Crew.",
+  "The rest countdown notification is switched off in Android's settings for Gym Crew.": "La notificación de cuenta atrás está desactivada en los ajustes de Android para Gym Crew.",
+  "Turn on": "Activar"
 }

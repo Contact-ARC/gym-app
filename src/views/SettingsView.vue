@@ -126,6 +126,15 @@
         </div>
         <Toggle v-model="s.restNotify" @update:model-value="onRestNotify" />
       </div>
+      <div v-if="s.restNotify && notif" class="group-row notif-row">
+        <Icon :name="notif.ok ? 'doneCircle' : 'alert'" :class="notif.ok ? 't-ok' : 't-warn'" />
+        <div class="grow t-small">
+          <template v-if="notif.ok">{{ notif.exact === false ? t('Notifications are on, but Android may deliver the alert a little late (exact alarms are off).') : t('Notifications are on.') }}</template>
+          <template v-else>{{ notifyText(notif) }}</template>
+        </div>
+        <button v-if="!notif.ok" class="btn btn-sm btn-primary" @click="openNotificationSettings">{{ t('Turn on') }}</button>
+        <button v-else class="btn btn-sm btn-soft" @click="testNotify">{{ t('Test') }}</button>
+      </div>
     </div>
 
     <h2 id="backup" class="section-h">{{ t('Backups') }}</h2>
@@ -272,7 +281,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { Capacitor } from '@capacitor/core'
 import Icon from '../ui/Icon.vue'
@@ -288,7 +297,11 @@ import {
 import { APP_VERSION, DEFAULT_ROUTINES_URL } from '../config.js'
 import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT } from '../lib/training.js'
 import { previewRestSound } from '../lib/restTimer.js'
-import { isNative, shareBackupFile, openUrl, copyText, hideRestCountdown, ensureNotifyPermission } from '../lib/native.js'
+import {
+  isNative, shareBackupFile, openUrl, copyText, hideRestCountdown, ensureNotifyPermission, notificationStatus, openNotificationSettings,
+  showRestCountdown, scheduleRestNotification
+} from '../lib/native.js'
+import { notifyText } from '../lib/notifyText.js'
 import { relativeDay, fmtDate } from '../lib/format.js'
 import { parseBackup } from '../lib/storage.js'
 import { runAutoBackup, listAutoBackups, readBackup, shareBackupEntry, backupDate, exportCSV } from '../lib/backup.js'
@@ -304,6 +317,24 @@ async function onRestNotify (on) {
   persist()
   if (on) await ensureNotifyPermission()
   else hideRestCountdown()
+  refreshNotif()
+}
+
+// Notification status: checked on opening Settings and when coming back from Android's settings
+const notif = ref(null)
+async function refreshNotif () { notif.value = await notificationStatus() }
+refreshNotif()
+const onVisible = () => { if (!document.hidden) refreshNotif() }
+document.addEventListener('visibilitychange', onVisible)
+onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible))
+/** A 10-second countdown and its alert, to check both on this phone (leave the app to see the pop-up). */
+async function testNotify () {
+  await ensureNotifyPermission()
+  const at = Date.now() + 10000
+  await showRestCountdown(at, t('Test: next set'), t('Tap to go back to your workout'))
+  await scheduleRestNotification(at, t('Test: next set'))
+  toast(t('Test started: a 10-second countdown. Leave the app to see the pop-up.'))
+  refreshNotif()
 }
 const themeItems = computed(() => [{ label: t('Light'), value: 'light' }, { label: t('Dark'), value: 'dark' }, { label: t('Auto'), value: 'system' }])
 
@@ -511,6 +542,7 @@ async function copyDebug () {
     autoBackup: state.data.autoBackup,
     crew: { joined: inCrew.value, configured: !!crewConfig.value, queued: state.data.crew.queue.length },
     saveError: state.saveError,
+    notifications: await notificationStatus(),
     errors: errorLog().slice(0, 10)
   }
   const ok = await copyText(JSON.stringify(info, null, 2))
@@ -520,6 +552,7 @@ async function copyDebug () {
 
 <style scoped>
 .group-row.col { flex-direction: column; align-items: stretch; gap: 10px; }
+.notif-row { gap: 10px; }
 .inline-input {
   width: 55%; text-align: right; background: transparent; border: 0; outline: none;
   font-size: 17px; color: var(--ink-2); padding: 8px 0;

@@ -1,11 +1,13 @@
 // Rest timer driven by an absolute end time, so it stays correct if the WebView is paused.
-// While it runs, a countdown notification sits in the status bar (Android ticks it by itself).
-// While the app is in the background, a "Get ready" alert is scheduled for the end time;
-// it's cancelled when the app comes back to the front (the app beeps and buzzes itself then).
+// While it runs, a countdown notification sits in the status bar (Android ticks it by itself),
+// and a "Get ready" alert is scheduled for the end time as soon as the rest starts, so it fires
+// whether or not the app gets a chance to run when you leave it. If you're in the app when the
+// time is up, the alert is cancelled just before and the app chimes and buzzes itself.
 import { reactive } from 'vue'
 import { App } from '@capacitor/app'
 import {
-  buzz, scheduleRestNotification, cancelRestNotification, ensureNotifyPermission, isNative, showRestCountdown, hideRestCountdown
+  buzz, scheduleRestNotification, cancelRestNotification, ensureNotifyPermission, isNative, showRestCountdown, hideRestCountdown,
+  notificationStatus
 } from './native.js'
 import { state, persist } from '../store.js'
 import { t } from '../i18n/index.js'
@@ -17,6 +19,9 @@ export const rest = reactive({
   remaining: 0, // seconds, updated every 250 ms
   done: false
 })
+
+/** Set when the notifications can't show (blocked for the app, or a channel switched off), so the workout can say so. */
+export const notifyProblem = reactive({ status: null, dismissed: false })
 
 let ticker = null
 let inBackground = false
@@ -69,10 +74,16 @@ function warnChime () {
   try { ding(1047, 0, 0.35, loud() ? 0.6 : 0.3) } catch { /* no audio */ }
 }
 
+let alertCancelled = false
 function tick () {
   if (!rest.endsAt) return
   const left = Math.max(0, Math.ceil((rest.endsAt - Date.now()) / 1000))
   rest.remaining = left
+  // In the app at the end: the app chimes itself, so the pop-up isn't needed
+  if (!inBackground && !alertCancelled && rest.endsAt - Date.now() < 1200) {
+    alertCancelled = true
+    cancelRestNotification()
+  }
   const st = state.data.settings
   if (!warned && left <= 10 && left > 0 && rest.total > 20) {
     warned = true
@@ -98,10 +109,18 @@ export function previewRestSound () {
   doneChime()
 }
 
-/** Countdown in the status bar for the current rest (if notifications are on). */
-function showCountdown () {
+/** Countdown in the status bar and the "Get ready" alert for the current rest (if notifications are on). */
+function notifyRest () {
   if (!rest.endsAt || !state.data.settings.restNotify) return
   showRestCountdown(rest.endsAt, rest.label ? t('Next: {what}', { what: rest.label }) : t('Resting'), t('Tap to go back to your workout'))
+  alertCancelled = false
+  scheduleRestNotification(rest.endsAt, rest.label || null)
+}
+
+/** Check once per rest start whether Android will actually show them. */
+async function checkNotifications () {
+  const st = await notificationStatus()
+  notifyProblem.status = st && !st.ok ? st : null
 }
 
 // The running timer is saved with the data, so closing the app mid-rest doesn't lose it
@@ -122,7 +141,7 @@ export function resumeRest () {
   tick()
   clearInterval(ticker)
   ticker = setInterval(tick, 250)
-  showCountdown()
+  notifyRest()
 }
 
 export async function startRest (seconds, label = '') {
@@ -139,7 +158,8 @@ export async function startRest (seconds, label = '') {
   ticker = setInterval(tick, 250)
   if (state.data.settings.restNotify) {
     await ensureNotifyPermission()
-    showCountdown()
+    notifyRest()
+    checkNotifications()
   }
 }
 
@@ -151,7 +171,7 @@ export function addRest (seconds) {
   if (rest.endsAt - Date.now() > 10500) warned = false
   tick()
   save()
-  showCountdown()
+  notifyRest()
 }
 
 export function stopRest () {
@@ -168,10 +188,13 @@ export function stopRest () {
 if (isNative) {
   App.addListener('appStateChange', async ({ isActive }) => {
     inBackground = !isActive
-    if (!isActive && rest.endsAt && !rest.done && state.data.settings.restNotify) {
+    if (!isActive && rest.endsAt && !rest.done && alertCancelled && state.data.settings.restNotify) {
+      // Left the app in the last second, after the alert was called off: put it back
+      alertCancelled = false
       await scheduleRestNotification(rest.endsAt, rest.label || null)
     } else if (isActive) {
-      await cancelRestNotification()
+      // Back in the app: clear an alert that already popped up
+      if (!rest.endsAt || rest.done || rest.endsAt <= Date.now()) await cancelRestNotification()
       tick()
     }
   })

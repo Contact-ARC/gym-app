@@ -211,6 +211,14 @@
       </Transition>
     </main>
 
+    <!-- Android won't show the rest notifications: say so once, with a way to fix it -->
+    <div v-if="notifyProblem.status && !notifyProblem.dismissed && state.data.settings.restNotify" class="notif-warn" role="alert">
+      <Icon name="bell" :size="20" />
+      <span class="grow t-small">{{ notifyText(notifyProblem.status) }}</span>
+      <button class="btn btn-sm btn-primary" @click="openNotificationSettings">{{ t('Turn on') }}</button>
+      <button class="icon-btn sm" :aria-label="t('Close')" @click="notifyProblem.dismissed = true"><Icon name="close" :size="20" /></button>
+    </div>
+
     <!-- Bottom dock: rest timer + log button -->
     <div v-if="items.length" class="dock">
       <Transition name="fade">
@@ -392,8 +400,9 @@ import {
 } from '../lib/training.js'
 import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle } from '../lib/format.js'
 import { effectiveRest, supersetNext } from '../lib/supersets.js'
-import { rest, startRest, stopRest, addRest } from '../lib/restTimer.js'
-import { tap, buzz, keepAwake } from '../lib/native.js'
+import { rest, startRest, stopRest, addRest, notifyProblem } from '../lib/restTimer.js'
+import { tap, buzz, keepAwake, openNotificationSettings } from '../lib/native.js'
+import { notifyText } from '../lib/notifyText.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -1034,6 +1043,13 @@ function discard () {
 .hint .icon { margin-top: 1px; color: var(--ink-2); }
 .hint.k-up .icon { color: var(--ok); }
 .hint.k-down .icon, .hint.k-deload .icon { color: var(--warn); }
+.notif-warn {
+  position: fixed; left: 12px; right: 12px; z-index: 30; top: calc(var(--safe-top) + 64px);
+  display: flex; align-items: center; gap: 8px; padding: 10px 8px 10px 14px; border-radius: 14px;
+  background: var(--warn-soft); color: var(--ink); box-shadow: var(--shadow-float);
+  max-width: 616px; margin: 0 auto;
+}
+.notif-warn .icon-btn.sm { width: 36px; height: 36px; }
 .hint.adj.k-up { background: var(--ok-soft); }
 .hint.adj.k-down { background: var(--warn-soft); }
 .mini-note { display: flex; gap: 6px; align-items: flex-start; margin: 10px 2px 0; }
