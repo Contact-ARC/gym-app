@@ -33,24 +33,36 @@ export async function openUrl (url) {
 }
 
 // ── Notifications (rest timer) ──
-// Two of them: a quiet countdown that sits in the status bar while you rest (our own small
-// Android plugin, RestTimerPlugin.java, because the system draws the ticking clock), and a
-// "Get ready" alert that pops up when the rest is over (scheduled with local notifications).
+// Two of them, both only for when you're out of the app:
+//  • a countdown that pops up when you leave the app mid-rest and stays until the rest is over
+//    (our own Android plugin, RestTimerPlugin.java: Android draws the ticking clock, posts it the
+//    moment the app goes to the background, and puts it back if it's swiped away);
+//  • a "Get ready" alert when the rest is over (scheduled with local notifications; the app
+//    calls it off just before the end if you're still in it, since it chimes itself then).
 
 const REST_NOTIF_ID = 4242
 const RestTimer = registerPlugin('RestTimer')
 const DONE_CHANNEL = 'rest_ready'
 let channelReady = false
 
-/** Countdown notification until `endsAt` (ms). Safe to call again to update it. */
+const channelText = () => ({ channelName: t('Rest countdown'), channelDescription: t('The time left while you rest, when you leave the app') })
+
+/** Countdown until `endsAt` (ms), shown only while you're out of the app. Call again to change it. */
+export async function armRestCountdown (endsAt, title, body) {
+  if (!isNative) return
+  try { await RestTimer.arm({ endsAt, title, body: body || '', ...channelText() }) } catch (e) { logError(e, 'rest countdown') }
+}
+
+export async function disarmRestCountdown () {
+  if (!isNative) return
+  try { await RestTimer.disarm() } catch { /* not there */ }
+}
+
+/** Show the countdown right now, in or out of the app (the test in Settings). */
 export async function showRestCountdown (endsAt, title, body) {
   if (!isNative) return
   try {
-    await RestTimer.show({
-      endsAt, title, body: body || '',
-      channelName: t('Rest countdown'),
-      channelDescription: t('The time left while you rest, in the status bar')
-    })
+    await RestTimer.show({ endsAt, title, body: body || '', ...channelText() })
   } catch (e) { logError(e, 'rest countdown') }
 }
 

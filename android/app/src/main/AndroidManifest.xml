@@ -30,6 +30,9 @@
             <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
 
+        <!-- Puts the rest countdown back if it's swiped away while time is left -->
+        <receiver android:name=".RestCountdownReceiver" android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
@@ -45,6 +48,8 @@
     <!-- The "Get ready" alert at the end of a rest has to arrive on time, not minutes late.
          Granted at install (no prompt) on Android 13+; the app isn't on Google Play, whose policy limits it to alarm apps. -->
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+    <!-- Android 16: lets the rest countdown show as a Live Update (time in a status-bar chip) where supported -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <!-- Automatic backups to Documents/GymCrew. Only needed on Android 9 and older;
          newer versions let the app write its own files there without asking. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />

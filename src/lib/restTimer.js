@@ -1,12 +1,12 @@
 // Rest timer driven by an absolute end time, so it stays correct if the WebView is paused.
-// While it runs, a countdown notification sits in the status bar (Android ticks it by itself),
-// and a "Get ready" alert is scheduled for the end time as soon as the rest starts, so it fires
-// whether or not the app gets a chance to run when you leave it. If you're in the app when the
-// time is up, the alert is cancelled just before and the app chimes and buzzes itself.
+// In the app: just the on-screen timer and the chime. Out of the app: a countdown notification
+// (armed here, posted by Android the moment you leave, ticking by itself) and a "Get ready" alert
+// at the end. The alert is scheduled as soon as the rest starts, so it fires whether or not the app
+// gets a chance to run when you leave; if you're still in the app at the end it's called off just before.
 import { reactive } from 'vue'
 import { App } from '@capacitor/app'
 import {
-  buzz, scheduleRestNotification, cancelRestNotification, ensureNotifyPermission, isNative, showRestCountdown, hideRestCountdown,
+  buzz, scheduleRestNotification, cancelRestNotification, ensureNotifyPermission, isNative, armRestCountdown, disarmRestCountdown,
   notificationStatus
 } from './native.js'
 import { state, persist } from '../store.js'
@@ -98,8 +98,10 @@ function tick () {
       if (st.restVibrate) { buzz(350); setTimeout(() => buzz(350), 600) }
       if (st.restSound) doneChime()
     }
-    hideRestCountdown()
-    setTimeout(() => { if (rest.done) stopRest() }, 4000)
+    disarmRestCountdown()
+    // Tidy up, but leave the "Get ready" alert alone: on some phones (OnePlus, Xiaomi…) the alarm
+    // behind it can arrive a few seconds late while the screen is off, and cancelling it here would lose it
+    setTimeout(() => { if (rest.done) stopRest({ keepAlert: true }) }, 4000)
   }
 }
 
@@ -109,10 +111,10 @@ export function previewRestSound () {
   doneChime()
 }
 
-/** Countdown in the status bar and the "Get ready" alert for the current rest (if notifications are on). */
+/** Countdown (for when you leave the app) and the "Get ready" alert for the current rest, if notifications are on. */
 function notifyRest () {
   if (!rest.endsAt || !state.data.settings.restNotify) return
-  showRestCountdown(rest.endsAt, rest.label ? t('Next: {what}', { what: rest.label }) : t('Resting'), t('Tap to go back to your workout'))
+  armRestCountdown(rest.endsAt, rest.label ? t('Next: {what}', { what: rest.label }) : t('Resting'), t('Tap to go back to your workout'))
   alertCancelled = false
   scheduleRestNotification(rest.endsAt, rest.label || null)
 }
@@ -174,14 +176,16 @@ export function addRest (seconds) {
   notifyRest()
 }
 
-export function stopRest () {
+/** Stop the rest. Skipping it early also calls off the "Get ready" alert; once the time is up it's left to show. */
+export function stopRest ({ keepAlert = false } = {}) {
+  const early = rest.endsAt && rest.endsAt - Date.now() > 1000
   clearInterval(ticker)
   ticker = null
   rest.endsAt = null
   rest.remaining = 0
   rest.done = false
-  cancelRestNotification()
-  hideRestCountdown()
+  if (!keepAlert && (early || !inBackground)) cancelRestNotification()
+  disarmRestCountdown()
   save()
 }
 

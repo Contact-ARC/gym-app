@@ -122,7 +122,7 @@
       <div class="group-row">
         <div class="grow">
           <div>{{ t('Countdown and "get ready" notifications') }}</div>
-          <div class="t-tiny t-muted">{{ t('The time left sits in your status bar while you rest, and a pop-up tells you which set is next when it ends') }}</div>
+          <div class="t-tiny t-muted">{{ t('Only when you leave the app mid-rest: the time left pops up and stays until the rest is over, then an alert tells you which set is next') }}</div>
         </div>
         <Toggle v-model="s.restNotify" @update:model-value="onRestNotify" />
       </div>
@@ -298,8 +298,8 @@ import { APP_VERSION, DEFAULT_ROUTINES_URL } from '../config.js'
 import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT } from '../lib/training.js'
 import { previewRestSound } from '../lib/restTimer.js'
 import {
-  isNative, shareBackupFile, openUrl, copyText, hideRestCountdown, ensureNotifyPermission, notificationStatus, openNotificationSettings,
-  showRestCountdown, scheduleRestNotification
+  isNative, shareBackupFile, openUrl, copyText, disarmRestCountdown, ensureNotifyPermission, notificationStatus, openNotificationSettings,
+  armRestCountdown, scheduleRestNotification
 } from '../lib/native.js'
 import { notifyText } from '../lib/notifyText.js'
 import { relativeDay, fmtDate } from '../lib/format.js'
@@ -316,7 +316,7 @@ const s = computed(() => state.data.settings)
 async function onRestNotify (on) {
   persist()
   if (on) await ensureNotifyPermission()
-  else hideRestCountdown()
+  else disarmRestCountdown()
   refreshNotif()
 }
 
@@ -327,13 +327,13 @@ refreshNotif()
 const onVisible = () => { if (!document.hidden) refreshNotif() }
 document.addEventListener('visibilitychange', onVisible)
 onBeforeUnmount(() => document.removeEventListener('visibilitychange', onVisible))
-/** A 10-second countdown and its alert, to check both on this phone (leave the app to see the pop-up). */
+/** A 15-second rest as it works in a workout: leave the app to see the countdown, then the alert. */
 async function testNotify () {
   await ensureNotifyPermission()
-  const at = Date.now() + 10000
-  await showRestCountdown(at, t('Test: next set'), t('Tap to go back to your workout'))
+  const at = Date.now() + 15000
+  await armRestCountdown(at, t('Test: next set'), t('Tap to go back to your workout'))
   await scheduleRestNotification(at, t('Test: next set'))
-  toast(t('Test started: a 10-second countdown. Leave the app to see the pop-up.'))
+  toast(t('Test started: leave the app now. The countdown pops up, then the alert in 15 seconds.'))
   refreshNotif()
 }
 const themeItems = computed(() => [{ label: t('Light'), value: 'light' }, { label: t('Dark'), value: 'dark' }, { label: t('Auto'), value: 'system' }])

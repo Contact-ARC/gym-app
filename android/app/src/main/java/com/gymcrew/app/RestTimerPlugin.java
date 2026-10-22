@@ -1,10 +1,8 @@
 package com.gymcrew.app;
 
 import android.app.AlarmManager;
-import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
@@ -18,97 +16,96 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 
 /**
- * The rest timer as an ongoing notification that counts down by itself.
+ * Rest countdown in the notification shade, only while you're out of the app.
  *
- * Android draws the countdown (a chronometer counting down to the end time), so it keeps
- * ticking while the app is in the background or the screen is off, with no app code running.
- * It removes itself when the time is up; the "Get ready" alert is a separate scheduled
- * notification (see native.js).
+ * The app "arms" it when a rest starts. Nothing shows while you stay in the app (it has its own
+ * timer and chime). The moment you leave, this posts the countdown (Android's onPause, so it doesn't
+ * depend on the app's JavaScript still running), and it disappears again when you come back.
+ * Swiping it away while time is left brings it back (RestCountdownReceiver). It removes itself
+ * when the time is up; the "Get ready" alert is a separate scheduled notification (native.js).
  *
- * JS: registerPlugin('RestTimer') → show({ endsAt, title, body, channelName, channelDescription }), hide(),
- *     status() → { enabled, countdownChannel, readyChannel, exact, sdk }, openSettings()
+ * JS: registerPlugin('RestTimer') →
+ *   arm({ endsAt, title, body, channelName, channelDescription }), disarm(),
+ *   show({ … }) / hide() (show right now, for the test in Settings),
+ *   status() → { enabled, countdownChannel, readyChannel, exact, sdk }, openSettings()
  */
 @CapacitorPlugin(name = "RestTimer")
 public class RestTimerPlugin extends Plugin {
 
-    private static final String CHANNEL_ID = "rest_countdown";
-    private static final int NOTIFICATION_ID = 4243;
+    // Read by RestCountdownReceiver
+    static volatile boolean inForeground = false; // set by onResume; false after Android restarts the process in the background
+    static volatile long armedEndsAt = 0;
+    private static String armedTitle = "";
+    private static String armedBody = "";
 
-    private NotificationManager manager() {
-        return (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
+    /** A millisecond timestamp arrives as a Long, which PluginCall.getDouble() rejects, so read the raw number. */
+    private static long endsAtOf(PluginCall call) {
+        Object raw = call.getData().opt("endsAt");
+        return raw instanceof Number ? ((Number) raw).longValue() : 0L;
     }
 
-    /** Quiet channel: no sound, no vibration, no pop-up. It just sits in the status bar and shade. */
-    private void ensureChannel(String name, String description) {
-        if (Build.VERSION.SDK_INT < 26) return;
-        NotificationManager m = manager();
-        if (m == null || m.getNotificationChannel(CHANNEL_ID) != null) return;
-        NotificationChannel ch = new NotificationChannel(CHANNEL_ID, name, NotificationManager.IMPORTANCE_LOW);
-        ch.setDescription(description);
-        ch.setShowBadge(false);
-        ch.setSound(null, null);
-        ch.enableVibration(false);
-        ch.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
-        m.createNotificationChannel(ch);
+    private void rememberChannelText(PluginCall call) {
+        String name = call.getString("channelName", null);
+        if (name != null) RestCountdown.channelName = name;
+        String description = call.getString("channelDescription", null);
+        if (description != null) RestCountdown.channelDescription = description;
     }
 
     @PluginMethod
-    public void show(PluginCall call) {
-        // A millisecond timestamp arrives as a Long, which PluginCall.getDouble() doesn't accept
-        // (it returns null for Longs), so read the raw number whatever its type
-        Object raw = call.getData().opt("endsAt");
-        if (!(raw instanceof Number)) {
+    public void arm(PluginCall call) {
+        long endsAt = endsAtOf(call);
+        if (endsAt == 0) {
             call.reject("endsAt is required");
             return;
         }
-        long endsAt = ((Number) raw).longValue();
-        long left = endsAt - System.currentTimeMillis();
-        NotificationManager m = manager();
-        if (m == null) {
-            call.resolve();
-            return;
-        }
-        if (left <= 0) {
-            m.cancel(NOTIFICATION_ID);
-            call.resolve();
-            return;
-        }
-
-        Context ctx = getContext();
-        ensureChannel(call.getString("channelName", "Rest timer"), call.getString("channelDescription", ""));
-
-        // Tapping it opens the app where you left it
-        PendingIntent open = null;
-        Intent launch = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
-        if (launch != null) {
-            launch.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            open = PendingIntent.getActivity(ctx, 0, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-        }
-
-        Notification.Builder b = Build.VERSION.SDK_INT >= 26
-            ? new Notification.Builder(ctx, CHANNEL_ID)
-            : new Notification.Builder(ctx);
-        b.setSmallIcon(R.drawable.ic_stat_rest)
-            .setContentTitle(call.getString("title", "Resting"))
-            .setContentText(call.getString("body", ""))
-            .setOngoing(true)
-            .setOnlyAlertOnce(true)
-            .setShowWhen(true)
-            .setWhen(endsAt)
-            .setUsesChronometer(true)
-            .setChronometerCountDown(true)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setColor(0xFF2457B5);
-        if (Build.VERSION.SDK_INT >= 26) b.setTimeoutAfter(left);
-        if (Build.VERSION.SDK_INT >= 30) b.setCategory(Notification.CATEGORY_STOPWATCH);
-        if (open != null) b.setContentIntent(open);
-
-        try {
-            m.notify(NOTIFICATION_ID, b.build());
-        } catch (SecurityException e) {
-            // Notifications turned off for the app: nothing to show
-        }
+        rememberChannelText(call);
+        armedEndsAt = endsAt;
+        armedTitle = call.getString("title", "Resting");
+        armedBody = call.getString("body", "");
+        if (inForeground) RestCountdown.cancel(getContext());
+        else RestCountdown.post(getContext(), armedEndsAt, armedTitle, armedBody); // e.g. +30 s from the notification's app
         call.resolve();
+    }
+
+    @PluginMethod
+    public void disarm(PluginCall call) {
+        armedEndsAt = 0;
+        RestCountdown.cancel(getContext());
+        call.resolve();
+    }
+
+    /** Show it now, whatever the app's state (the test in Settings). */
+    @PluginMethod
+    public void show(PluginCall call) {
+        long endsAt = endsAtOf(call);
+        if (endsAt == 0) {
+            call.reject("endsAt is required");
+            return;
+        }
+        rememberChannelText(call);
+        RestCountdown.post(getContext(), endsAt, call.getString("title", "Resting"), call.getString("body", ""));
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void hide(PluginCall call) {
+        RestCountdown.cancel(getContext());
+        call.resolve();
+    }
+
+    @Override
+    protected void handleOnPause() {
+        super.handleOnPause();
+        inForeground = false;
+        if (armedEndsAt != 0) RestCountdown.post(getContext(), armedEndsAt, armedTitle, armedBody);
+    }
+
+    @Override
+    protected void handleOnResume() {
+        super.handleOnResume();
+        inForeground = true;
+        RestCountdown.cancel(getContext());
+        if (armedEndsAt != 0 && armedEndsAt <= System.currentTimeMillis()) armedEndsAt = 0;
     }
 
     /**
@@ -119,10 +116,10 @@ public class RestTimerPlugin extends Plugin {
     @PluginMethod
     public void status(PluginCall call) {
         JSObject r = new JSObject();
-        NotificationManager m = manager();
+        NotificationManager m = RestCountdown.manager(getContext());
         r.put("enabled", m != null && m.areNotificationsEnabled());
         if (Build.VERSION.SDK_INT >= 26 && m != null) {
-            NotificationChannel countdown = m.getNotificationChannel(CHANNEL_ID);
+            NotificationChannel countdown = m.getNotificationChannel(RestCountdown.CHANNEL_ID);
             NotificationChannel ready = m.getNotificationChannel("rest_ready");
             r.put("countdownChannel", countdown == null ? -1 : countdown.getImportance());
             r.put("readyChannel", ready == null ? -1 : ready.getImportance());
@@ -156,12 +153,5 @@ public class RestTimerPlugin extends Plugin {
         } catch (Exception e) {
             call.reject("Couldn't open the settings");
         }
-    }
-
-    @PluginMethod
-    public void hide(PluginCall call) {
-        NotificationManager m = manager();
-        if (m != null) m.cancel(NOTIFICATION_ID);
-        call.resolve();
     }
 }
