@@ -132,8 +132,17 @@
           <template v-if="notif.ok">{{ notif.exact === false ? t('Notifications are on, but Android may deliver the alert a little late (exact alarms are off).') : t('Notifications are on.') }}</template>
           <template v-else>{{ notifyText(notif) }}</template>
         </div>
-        <button v-if="!notif.ok" class="btn btn-sm btn-primary" @click="openNotificationSettings">{{ t('Turn on') }}</button>
+        <button v-if="!notif.ok" class="btn btn-sm btn-primary" @click="openNotificationSettings()">{{ t('Turn on') }}</button>
         <button v-else class="btn btn-sm btn-soft" @click="testNotify">{{ t('Test') }}</button>
+      </div>
+      <!-- Android 16: the countdown can show as a Live Update (status-bar chip; Live Alerts on OnePlus) -->
+      <div v-if="s.restNotify && notif && notif.ok && notif.liveUpdates !== null" class="group-row notif-row">
+        <Icon :name="notif.liveUpdates ? 'doneCircle' : 'info'" :class="notif.liveUpdates ? 't-ok' : 't-muted'" />
+        <div class="grow t-small">
+          {{ notif.liveUpdates ? t('Live Updates are on: the countdown can show in the status bar.') : t('Live Updates are off for Gym Crew. Turn them on to see the countdown in the status bar.') }}
+          <div class="t-tiny t-muted">{{ t('On OnePlus, also turn on "Show Live Updates on Live Alerts" in Gym Crew\'s notification settings.') }}</div>
+        </div>
+        <button class="btn btn-sm" :class="notif.liveUpdates ? 'btn-soft' : 'btn-primary'" @click="openNotificationSettings(notif.liveUpdates ? '' : 'liveUpdates')">{{ notif.liveUpdates ? t('Settings') : t('Turn on') }}</button>
       </div>
     </div>
 

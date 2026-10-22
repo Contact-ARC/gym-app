@@ -1173,5 +1173,9 @@ export default {
   "Test: next set": "Prueba: siguiente serie",
   "The get-ready alert is switched off in Android's settings for Gym Crew.": "El aviso de «prepárate» está desactivado en los ajustes de Android para Gym Crew.",
   "The rest countdown notification is switched off in Android's settings for Gym Crew.": "La notificación de cuenta atrás está desactivada en los ajustes de Android para Gym Crew.",
-  "Turn on": "Activar"
+  "Turn on": "Activar",
+  // ── 0.5.5: Live Updates ──
+  "Live Updates are off for Gym Crew. Turn them on to see the countdown in the status bar.": "Las actualizaciones en directo están desactivadas para Gym Crew. Actívalas para ver la cuenta atrás en la barra de estado.",
+  "Live Updates are on: the countdown can show in the status bar.": "Las actualizaciones en directo están activadas: la cuenta atrás puede aparecer en la barra de estado.",
+  "On OnePlus, also turn on \"Show Live Updates on Live Alerts\" in Gym Crew's notification settings.": "En OnePlus, activa también «Mostrar actualizaciones en directo en Live Alerts» en los ajustes de notificaciones de Gym Crew."
 }

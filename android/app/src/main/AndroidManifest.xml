@@ -34,6 +34,16 @@
         <receiver android:name=".RestCountdownReceiver" android:exported="false" />
         <!-- Swaps the countdown for the "Get ready" alert when the rest is over -->
         <receiver android:name=".RestAlarmReceiver" android:exported="false" />
+        <!-- Runs only while you're out of the app mid-rest, so the phone doesn't freeze the app
+             before the "Get ready" alert is due. Its notification is the rest countdown. -->
+        <service
+            android:name=".RestTimerService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Rest timer between gym sets: shows the time left and alerts when the next set is due" />
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -52,6 +62,9 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <!-- Android 16: lets the rest countdown show as a Live Update (time in a status-bar chip) where supported -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
+    <!-- The rest timer's foreground service (see RestTimerService) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- Automatic backups to Documents/GymCrew. Only needed on Android 9 and older;
          newer versions let the app write its own files there without asking. -->
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" />

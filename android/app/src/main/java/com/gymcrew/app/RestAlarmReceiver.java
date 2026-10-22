@@ -29,18 +29,26 @@ public class RestAlarmReceiver extends BroadcastReceiver {
 
     static String channelName = "Rest is over";
     static String channelDescription = "";
+    private static volatile long firedFor = 0; // the rest the alert was already shown for
 
     @Override
     public void onReceive(Context ctx, Intent intent) {
         if (intent == null || !ACTION_REST_OVER.equals(intent.getAction())) return;
-        RestCountdown.cancel(ctx);
-        // A newer rest replaced this one (its own alarm will fire), or you're in the app
-        long endsAt = intent.getLongExtra(EXTRA_ENDS_AT, 0L);
+        fire(ctx, intent.getLongExtra(EXTRA_ENDS_AT, 0L), intent.getStringExtra(EXTRA_TITLE), intent.getStringExtra(EXTRA_BODY));
+    }
+
+    /**
+     * The rest that ends at `endsAt` is over: swap the countdown for the alert, once.
+     * Called by RestTimerService on time, and by the alarm as a backup.
+     */
+    static synchronized void fire(Context ctx, long endsAt, String title, String body) {
+        if (endsAt != 0 && endsAt == firedFor) return;
+        // A newer rest replaced this one (its own timing will fire), or you're in the app (it chimes itself)
         long armed = RestTimerPlugin.armedEndsAt;
         if (armed != 0 && armed != endsAt) return;
+        RestCountdown.cancel(ctx);
         if (RestTimerPlugin.inForeground) return;
-        String title = intent.getStringExtra(EXTRA_TITLE);
-        String body = intent.getStringExtra(EXTRA_BODY);
+        firedFor = endsAt;
         post(ctx, title != null ? title : "Get ready", body != null ? body : "");
     }
 

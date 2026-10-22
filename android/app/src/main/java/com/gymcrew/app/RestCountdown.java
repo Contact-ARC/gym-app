@@ -51,15 +51,28 @@ final class RestCountdown {
         m.createNotificationChannel(ch);
     }
 
-    /** Post (or replace) the countdown. Does nothing once the time is up. */
+    /** Post (or replace) the countdown as a normal notification. Does nothing once the time is up. */
     static void post(Context ctx, long endsAt, String title, String body) {
-        long left = endsAt - System.currentTimeMillis();
         NotificationManager m = manager(ctx);
         if (m == null) return;
-        if (left <= 1000) {
+        Notification n = build(ctx, endsAt, title, body);
+        if (n == null) {
             m.cancel(NOTIFICATION_ID);
             return;
         }
+        try {
+            m.notify(NOTIFICATION_ID, n);
+        } catch (SecurityException e) {
+            // Notifications are off for the app: nothing to show
+        }
+    }
+
+    /** The countdown notification, or null once the time is up. Also used by RestTimerService. */
+    static Notification build(Context ctx, long endsAt, String title, String body) {
+        long left = endsAt - System.currentTimeMillis();
+        if (left <= 1000) return null;
+        if (title == null) title = "Resting";
+        if (body == null) body = "";
         ensureChannel(ctx);
 
         // Tapping it opens the app where you left it
@@ -96,15 +109,30 @@ final class RestCountdown {
         if (open != null) b.setContentIntent(open);
         if (Build.VERSION.SDK_INT >= 26) b.setTimeoutAfter(left);
         if (Build.VERSION.SDK_INT >= 30) b.setCategory(Notification.CATEGORY_STOPWATCH);
-        // Android 16: ask to show it as a Live Update (a chip with the time in the status bar).
-        // Phones that don't support it simply ignore the request.
-        if (Build.VERSION.SDK_INT >= 36) b.getExtras().putBoolean("android.requestPromotedOngoing", true);
+        // Android 16: ask to show it as a Live Update (the time in a status-bar chip, a Live Alert on OnePlus)
+        if (Build.VERSION.SDK_INT >= 36) requestPromoted(b);
+        return b.build();
+    }
 
+    /**
+     * Ask for Live Update treatment. setRequestPromotedOngoing() only exists on newer Android 16 builds,
+     * so it's looked up at run time; older builds get the same request through the notification's extras.
+     */
+    static void requestPromoted(Notification.Builder b) {
         try {
-            m.notify(NOTIFICATION_ID, b.build());
-        } catch (SecurityException e) {
-            // Notifications are off for the app: nothing to show
+            Notification.Builder.class.getMethod("setRequestPromotedOngoing", boolean.class).invoke(b, true);
+            return;
+        } catch (Throwable ignored) {
+            // method not on this build
         }
+        String key = "android.requestPromotedOngoing";
+        try {
+            Object k = Notification.class.getField("EXTRA_REQUEST_PROMOTED_ONGOING").get(null);
+            if (k instanceof String) key = (String) k;
+        } catch (Throwable ignored) {
+            // constant not on this build
+        }
+        b.getExtras().putBoolean(key, true);
     }
 
     static void cancel(Context ctx) {

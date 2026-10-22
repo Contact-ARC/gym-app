@@ -128,13 +128,13 @@ export async function notificationStatus () {
   try { st = await RestTimer.status() } catch (e) { st = { error: String(e?.message || e) } }
   const off = (imp) => imp === 0
   const ok = permission === 'granted' && st.enabled !== false && !off(st.countdownChannel) && !off(st.readyChannel)
-  return { ok, permission, countdown: st.countdownChannel, ready: st.readyChannel, exact: st.exact, sdk: st.sdk, error: st.error }
+  return { ok, permission, countdown: st.countdownChannel, ready: st.readyChannel, exact: st.exact, sdk: st.sdk, liveUpdates: st.liveUpdates ?? null, error: st.error }
 }
 
-/** Android's notification settings for this app (to switch them back on). */
-export async function openNotificationSettings () {
+/** Android's notification settings for this app (to switch them back on). which: 'liveUpdates' for that screen. */
+export async function openNotificationSettings (which = '') {
   if (!isNative) return
-  try { await RestTimer.openSettings() } catch (e) { logError(e, 'open notification settings') }
+  try { await RestTimer.openSettings({ which }) } catch (e) { logError(e, 'open notification settings') }
 }
 
 /** Clear a "Rest over" alert left scheduled by 0.5.2 and older (the alert is native since 0.5.3). */

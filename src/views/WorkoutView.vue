@@ -215,7 +215,7 @@
     <div v-if="notifyProblem.status && !notifyProblem.dismissed && state.data.settings.restNotify" class="notif-warn" role="alert">
       <Icon name="bell" :size="20" />
       <span class="grow t-small">{{ notifyText(notifyProblem.status) }}</span>
-      <button class="btn btn-sm btn-primary" @click="openNotificationSettings">{{ t('Turn on') }}</button>
+      <button class="btn btn-sm btn-primary" @click="openNotificationSettings()">{{ t('Turn on') }}</button>
       <button class="icon-btn sm" :aria-label="t('Close')" @click="notifyProblem.dismissed = true"><Icon name="close" :size="20" /></button>
     </div>
 

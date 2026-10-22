@@ -28,7 +28,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  *   arm({ endsAt, title, body, alertTitle, alertBody, channelName, channelDescription, alertChannelName,
  *         alertChannelDescription }), disarm(),
  *   show({ … }) / hide() (show right now, for the test in Settings),
- *   status() → { enabled, countdownChannel, readyChannel, exact, sdk }, openSettings()
+ *   status() → { enabled, countdownChannel, readyChannel, exact, sdk, liveUpdates }, openSettings({ which })
  */
 @CapacitorPlugin(name = "RestTimer")
 public class RestTimerPlugin extends Plugin {
@@ -38,6 +38,8 @@ public class RestTimerPlugin extends Plugin {
     static volatile long armedEndsAt = 0;
     private static String armedTitle = "";
     private static String armedBody = "";
+    private static String armedAlertTitle = "";
+    private static String armedAlertBody = "";
 
     /** A millisecond timestamp arrives as a Long, which PluginCall.getDouble() rejects, so read the raw number. */
     private static long endsAtOf(PluginCall call) {
@@ -67,19 +69,32 @@ public class RestTimerPlugin extends Plugin {
         armedEndsAt = endsAt;
         armedTitle = call.getString("title", "Resting");
         armedBody = call.getString("body", "");
+        armedAlertTitle = call.getString("alertTitle", "Get ready");
+        armedAlertBody = call.getString("alertBody", "");
         Context ctx = getContext();
         RestAlarmReceiver.cancelShown(ctx);
-        RestAlarmReceiver.schedule(ctx, endsAt, call.getString("alertTitle", "Get ready"), call.getString("alertBody", ""));
+        RestAlarmReceiver.schedule(ctx, endsAt, armedAlertTitle, armedAlertBody); // backup if the service is stopped
         if (inForeground) RestCountdown.cancel(ctx);
-        else RestCountdown.post(ctx, armedEndsAt, armedTitle, armedBody);
+        else showOutside(ctx);
         call.resolve();
+    }
+
+    /** Out of the app mid-rest: the countdown, kept alive by the foreground service (plain notification if that's not allowed). */
+    private static void showOutside(Context ctx) {
+        if (armedEndsAt == 0) return;
+        if (!RestTimerService.start(ctx, armedEndsAt, armedTitle, armedBody, armedAlertTitle, armedAlertBody)) {
+            RestCountdown.post(ctx, armedEndsAt, armedTitle, armedBody);
+        }
     }
 
     /** The rest stopped. Skipped early: call off the alert too. Time's up: leave the alarm alone (it may run a little late). */
     @PluginMethod
     public void disarm(PluginCall call) {
         Context ctx = getContext();
-        if (armedEndsAt != 0 && armedEndsAt - System.currentTimeMillis() > 1000) RestAlarmReceiver.unschedule(ctx);
+        if (armedEndsAt != 0 && armedEndsAt - System.currentTimeMillis() > 1000) {
+            RestAlarmReceiver.unschedule(ctx);
+            RestTimerService.stop(ctx);
+        }
         armedEndsAt = 0;
         RestCountdown.cancel(ctx);
         call.resolve();
@@ -108,13 +123,14 @@ public class RestTimerPlugin extends Plugin {
     protected void handleOnPause() {
         super.handleOnPause();
         inForeground = false;
-        if (armedEndsAt != 0) RestCountdown.post(getContext(), armedEndsAt, armedTitle, armedBody);
+        showOutside(getContext());
     }
 
     @Override
     protected void handleOnResume() {
         super.handleOnResume();
         inForeground = true;
+        RestTimerService.stop(getContext());
         RestCountdown.cancel(getContext());
         RestAlarmReceiver.cancelShown(getContext()); // back in the app: the alert has done its job
         if (armedEndsAt != 0 && armedEndsAt <= System.currentTimeMillis()) armedEndsAt = 0;
@@ -143,18 +159,38 @@ public class RestTimerPlugin extends Plugin {
         }
         r.put("exact", exact);
         r.put("sdk", Build.VERSION.SDK_INT);
+        // Android 16 Live Updates allowed for the app (null where the phone doesn't have them)
+        if (Build.VERSION.SDK_INT >= 36 && m != null) {
+            try {
+                Object ok = NotificationManager.class.getMethod("canPostPromotedNotifications").invoke(m);
+                if (ok instanceof Boolean) r.put("liveUpdates", (boolean) (Boolean) ok);
+            } catch (Throwable ignored) {
+                // not on this build
+            }
+        }
         call.resolve(r);
     }
 
-    /** Open Android's notification settings for this app. */
+    /** Open Android's notification settings for this app ({ which: 'liveUpdates' } for the Live Updates screen). */
     @PluginMethod
     public void openSettings(PluginCall call) {
         Context ctx = getContext();
-        Intent i;
-        if (Build.VERSION.SDK_INT >= 26) {
+        Intent i = null;
+        if ("liveUpdates".equals(call.getString("which", "")) && Build.VERSION.SDK_INT >= 36) {
+            try {
+                Object action = Settings.class.getField("ACTION_MANAGE_APP_PROMOTED_NOTIFICATIONS").get(null);
+                if (action instanceof String) {
+                    i = new Intent((String) action);
+                    i.putExtra(Settings.EXTRA_APP_PACKAGE, ctx.getPackageName());
+                }
+            } catch (Throwable ignored) {
+                // not on this build: fall back to the app's notification settings
+            }
+        }
+        if (i == null && Build.VERSION.SDK_INT >= 26) {
             i = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS);
             i.putExtra(Settings.EXTRA_APP_PACKAGE, ctx.getPackageName());
-        } else {
+        } else if (i == null) {
             i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS);
             i.setData(Uri.fromParts("package", ctx.getPackageName(), null));
         }
