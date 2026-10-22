@@ -90,7 +90,7 @@
       <div class="group-row">
         <div class="grow">
           <div>{{ t('Barbell weight') }}</div>
-          <div class="t-tiny t-muted">{{ t('Used by the plate and warm-up tools') }}</div>
+          <div class="t-tiny t-muted">{{ t('Used by the plate and warm-up tools, and for barbell weight suggestions') }}</div>
         </div>
         <Stepper v-model="p.bar" :step="5" :min="0" :max="50" size="md" class="mini" @update:model-value="persist" />
       </div>
@@ -404,6 +404,7 @@ function onUnit (u) {
   const prof = state.data.profile
   prof.increments = { ...DEFAULT_INCREMENTS[u] }
   prof.bar = DEFAULT_BAR[u]
+  prof.plates = null // plate sizes are per unit
   if (prof.bodyweight) prof.bodyweight = Math.round(convertLoad(prof.bodyweight, u === 'kg' ? 'lb' : 'kg', u))
   persist()
 }

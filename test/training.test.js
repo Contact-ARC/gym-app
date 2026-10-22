@@ -2,6 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   estimate1RM, loadForReps, roundToIncrement, suggestNext, platesPerSide, warmupSets,
+  loadableAround, isLoadable, snapToPlates, platesFor,
   detectPRs, compareVersions, pickActiveRoutine, convertLoad, routineWeek
 } from '../src/lib/training.js'
 
@@ -26,6 +27,9 @@ test('e1RM: RIR counts as extra reps', () => {
 test('loadForReps inverts estimate1RM', () => {
   const e = estimate1RM(80, 8)
   assert.ok(Math.abs(loadForReps(e, 8) - 80) < 0.5)
+  for (const reps of [1, 3, 5, 8, 10, 12, 15]) {
+    for (const rir of [0, 2]) assert.ok(Math.abs(estimate1RM(loadForReps(100, reps, rir), reps, rir) - 100) <= 0.1)
+  }
 })
 
 test('rounding to increments', () => {
@@ -104,6 +108,35 @@ test('plates: 100 kg on a 20 kg bar', () => {
   const r = platesPerSide(100, 20, [25, 20, 15, 10, 5, 2.5, 1.25])
   assert.deepEqual(r.perSide, [25, 15])
   assert.equal(r.remainder, 0)
+})
+
+test('plates: picks the closest loadable total, even when it is heavier', () => {
+  // 25s and 20s only: 57.5 can't be loaded; 60 (a 20 each side) is 2.5 over, the bar alone is 37.5 under
+  const r = platesPerSide(57.5, 20, [25, 20])
+  assert.deepEqual(r.perSide, [20])
+  assert.equal(r.achieved, 60)
+  assert.equal(r.remainder, -2.5)
+  assert.equal(r.lighter, 20)
+})
+
+test('plates: finds exact loads a heaviest-first fill misses', () => {
+  // 20 a side with 15s and 10s is 10 + 10, not 15 and stuck
+  assert.deepEqual(platesPerSide(60, 20, [15, 10]).perSide, [10, 10])
+  assert.equal(platesPerSide(60, 20, [15, 10]).remainder, 0)
+})
+
+test('plates: fewest plates, heavier first, sorted', () => {
+  assert.deepEqual(platesPerSide(137.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25]).perSide, [25, 25, 5, 2.5, 1.25])
+  assert.deepEqual(platesPerSide(135, 45, [45, 35, 25, 10, 5, 2.5]).perSide, [45])
+})
+
+test('plates: just the bar, and the next option up', () => {
+  const r = platesPerSide(22.5, 20, [25, 20])
+  assert.deepEqual(r.perSide, [])
+  assert.equal(r.achieved, 20)
+  assert.equal(r.heavier, 60)
+  assert.equal(platesPerSide(20, 20, [25]).remainder, 0)
+  assert.ok(platesPerSide(15, 20, [25]).error)
 })
 
 test('plates: reports what is unreachable', () => {
@@ -241,4 +274,62 @@ test('next set: pins move one at a time; bodyweight and timed are left alone', (
   assert.equal(nextSetAdjust({ load: 6, reps: 8, rir: 0, repRange: [10, 12], inc: 1, unit: 'pin' }).load, 5)
   assert.equal(nextSetAdjust({ load: 0, reps: 8, rir: 4, repRange: [6, 8], inc: 2, unit: 'kg', logType: 'bodyweight' }), null)
   assert.equal(nextSetAdjust({ load: 20, reps: null, rir: null, repRange: null, inc: 2, unit: 'kg' }), null)
+})
+
+// ── Loading only what your plates allow ──
+const few = [25, 20] // a gym with only 25s and 20s: 20, 60, 70, 100, 110, 120, 140… on a 20 kg bar
+const barbellEx = { id: 'barbell-bench-press', logType: 'weight', incrementGroup: 'upper', equipment: ['barbell'] }
+const fewProfile = { ...profile, bar: 20, plates: few }
+
+test('loadable totals around a target', () => {
+  assert.deepEqual(loadableAround(57.5, 20, few), { below: 20, above: 60 })
+  assert.deepEqual(loadableAround(70, 20, few), { below: 70, above: 70 })
+  assert.deepEqual(loadableAround(15, 20, few), { below: null, above: 20 })
+  assert.ok(isLoadable(110, 20, few))
+  assert.ok(!isLoadable(90, 20, few))
+  assert.ok(!isLoadable(62.5, 20, few))
+  assert.equal(snapToPlates(64, 20, few), 60)
+  assert.equal(snapToPlates(65, 20, few), 60) // a tie goes lighter
+  assert.equal(snapToPlates(61, 20, few, 'up'), 70)
+  assert.deepEqual(platesFor({ unit: 'kg' }), [25, 20, 15, 10, 5, 2.5, 1.25])
+  assert.deepEqual(platesFor(fewProfile), few)
+})
+
+test('barbell suggestion goes up to the next weight you can load', () => {
+  const history = [{ date: '2026-10-01', sets: [{ load: 60, unit: 'kg', reps: 12 }, { load: 60, unit: 'kg', reps: 12 }, { load: 60, unit: 'kg', reps: 12 }] }]
+  const s = suggestNext({ item: { sets: 3, repRange: [8, 12] }, exercise: barbellEx, history, profile: fewProfile })
+  assert.equal(s.kind, 'up')
+  assert.equal(s.load, 70)
+  assert.match(s.text, /10 kg/)
+  // The full standard set still steps by 2.5
+  assert.equal(suggestNext({ item: { sets: 3, repRange: [8, 12] }, exercise: barbellEx, history, profile: { ...profile, bar: 20 } }).load, 62.5)
+})
+
+test('barbell deload lands on a loadable lighter weight', () => {
+  const history = [{ date: '2026-10-01', sets: [{ load: 100, unit: 'kg', reps: 8 }, { load: 100, unit: 'kg', reps: 8 }, { load: 100, unit: 'kg', reps: 8 }] }]
+  const s = suggestNext({ item: { sets: 3, repRange: [8, 12] }, exercise: barbellEx, history, profile: fewProfile, deload: true })
+  assert.equal(s.load, 70) // 90 can't be loaded; 70 is the next lighter weight that can
+  // Already on the empty bar: nothing lighter, so it stays
+  const h2 = [{ date: '2026-10-01', sets: [{ load: 20, unit: 'kg', reps: 8 }] }]
+  assert.equal(suggestNext({ item: { sets: 1, repRange: [8, 12] }, exercise: barbellEx, history: h2, profile: fewProfile, deload: true }).load, 20)
+})
+
+test('next-set advice on a barbell stays loadable and within its limits', () => {
+  const base = { reps: 8, repRange: [8, 12], targetRir: 2, inc: 2.5, unit: 'kg' }
+  // Easy set at 60: +5% is 63, nothing loadable in between → keep the weight
+  assert.equal(nextSetAdjust({ ...base, load: 60, rir: 4, bar: 20, plates: few }), null)
+  // Easy set at 100 with the full set: 105 is fine
+  assert.equal(nextSetAdjust({ ...base, load: 100, rir: 4, bar: 20, plates: [25, 20, 15, 10, 5, 2.5, 1.25] }).load, 105)
+  // Grinder at 120 with 25s/20s: −10% reaches 108, and 110 is loadable
+  const down = nextSetAdjust({ ...base, load: 120, reps: 6, rir: 0, bar: 20, plates: few })
+  assert.equal(down.load, 110)
+  // Grinder at 100: the next lighter is 70, past −10% → keep the weight
+  assert.equal(nextSetAdjust({ ...base, load: 100, reps: 6, rir: 0, bar: 20, plates: few }), null)
+  // Grinder at 60: the next lighter is the bar, far past −10% → keep the weight
+  assert.equal(nextSetAdjust({ ...base, load: 60, reps: 6, rir: 0, bar: 20, plates: few }), null)
+})
+
+test('barbell warm-ups only use loadable weights', () => {
+  const w = warmupSets(100, 2.5, 20, few)
+  assert.deepEqual(w.map(s => s.load), [20, 60, 70])
 })

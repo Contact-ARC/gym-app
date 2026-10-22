@@ -396,7 +396,7 @@ import {
 } from '../store.js'
 import { t, tn, tx } from '../i18n/index.js'
 import {
-  unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, DEFAULT_PLATES, nextSetAdjust
+  unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, platesFor, nextSetAdjust
 } from '../lib/training.js'
 import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle } from '../lib/format.js'
 import { effectiveRest, supersetNext } from '../lib/supersets.js'
@@ -628,7 +628,7 @@ const plateLine = computed(() => {
   if (!isBarbellLift(ex.value) || draft.value.load == null) return ''
   const bar = profile.value.bar || 0
   if (draft.value.load < bar) return t('Lighter than the {w} bar', { w: `${bar} ${unit.value}` })
-  const r = platesPerSide(draft.value.load, bar, DEFAULT_PLATES[unit.value] || [])
+  const r = platesPerSide(draft.value.load, bar, platesFor(profile.value))
   if (!r.perSide.length) return t('Just the bar')
   const extra = Math.abs(r.remainder) > 0.001 ? t(' (closest: {w})', { w: fmtLoad(r.achieved, unit.value) }) : ''
   return t('Each side: {plates}', { plates: r.perSide.join(' + ') }) + extra
@@ -639,8 +639,9 @@ const warmBase = computed(() => planLogged(current.value)[0]?.load ?? draft.valu
 const warmups = computed(() => {
   const w = warmBase.value
   if (!w) return []
-  const bar = isBarbellLift(ex.value) ? (profile.value.bar || 0) : 0
-  return warmupSets(w, inc.value, bar)
+  const onBar = isBarbellLift(ex.value)
+  const bar = onBar ? (profile.value.bar || 0) : 0
+  return warmupSets(w, inc.value, bar, onBar && bar > 0 ? platesFor(profile.value) : null)
 })
 const showWarmup = computed(() => {
   if (editingFinished.value || !item.value || !ex.value) return false
@@ -705,7 +706,9 @@ function logNow () {
     const adj = nextSetAdjust({
       load: row.load, reps: row.reps, rir: row.rir, repRange: it.repRange,
       targetRir: session.value.plan?.deload ? 3 : (session.value.plan?.rir ?? 2),
-      inc: inc.value, unit: unit.value, logType: ex.value?.logType
+      inc: inc.value, unit: unit.value, logType: ex.value?.logType,
+      // Barbell lifts: only weights you can load with your plates
+      ...(isBarbellLift(ex.value) ? { bar: profile.value.bar || 0, plates: platesFor(profile.value) } : {})
     })
     if (adj) {
       d.load = adj.load

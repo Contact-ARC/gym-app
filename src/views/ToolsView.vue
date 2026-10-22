@@ -82,12 +82,17 @@
           <div class="t-small t-muted">{{ t('On each side') }}</div>
           <div class="t-h2 t-num per-side">{{ plates.perSide.length ? plates.perSide.join(' + ') : t('Nothing, just the bar') }}</div>
           <div v-if="Math.abs(plates.remainder) > 0.001" class="note note-warn t-small">
-            {{ t('The closest you can load is {a}, which is {b} short.', { a: fmtLoad(plates.achieved, unit), b: `${plates.remainder} ${unit}` }) }}
+            {{ plates.remainder > 0
+              ? t('The closest you can load is {a}, which is {b} short.', { a: fmtLoad(plates.achieved, unit), b: fmtLoad(plates.remainder, unit) })
+              : t('The closest you can load is {a}, which is {b} over.', { a: fmtLoad(plates.achieved, unit), b: fmtLoad(-plates.remainder, unit) }) }}
+            <template v-if="plates.lighter != null">{{ t('Next lighter: {a}.', { a: fmtLoad(plates.lighter, unit) }) }}</template>
+            <template v-else-if="plates.heavier != null">{{ t('Next heavier: {a}.', { a: fmtLoad(plates.heavier, unit) }) }}</template>
           </div>
         </template>
       </div>
 
       <h2 class="section-h">{{ t('Plates your gym has') }}</h2>
+      <p class="t-tiny t-muted plates-note">{{ t('Saved on this phone. Barbell weight suggestions and warm-ups in your workouts only use weights you can load with these.') }}</p>
       <div class="plate-picks">
         <button
           v-for="p in allPlates" :key="p" class="pick t-num" :class="{ on: platesOn.includes(p) }"
@@ -129,10 +134,10 @@ import Icon from '../ui/Icon.vue'
 import Stepper from '../ui/Stepper.vue'
 import Segmented from '../ui/Segmented.vue'
 import { weightPlateColors } from '../ui/plates.js'
-import { state } from '../store.js'
+import { state, persist } from '../store.js'
 import { t } from '../i18n/index.js'
 import {
-  estimate1RM, loadForReps, roundToIncrement, fmtLoad, platesPerSide, warmupSets, DEFAULT_PLATES, DEFAULT_BAR
+  estimate1RM, loadForReps, roundToIncrement, fmtLoad, platesPerSide, warmupSets, platesFor, DEFAULT_PLATES, DEFAULT_BAR
 } from '../lib/training.js'
 
 const tabs = computed(() => [{ label: t('Effort'), value: 'effort' }, { label: t('Plates'), value: 'plates' }, { label: t('Warm-up'), value: 'warmup' }])
@@ -164,10 +169,16 @@ const barOptions = computed(() => (unit.value === 'kg'
   ? [{ label: '20 kg', value: 20 }, { label: '15 kg', value: 15 }, { label: '10 kg', value: 10 }]
   : [{ label: '45 lb', value: 45 }, { label: '35 lb', value: 35 }, { label: '25 lb', value: 25 }]))
 const allPlates = computed(() => DEFAULT_PLATES[unit.value])
-const platesOn = ref([...DEFAULT_PLATES[unit.value]])
-watch(unit, (u) => { platesOn.value = [...DEFAULT_PLATES[u]]; bar.value = DEFAULT_BAR[u] })
+// Your plates are saved (profile.plates) and used for barbell suggestions in workouts too
+const platesOn = computed(() => platesFor(state.data.profile))
+watch(unit, (u) => { bar.value = DEFAULT_BAR[u] })
 function togglePlate (p) {
-  platesOn.value = platesOn.value.includes(p) ? platesOn.value.filter(x => x !== p) : [...platesOn.value, p]
+  const on = platesOn.value.includes(p) ? platesOn.value.filter(x => x !== p) : [...platesOn.value, p]
+  if (!on.length) return // keep at least one
+  const std = DEFAULT_PLATES[unit.value]
+  const sorted = on.sort((a, b) => b - a)
+  state.data.profile.plates = sorted.length === std.length && sorted.every(x => std.includes(x)) ? null : sorted
+  persist()
 }
 const plates = computed(() => platesPerSide(plateTarget.value, bar.value || 0, platesOn.value))
 const maxPlate = computed(() => Math.max(...allPlates.value))
@@ -181,7 +192,10 @@ function plateCss (p) {
 const working = ref(null)
 const warmBar = ref(true)
 const warmups = computed(() =>
-  warmupSets(working.value, incs.value[warmBar.value ? 'upper' : 'dumbbell'], warmBar.value ? (state.data.profile.bar || 0) : 0)
+  warmupSets(
+    working.value, incs.value[warmBar.value ? 'upper' : 'dumbbell'], warmBar.value ? (state.data.profile.bar || 0) : 0,
+    warmBar.value && state.data.profile.bar ? platesFor(state.data.profile) : null
+  )
 )
 </script>
 
@@ -207,6 +221,7 @@ const warmups = computed(() =>
 
 /* Barbell drawing: sleeve, collar, then plates in IWF colours */
 .plates-card { margin-top: 12px; }
+.plates-note { margin: -4px 4px 10px; }
 .bar-viz { display: flex; align-items: center; height: 130px; margin-bottom: 12px; }
 .sleeve { width: 54px; height: 12px; border-radius: 3px 0 0 3px; background: #A6AEB8; }
 .collar { width: 10px; height: 34px; border-radius: 3px; background: #7F8894; margin-right: 3px; }

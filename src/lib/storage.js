@@ -22,7 +22,8 @@ export function emptyData () {
       theme: 'system',
       level: 'standard', // standard | beginner (routine track)
       heightCm: null,
-      sex: null // null | male | female: only for the body-fat estimate and DOTS
+      sex: null, // null | male | female: only for the body-fat estimate and DOTS
+      plates: null // plates your gym has (Tools → Plates), in your unit; null = the standard set
     },
     settings: {
       routinesUrl: null, // null = use DEFAULT_ROUTINES_URL from config.js
