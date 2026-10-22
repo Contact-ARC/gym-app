@@ -24,6 +24,7 @@ so a new month never needs a new APK. Workout history lives only on each phone.
 - **v0.4, motivation**: week streaks (2+ workouts a week), month report (shown once when a new month starts, and in Progress → Reports), share images for a workout or a month, rep records and longest holds, bodyweight + measurements + private progress photos, hard sets per muscle against a 10–20 target (changeable), calendar in History
 - **v0.5, your routines**: adjust any of the month's days (add, swap, remove or reorder exercises; change sets, reps, rest, notes, supersets). Changes are stored as a short edit list on top of the repo's day, so next month's version of the day gets them too; if the repo turns the day into a different workout you're asked whether to save the old one as yours, keep what still fits, or drop the changes. "Keep these changes?" after a workout where you swapped, added or changed sets (just today, always, or save as mine)
 - **v0.5, My routines**: your own days and saved copies (save any day or the whole month as yours). Use a routine alongside the month's days or instead of them, for this month, a set number of weeks, or every month; when its time is up it goes back to My routines. Restoring the repo's routine never deletes anything. Your own exercises (name, how you log it, muscles, optional photo) for anything not in the library
+- **v0.6, the crew grows up**: notifications through Firebase (workouts, records, training now, comments, reactions, nudges, challenges and badges, Sunday recap; each switchable, each its own Android channel), comments and four reactions on posts, leaderboards for this week / this month / all time (workouts, sets, volume, records, best streak) and a lifts board (squat, bench, deadlift, total, opt-in DOTS), member profiles with badges and a head-to-head chart, every set of a workout with "save it to My routines", share your own routines, team and head-to-head crew challenges settled automatically, "training now", nudges, and a crew owner who can remove people
 - **v0.5.1**: the next set's weight adapts to the last one (reps left in the tank against the plan's target, and reps against the routine's range); rest countdown that pops up only when you leave the app mid-rest (Android's chronometer ticks it, it's posted natively on pause, comes back if swiped away while time is left, and asks to be a Live Update on Android 16) and a "Get ready: <next set>" pop-up when it ends, fired on time by a foreground service that runs only while you're out of the app mid-rest (RestTimerService; phones like OnePlus freeze background apps otherwise), with an exact alarm as backup (RestAlarmReceiver); skipped if you're in the app, which chimes instead; louder, longer rest chime with a Soft/Loud choice
 - **v0.5, body and goals**: height and optional sex, body fat entered or estimated from waist/neck/hips (US Navy formula), lean mass, FFMI and BMI. Goals for lifts (estimated max or actually lifted), reps, holds, bodyweight multiples, powerlifting total, DOTS, bodyweight, body fat, waist, lean mass and workouts per week (which also sets your streak from then on), with suggested targets, pace for weight goals, and up to two pinned on Train. Powerlifting card in Progress (squat, bench, deadlift, total, DOTS, bodyweight multiples)
 
@@ -104,9 +105,50 @@ Notes:
   (same page, "Legacy API keys" tab). Both work with the same SQL.
 - Free Supabase projects pause after about a week with no activity. If that happens, press Restore in the
   dashboard. The app queues posts while it can't reach the board and sends them later.
-- Shared: display name, workouts (day, length, sets, volume, records) and weekly totals. Never shared:
-  notes, body weight, measurements, photos. Anyone can turn off posting to the feed, or leave the crew
+- Shared: display name, workouts (day, length, every set's weight and reps unless "Show every set" is off,
+  records), totals for the week, month and all time, best lifts and badges, and routines you choose to share.
+  Never shared: notes, body weight, measurements, photos (DOTS only if you turn it on). Anyone can turn off posting to the feed, or leave the crew
   (which deletes their posts).
+
+## Crew notifications (optional, one person does this once)
+Notifications go through Firebase Cloud Messaging (free). Without this setup the app still works; the
+notification settings in Crew just say they aren't set up.
+
+**Firebase (console.firebase.google.com)**
+1. Add project → name it (e.g. Gym Crew) → Google Analytics off → Create.
+2. Project overview → Add app → **Android** → package name `com.gymcrew.app` → Register app →
+   **Download google-services.json** → skip the remaining steps.
+3. ⚙ Project settings → **Service accounts** → **Generate new private key** → saves a `…-firebase-adminsdk-….json`.
+   This one is a secret: keep it out of the repo.
+4. ⚙ Project settings → **Cloud Messaging**: "Firebase Cloud Messaging API (V1)" should say Enabled.
+
+**GitHub (so the APK is built with Firebase)**
+```powershell
+Get-Content .\google-services.json -Raw | gh secret set GOOGLE_SERVICES_JSON
+```
+(The CI writes it to `android/app/google-services.json`; that path is git-ignored.)
+
+**Supabase**
+1. SQL Editor → run the latest [`supabase/crew.sql`](supabase/crew.sql) again (safe to re-run).
+2. Edge Functions → Deploy a new function → **Via editor** → name `crew-push` → paste
+   [`supabase/functions/crew-push/index.ts`](supabase/functions/crew-push/index.ts) → Deploy.
+3. Open `crew-push` → its settings → turn **off** "Verify JWT with legacy secret" / "Enforce JWT verification" → Save.
+   (The database calls it without a key; the function only sends what the database says really happened, once.)
+4. Edge Functions → **Secrets** → add `FCM_SERVICE_ACCOUNT` = the whole contents of the service-account JSON from Firebase step 3.
+5. SQL Editor → tell the database where the function is (use your project's address):
+   ```sql
+   insert into public.crew_settings (key, value)
+   values ('push_url', 'https://<project-ref>.supabase.co/functions/v1/crew-push')
+   on conflict (key) do update set value = excluded.value;
+   ```
+6. Integrations → **Cron** should list `crew-settle` (nightly: closes crew challenges) and `crew-recap` (Sunday evening).
+   If Cron isn't enabled, enable it there and run `crew.sql` once more.
+
+Then release the app. In Crew → ⋯ → Notifications, each person turns them on and picks which kinds they want
+(workouts, records, training now, comments, reactions, nudges, challenges and badges, weekly recap).
+Each kind is also its own Android notification channel.
+
+If notifications don't arrive: Edge Functions → crew-push → **Logs** shows Firebase's answer for every send.
 
 ## Installing on a phone
 1. On the phone, open GitHub in Chrome, signed in to the account, → `gym-app` → Releases → download the APK.

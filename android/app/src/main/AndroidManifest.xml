@@ -45,6 +45,17 @@
                 android:value="Rest timer between gym sets: shows the time left and alerts when the next set is due" />
         </service>
 
+        <!-- Crew notifications (Firebase): the dumbbell in the status bar, in the app's blue -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_rest" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/crew_push" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="crew_workouts" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

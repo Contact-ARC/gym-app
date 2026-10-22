@@ -41,7 +41,15 @@ const EXTRA = [
   'Bench 100 kg, squat 140 kg for 5…', '10 pull-ups, 30 push-ups…', 'A 2-minute plank, a longer carry…', 'Squat twice your bodyweight…',
   'Squat + bench + deadlift', 'Compares lifters of different bodyweights', 'Gain or lose, with a 7-day average', 'Entered or estimated from measurements',
   'From your measurements', 'Weight without fat: build muscle', 'Also sets what keeps your streak going',
-  'Crew codes are 6 letters or numbers.', 'Pick a name between 1 and 30 characters.', "This phone isn't in that crew any more.", 'That was too much data to send.'
+  'Crew codes are 6 letters or numbers.', 'Pick a name between 1 and 30 characters.', "This phone isn't in that crew any more.", 'That was too much data to send.',
+  // 0.6: crew errors, notification kinds, leaderboard metrics and reactions shown through a variable
+  "Only the crew's owner can do that.", 'You already nudged them this week.', 'They already trained this week.',
+  'There are already as many as the crew can have. Remove one first.', 'Comments are 1 to 500 characters.',
+  'Check the challenge: it needs a name, and a target for a team challenge.', "That isn't on the board any more.", "You can't do that to yourself.",
+  'Workouts', 'When someone finishes a workout', 'Records', 'When someone breaks a record, even with workouts off', 'Training now',
+  'When someone starts a workout', 'Comments', 'On your posts, and replies where you commented', 'Reactions', 'High fives and emojis on your posts',
+  'Nudges', 'When someone nudges you to train', 'Challenges and badges', 'New crew challenges, results, badges, the monthly challenge',
+  'Weekly recap', 'Sunday evening: how the week went', 'Sets', 'Volume', 'Best streak', 'High five', 'Fire', 'Strong', 'Funny'
 ]
 for (const k of EXTRA) keys.add(k)
 // Template placeholders like `${…}` aren't keys

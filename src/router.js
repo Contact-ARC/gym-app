@@ -19,6 +19,8 @@ export default createRouter({
     { path: '/body', name: 'body', component: () => import('./views/BodyView.vue'), meta: { tab: 'progress' } },
     { path: '/report/:month?', name: 'report', component: () => import('./views/ReportView.vue'), meta: { tab: 'progress' } },
     { path: '/crew', name: 'crew', component: () => import('./views/CrewView.vue'), meta: { tab: 'crew' } },
+    { path: '/crew/post/:id', name: 'crew-post', component: () => import('./views/CrewPostView.vue'), meta: { tab: 'crew' } },
+    { path: '/crew/member/:id', name: 'crew-member', component: () => import('./views/CrewMemberView.vue'), meta: { tab: 'crew' } },
     { path: '/tools', name: 'tools', component: () => import('./views/ToolsView.vue'), meta: { tab: 'tools' } },
     { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue'), meta: { tab: 'home' } },
     { path: '/:pathMatch(.*)*', redirect: '/' }

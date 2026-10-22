@@ -7,6 +7,7 @@
     </div>
     <h1 class="t-title">{{ plan.name || t('Untitled') }}</h1>
     <p v-if="fromLine" class="t-small t-muted sub">{{ fromLine }}</p>
+    <p v-if="plan.crewShare && inCrew" class="t-small t-muted sub shared"><Icon name="crew" :size="16" /> {{ t('Shared with the crew') }}</p>
 
     <!-- In use? -->
     <div class="card card-pad status" :class="{ on: active }">
@@ -69,6 +70,13 @@
       <div class="group">
         <button class="group-row" @click="menuOpen = false; openRename()"><Icon name="edit" /><span class="grow">{{ t('Rename') }}</span></button>
         <button class="group-row" @click="duplicate"><Icon name="copy" /><span class="grow">{{ t('Duplicate') }}</span></button>
+        <button v-if="inCrew" class="group-row" @click="toggleShare">
+          <Icon name="crew" />
+          <span class="grow">
+            <span class="block">{{ plan.crewShare ? t('Stop sharing with the crew') : t('Share with the crew') }}</span>
+            <span class="t-tiny t-muted block">{{ plan.crewShare ? t('The crew can see and copy it now. Changes you make are shared too.') : t('The crew can see it and copy it to their own routines.') }}</span>
+          </span>
+        </button>
         <button class="group-row t-err" @click="menuOpen = false; delOpen = true"><Icon name="trash" /><span class="grow">{{ t('Delete this routine') }}</span></button>
       </div>
     </Sheet>
@@ -110,6 +118,7 @@ import {
 import { planKey, estimateMinutes, addDaysKey } from '../lib/routines.js'
 import { dayTitle, planStatus, monthName, shortDay } from '../lib/format.js'
 import { t, tn, tx } from '../i18n/index.js'
+import { inCrew, setPlanShared } from '../lib/crew.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -120,6 +129,7 @@ const plateIndex = (d, i) => { const k = dayIndexOf(keyOf(d)); return k >= 0 ? k
 
 const fromLine = computed(() => {
   const f = plan.value?.from
+  if (f?.kind === 'crew' && f.member) return t('Copied from {name} in the crew', { name: f.member })
   if (!f?.month) return ''
   if (f.kind === 'month') return t('Copy of the {month} routine', { month: monthName(f.month, { month: 'long', year: 'numeric' }) })
   if (f.kind === 'day') return t('Saved from day {id}, {month}', { id: f.dayId, month: monthName(f.month, { month: 'long', year: 'numeric' }) })
@@ -177,6 +187,13 @@ function duplicate () {
   if (p) { toast(t('Copy saved')); router.replace(`/plan/${p.id}`) }
 }
 const delOpen = ref(false)
+async function toggleShare () {
+  const on = !plan.value.crewShare
+  menuOpen.value = false
+  await setPlanShared(plan.value, on)
+  toast(on ? t('Shared with the crew') : t('No longer shared'))
+}
+
 function del () {
   const name = plan.value.name
   deletePlan(plan.value.id)
@@ -188,6 +205,8 @@ function del () {
 
 <style scoped>
 .sub { margin-top: 6px; }
+.shared { display: flex; align-items: center; gap: 6px; }
+.block { display: block; }
 .status { margin-top: 16px; }
 .status .row { gap: 12px; }
 .mine-ic { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--card-2); color: var(--ink-2); flex: 0 0 auto; }

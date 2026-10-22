@@ -60,7 +60,15 @@ export function emptyData () {
     reportsSeen: {}, // { [month]: true } month reports already shown
     restState: null, // { endsAt, total, label } while a rest timer runs
     updateSeen: null, // app version whose "ready to download" popup was already shown
-    crew: { code: null, name: '', memberId: null, key: null, shareFeed: true, queue: [], lastSync: null, url: null, anonKey: null },
+    crew: {
+      code: null, name: '', memberId: null, key: null, shareFeed: true, queue: [], lastSync: null, url: null, anonKey: null,
+      // 0.6
+      shareDetails: true, // every set's weight and reps in your posts
+      showDots: false, // your DOTS on the lifts board (it hints at your bodyweight)
+      push: { enabled: false, token: null, prefs: {} }, // notifications: prefs fill in from PUSH_DEFAULTS
+      badges: null, // { [badgeId]: date earned }; null until first worked out (those are recorded quietly)
+      sharedPlans: {} // { [planId]: what was last sent } for plans shared with the crew
+    },
     // v0.5
     customExercises: [], // your own exercises: { id: 'my-…', name, primary, secondary, logType, loadUnit, incrementGroup, perSide, images, hidden }
     routineEdits: {}, // { [dayId]: { baseMonth, base: <repo day when you changed it>, ops: [], pending, updatedAt } }
@@ -86,7 +94,7 @@ export function migrate (data) {
     body: { entries: [...(data.body?.entries || [])], photos: [...(data.body?.photos || [])] },
     challenges: { ...(data.challenges || {}) },
     reportsSeen: { ...(data.reportsSeen || {}) },
-    crew: { ...base.crew, ...(data.crew || {}), queue: [...(data.crew?.queue || [])] },
+    crew: { ...base.crew, ...(data.crew || {}), queue: [...(data.crew?.queue || [])], push: { ...base.crew.push, ...(data.crew?.push || {}) }, sharedPlans: { ...(data.crew?.sharedPlans || {}) } },
     customExercises: [...(data.customExercises || [])],
     routineEdits: { ...(data.routineEdits || {}) },
     plans: [...(data.plans || [])],

@@ -53,6 +53,20 @@ jobs:
           npm run build
           npx cap sync android
 
+      # Crew notifications: Firebase's config file comes from a secret (see README → Crew notifications).
+      # Without it the APK still builds; the app just says notifications aren't set up.
+      - name: Add Firebase config
+        env:
+          GSJ: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GSJ" ]; then
+            printf '%s' "$GSJ" > android/app/google-services.json
+            node -e "const j=require('./android/app/google-services.json'); if(!j.client?.some(c=>c.client_info?.android_client_info?.package_name==='com.gymcrew.app')) { console.error('::error::google-services.json has no Android app with package com.gymcrew.app'); process.exit(1) }"
+            echo "Firebase config added"
+          else
+            echo "::warning::GOOGLE_SERVICES_JSON secret not set: this APK won't have crew notifications"
+          fi
+
       - name: Version info
         id: ver
         run: |

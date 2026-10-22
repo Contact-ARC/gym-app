@@ -17,6 +17,7 @@ import { initStore, state, nextDay, activeSession, startSession, persist, autoRe
 import { closeTopOverlay } from './ui/overlay.js'
 import { t, tn, setLang, deviceLang } from './i18n/index.js'
 import { initCrew } from './lib/crew.js'
+import { initPush } from './lib/push.js'
 import { initAutoBackup } from './lib/backup.js'
 import { resumeRest } from './lib/restTimer.js'
 import { ensureDoneChannel, cancelRestNotification } from './lib/native.js'
@@ -31,6 +32,7 @@ initStore().then(() => {
   installErrorHandlers(app)
   app.mount('#app')
   initCrew()
+  initPush(router).catch(() => {}) // crew notifications (listeners first, so a tap that opened the app lands)
   initAutoBackup()
   resumeRest()
   ensureDoneChannel() // the "Get ready" channel, with its name in the app's language

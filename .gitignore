@@ -8,6 +8,8 @@ dist/
 *.jks
 *.keystore
 *.b64
+# Firebase config: added by CI from the GOOGLE_SERVICES_JSON secret
+android/app/google-services.json
 
 .DS_Store
 .idea/

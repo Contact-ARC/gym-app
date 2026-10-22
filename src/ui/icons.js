@@ -74,5 +74,16 @@ export {
   mdiPinOutline as pinOff,
   mdiPlaylistEdit as adjust,
   mdiWeightLifter as lifter,
-  mdiCheckCircleOutline as doneCircle
+  mdiCheckCircleOutline as doneCircle,
+  mdiCommentOutline as comment,
+  mdiSend as send,
+  mdiMedalOutline as medal,
+  mdiHandWave as wave,
+  mdiRecordCircleOutline as live,
+  mdiScaleBalance as compare,
+  mdiAccountRemoveOutline as removeUser,
+  mdiFlagCheckered as finish,
+  mdiAccountGroupOutline as team,
+  mdiSwordCross as versus,
+  mdiAccountOutline as person
 } from '@mdi/js'

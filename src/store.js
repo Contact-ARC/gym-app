@@ -50,10 +50,13 @@ export function persist () {
   }
 }
 
-// Other modules (crew feed, automatic backups) react to finished or deleted workouts
-const hooks = { finished: [], deleted: [] }
+// Other modules (crew feed, automatic backups) react to workouts starting, finishing or being deleted
+const hooks = { finished: [], deleted: [], started: [], discarded: [] }
 export function onSessionFinished (fn) { hooks.finished.push(fn) }
 export function onSessionDeleted (fn) { hooks.deleted.push(fn) }
+/** A workout started, or one in progress was thrown away (crew: "training now"). */
+export function onSessionStarted (fn) { hooks.started.push(fn) }
+export function onSessionDiscarded (fn) { hooks.discarded.push(fn) }
 function emit (kind, payload) {
   for (const fn of hooks[kind]) { try { fn(payload) } catch (e) { console.warn(kind, 'hook failed', e) } }
 }
@@ -373,6 +376,7 @@ export function startSession (keyOrIndex) {
   state.data.sessions.push(session)
   state.data.activeSessionId = session.id
   persist()
+  emit('started', { session })
   return session.id
 }
 
@@ -395,6 +399,7 @@ export function startFreeSession (name = t('Free session')) {
   state.data.sessions.push(session)
   state.data.activeSessionId = session.id
   persist()
+  emit('started', { session })
   return session.id
 }
 
@@ -489,9 +494,11 @@ export function markSessionEdited (sessionId) {
 }
 
 export function discardSession (sessionId) {
+  const wasActive = state.data.activeSessionId === sessionId
   state.data.sessions = toRaw(state.data.sessions).filter(s => s.id !== sessionId)
-  if (state.data.activeSessionId === sessionId) state.data.activeSessionId = null
+  if (wasActive) state.data.activeSessionId = null
   persist()
+  if (wasActive) emit('discarded', { sessionId })
 }
 
 export function deleteSession (sessionId) {
@@ -779,6 +786,34 @@ export function deletePlan (planId) {
   state.data.plans = plain(state.data.plans).filter(p => p.id !== planId)
   state.data.planNotices = state.data.planNotices.filter(id => id !== planId)
   persist()
+}
+
+/**
+ * A plan (or one workout) copied from a crewmate. Their own exercises come too; if you already have one
+ * with the same id but it's a different exercise, theirs gets a new id.
+ * @param {{ name, days: [{ label, name, items }], customs?: object[], from?: object }} p
+ */
+export function importCrewPlan ({ name, notes = '', days, customs = [], from = null }) {
+  const map = {}
+  const mine = state.data.customExercises
+  for (const c of customs || []) {
+    if (!c?.id || !c.name) continue
+    const have = mine.find(e => e.id === c.id)
+    if (have && have.name.trim().toLowerCase() === c.name.trim().toLowerCase()) {
+      if (have.hidden) have.hidden = false
+      continue
+    }
+    if (exercisesById.value[c.id] && !have) continue // it's in the library after all
+    const id = have ? 'my-' + rid() : c.id
+    map[c.id] = id
+    mine.push({ ...plain(c), id, from: 'crew' })
+  }
+  const plan = planFromDays(name, days.map(d => ({
+    ...d,
+    items: (d.items || []).filter(it => it?.exerciseId).map(it => ({ ...it, exerciseId: map[it.exerciseId] || it.exerciseId }))
+  })), from)
+  if (notes) plan.notes = notes
+  return addPlan(plan)
 }
 
 export function duplicatePlan (planId, name) {

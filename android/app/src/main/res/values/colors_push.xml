@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Accent for crew notifications (plate blue) -->
+    <color name="crew_push">#2457B5</color>
+</resources>
