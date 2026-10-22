@@ -8,6 +8,7 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Build;
 
 /**
@@ -36,22 +37,52 @@ public class RestAlarmReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context ctx, Intent intent) {
         if (intent == null || !ACTION_REST_OVER.equals(intent.getAction())) return;
-        fire(ctx, intent.getLongExtra(EXTRA_ENDS_AT, 0L), intent.getStringExtra(EXTRA_TITLE), intent.getStringExtra(EXTRA_BODY));
+        fire(ctx, intent.getLongExtra(EXTRA_ENDS_AT, 0L), intent.getStringExtra(EXTRA_TITLE), intent.getStringExtra(EXTRA_BODY), "alarm");
     }
 
     /**
      * The rest that ends at `endsAt` is over: swap the countdown for the alert, once.
      * Called by RestTimerService on time, and by the alarm as a backup.
      */
-    static synchronized void fire(Context ctx, long endsAt, String title, String body) {
+    static synchronized void fire(Context ctx, long endsAt, String title, String body, String by) {
         if (endsAt != 0 && endsAt == firedFor) return;
         // A newer rest replaced this one (its own timing will fire), or you're in the app (it chimes itself)
         long armed = RestTimerPlugin.armedEndsAt;
-        if (armed != 0 && armed != endsAt) return;
+        if (armed != 0 && armed != endsAt) { remember(ctx, endsAt, by, "newer rest"); return; }
         RestCountdown.cancel(ctx);
-        if (RestTimerPlugin.inForeground) return;
+        if (RestTimerPlugin.inForeground) { remember(ctx, endsAt, by, "in the app"); return; }
         firedFor = endsAt;
         post(ctx, title != null ? title : "Get ready", body != null ? body : "");
+        remember(ctx, endsAt, by, "shown");
+    }
+
+    /** The last few alerts, for the bug report: when the rest ended, how late the alert was, what fired it, what happened. */
+    static void remember(Context ctx, long endsAt, String by, String result) {
+        try {
+            SharedPreferences p = ctx.getSharedPreferences("rest_diag", Context.MODE_PRIVATE);
+            long late = endsAt > 0 ? System.currentTimeMillis() - endsAt : 0;
+            String line = by + " " + result + " " + (late >= 0 ? "+" : "") + (late / 1000.0) + "s"
+                + (RestTimerService.running ? " fg" : "") + " @" + (endsAt / 1000);
+            String old = p.getString("log", "");
+            String log = (line + "\n" + old);
+            String[] lines = log.split("\n");
+            StringBuilder keep = new StringBuilder();
+            for (int i = 0; i < Math.min(lines.length, 6); i++) {
+                if (i > 0) keep.append("\n");
+                keep.append(lines[i]);
+            }
+            p.edit().putString("log", keep.toString()).apply();
+        } catch (Exception e) {
+            // diagnostics only
+        }
+    }
+
+    static String recent(Context ctx) {
+        try {
+            return ctx.getSharedPreferences("rest_diag", Context.MODE_PRIVATE).getString("log", "");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     static void ensureChannel(Context ctx) {

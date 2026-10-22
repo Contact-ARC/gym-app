@@ -129,7 +129,7 @@ export async function notificationStatus () {
   try { st = await RestTimer.status() } catch (e) { st = { error: String(e?.message || e) } }
   const off = (imp) => imp === 0
   const ok = permission === 'granted' && st.enabled !== false && !off(st.countdownChannel) && !off(st.readyChannel)
-  return { ok, permission, countdown: st.countdownChannel, ready: st.readyChannel, exact: st.exact, sdk: st.sdk, liveUpdates: st.liveUpdates ?? null, error: st.error }
+  return { ok, permission, countdown: st.countdownChannel, ready: st.readyChannel, exact: st.exact, sdk: st.sdk, liveUpdates: st.liveUpdates ?? null, alerts: st.alerts || undefined, error: st.error }
 }
 
 /** Android's notification settings for this app (to switch them back on). which: 'liveUpdates' for that screen. */

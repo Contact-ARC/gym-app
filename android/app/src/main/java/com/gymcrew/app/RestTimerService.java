@@ -10,6 +10,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
 
 /**
  * Keeps the app awake while you're out of it mid-rest, so the "Get ready" alert fires on time.
@@ -40,6 +41,9 @@ public class RestTimerService extends Service {
     static volatile boolean running = false;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
+    // Keeps the CPU awake until the rest is over. Without it, a locked phone goes to sleep and the
+    // Handler (which counts "awake time") stops: the countdown froze and the alert came late or not at all.
+    private PowerManager.WakeLock wake = null;
     private long endsAt = 0;
     private String title = "";
     private String body = "";
@@ -110,8 +114,32 @@ public class RestTimerService extends Service {
             return START_NOT_STICKY;
         }
         running = true;
+        holdAwake(endsAt - System.currentTimeMillis() + 15000);
         scheduleTick();
         return START_NOT_STICKY;
+    }
+
+    /** Stay awake for `ms` (capped at 20 minutes, the longest rest the app allows plus room). */
+    private void holdAwake(long ms) {
+        try {
+            if (wake == null) {
+                PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
+                if (pm == null) return;
+                wake = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "GymCrew:rest");
+                wake.setReferenceCounted(false);
+            }
+            wake.acquire(Math.max(1000L, Math.min(ms, 20 * 60 * 1000L)));
+        } catch (Exception e) {
+            // No wake lock: the exact alarm still covers the alert
+        }
+    }
+
+    private void letSleep() {
+        try {
+            if (wake != null && wake.isHeld()) wake.release();
+        } catch (Exception e) {
+            // already released
+        }
     }
 
     /** Next update right when the shown second changes. */
@@ -144,7 +172,7 @@ public class RestTimerService extends Service {
     /** Time's up: the "Get ready" alert, and the Live Update turns into "Go!" for a while. */
     private void finish() {
         handler.removeCallbacks(tick);
-        RestAlarmReceiver.fire(this, endsAt, alertTitle, alertBody);
+        RestAlarmReceiver.fire(this, endsAt, alertTitle, alertBody, "timer");
         NotificationManager m = RestCountdown.manager(this);
         try {
             if (m != null) m.notify(RestCountdown.NOTIFICATION_ID, RestCountdown.buildDone(this, endsAt, doneTitle, title));
@@ -152,6 +180,7 @@ public class RestTimerService extends Service {
             // Notifications turned off meanwhile
         }
         handler.postDelayed(end, DONE_KEEP_MS);
+        letSleep(); // the alert is out; "Go!" doesn't need the CPU
     }
 
     private void removeNotification() {
@@ -163,6 +192,7 @@ public class RestTimerService extends Service {
     @Override
     public void onDestroy() {
         running = false;
+        letSleep();
         handler.removeCallbacks(tick);
         handler.removeCallbacks(end);
         removeNotification();

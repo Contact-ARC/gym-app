@@ -161,6 +161,8 @@ public class RestTimerPlugin extends Plugin {
         }
         r.put("exact", exact);
         r.put("sdk", Build.VERSION.SDK_INT);
+        // The last few "Get ready" alerts (who fired them, how late, what happened)
+        r.put("alerts", RestAlarmReceiver.recent(getContext()));
         // Android 16 Live Updates allowed for the app (null where the phone doesn't have them)
         if (Build.VERSION.SDK_INT >= 36 && m != null) {
             try {

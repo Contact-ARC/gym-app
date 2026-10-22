@@ -74,6 +74,8 @@
     <!-- Android 16: lets the rest countdown show as a Live Update (time in a status-bar chip) where supported -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <!-- The rest timer's foreground service (see RestTimerService) -->
+    <!-- Keeps the rest timer running while the phone is locked (only during a rest, out of the app) -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <!-- Automatic backups to Documents/GymCrew. Only needed on Android 9 and older;
