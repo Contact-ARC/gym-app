@@ -67,10 +67,30 @@ final class RestCountdown {
         }
     }
 
-    /** The countdown notification, or null once the time is up. Also used by RestTimerService. */
+    /** The countdown notification, or null once the time is up. */
     static Notification build(Context ctx, long endsAt, String title, String body) {
+        return build(ctx, endsAt, title, body, false);
+    }
+
+    /** Seconds left as m:ss, rounded up (so it reads 0:01 until the very end, like the app's timer). */
+    static String clock(long leftMs) {
+        long s = Math.max(0L, (leftMs + 999) / 1000);
+        long sec = s % 60;
+        return (s / 60) + ":" + (sec < 10 ? "0" : "") + sec;
+    }
+
+    /**
+     * The countdown notification, or null once the time is up.
+     *
+     * live = false: Android counts down by itself (a chronometer), title "Next: …". Used when nothing in the
+     *   app can update it (the plain fallback, and putting it back after a swipe).
+     * live = true: RestTimerService re-posts it every second with the time left as the title and as the
+     *   Live Update's short text, so the status-bar pill / OnePlus Live Alert reads just "1:23";
+     *   "Next: …" moves to the line below, which you see when you open it.
+     */
+    static Notification build(Context ctx, long endsAt, String title, String body, boolean live) {
         long left = endsAt - System.currentTimeMillis();
-        if (left <= 1000) return null;
+        if (left <= (live ? 0 : 1000)) return null;
         if (title == null) title = "Resting";
         if (body == null) body = "";
         ensureChannel(ctx);
@@ -95,23 +115,91 @@ final class RestCountdown {
             ? new Notification.Builder(ctx, CHANNEL_ID)
             : new Notification.Builder(ctx);
         b.setSmallIcon(R.drawable.ic_stat_rest)
-            .setContentTitle(title)
-            .setContentText(body)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .setShowWhen(true)
-            .setWhen(endsAt)
-            .setUsesChronometer(true)
-            .setChronometerCountDown(true)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setColor(0xFF2457B5)
+            .setDeleteIntent(onDismiss);
+        if (live) {
+            String time = clock(left);
+            b.setContentTitle(time)
+                .setContentText(title)
+                .setShowWhen(false);
+        } else {
+            b.setContentTitle(title)
+                .setContentText(body)
+                .setShowWhen(true)
+                .setWhen(endsAt)
+                .setUsesChronometer(true)
+                .setChronometerCountDown(true);
+            if (Build.VERSION.SDK_INT >= 26) b.setTimeoutAfter(left);
+        }
+        if (open != null) b.setContentIntent(open);
+        if (Build.VERSION.SDK_INT >= 30) b.setCategory(Notification.CATEGORY_STOPWATCH);
+        // Android 16: ask to show it as a Live Update (the time in a status-bar chip, a Live Alert on OnePlus)
+        if (Build.VERSION.SDK_INT >= 36) {
+            requestPromoted(b);
+            if (live) shortCriticalText(b, clock(left));
+        }
+        return b.build();
+    }
+
+    /**
+     * After the rest: the same Live Update, now saying "Go!" (in the pill too) with "Next: …" underneath.
+     * RestTimerService keeps it up until you're back in the app or a few minutes have passed.
+     */
+    static Notification buildDone(Context ctx, long endsAt, String doneTitle, String title) {
+        if (doneTitle == null) doneTitle = "Go!";
+        if (title == null) title = "";
+        ensureChannel(ctx);
+        PendingIntent open = null;
+        Intent launch = ctx.getPackageManager().getLaunchIntentForPackage(ctx.getPackageName());
+        if (launch != null) {
+            launch.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            open = PendingIntent.getActivity(ctx, 0, launch, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+        }
+        Intent dismissed = new Intent(ctx, RestCountdownReceiver.class);
+        dismissed.setAction(ACTION_DISMISSED);
+        dismissed.putExtra(EXTRA_ENDS_AT, endsAt);
+        PendingIntent onDismiss = PendingIntent.getBroadcast(ctx, 1, dismissed, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+
+        Notification.Builder b = Build.VERSION.SDK_INT >= 26
+            ? new Notification.Builder(ctx, CHANNEL_ID)
+            : new Notification.Builder(ctx);
+        b.setSmallIcon(R.drawable.ic_stat_rest)
+            .setContentTitle(doneTitle)
+            .setContentText(title)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setShowWhen(false)
             .setVisibility(Notification.VISIBILITY_PUBLIC)
             .setColor(0xFF2457B5)
             .setDeleteIntent(onDismiss);
         if (open != null) b.setContentIntent(open);
-        if (Build.VERSION.SDK_INT >= 26) b.setTimeoutAfter(left);
         if (Build.VERSION.SDK_INT >= 30) b.setCategory(Notification.CATEGORY_STOPWATCH);
-        // Android 16: ask to show it as a Live Update (the time in a status-bar chip, a Live Alert on OnePlus)
-        if (Build.VERSION.SDK_INT >= 36) requestPromoted(b);
+        if (Build.VERSION.SDK_INT >= 36) {
+            requestPromoted(b);
+            shortCriticalText(b, doneTitle);
+        }
         return b.build();
+    }
+
+    /** The Live Update's text for the status-bar pill (setShortCriticalText, Android 16; looked up at run time). */
+    static void shortCriticalText(Notification.Builder b, String text) {
+        try {
+            Notification.Builder.class.getMethod("setShortCriticalText", String.class).invoke(b, text);
+            return;
+        } catch (Throwable ignored) {
+            // method not on this build
+        }
+        String key = "android.shortCriticalText";
+        try {
+            Object k = Notification.class.getField("EXTRA_SHORT_CRITICAL_TEXT").get(null);
+            if (k instanceof String) key = (String) k;
+        } catch (Throwable ignored) {
+            // constant not on this build
+        }
+        b.getExtras().putString(key, text);
     }
 
     /**

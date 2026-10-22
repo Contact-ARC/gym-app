@@ -30,6 +30,8 @@ public class RestAlarmReceiver extends BroadcastReceiver {
     static String channelName = "Rest is over";
     static String channelDescription = "";
     private static volatile long firedFor = 0; // the rest the alert was already shown for
+    /** The backup alarm goes off this long after the rest ends, so RestTimerService normally shows the alert first. */
+    static final long BACKUP_DELAY_MS = 1500;
 
     @Override
     public void onReceive(Context ctx, Intent intent) {
@@ -110,17 +112,18 @@ public class RestAlarmReceiver extends BroadcastReceiver {
         return PendingIntent.getBroadcast(ctx, 2, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 
-    /** Exact alarm at the end of the rest (replaces any earlier one). */
+    /** Exact alarm just after the end of the rest, as a backup (replaces any earlier one). */
     static void schedule(Context ctx, long endsAt, String title, String body) {
         AlarmManager am = (AlarmManager) ctx.getSystemService(Context.ALARM_SERVICE);
         if (am == null) return;
         PendingIntent pi = alarmIntent(ctx, endsAt, title, body);
+        long at = endsAt + BACKUP_DELAY_MS;
         boolean exact = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms();
         try {
-            if (exact) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, endsAt, pi);
-            else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, endsAt, pi);
+            if (exact) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
+            else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
         } catch (SecurityException e) {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, endsAt, pi);
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi);
         }
     }
 

@@ -408,6 +408,7 @@ export default {
   'Set the weight first': 'Primero pon el peso',
   'Set the pin first': 'Primero pon la posición',
   'Next: {what}': 'Ahora: {what}',
+  'Go!': '¡Vamos!',
   'Start a {t} rest': 'Empezar {t} de descanso',
   'Last week': 'La semana pasada',
   'pill|Next': 'Toca',

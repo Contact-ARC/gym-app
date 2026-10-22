@@ -64,6 +64,7 @@ export async function armRestCountdown (endsAt, what) {
       body: t('Tap to go back to your workout'),
       alertTitle: what ? t('Get ready: {what}', { what }) : t('Get ready for your next set'),
       alertBody: t('Rest is over 💪'),
+      doneTitle: t('Go!'),
       ...channelText()
     })
   } catch (e) { logError(e, 'rest countdown') }

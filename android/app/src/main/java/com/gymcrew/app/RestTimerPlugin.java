@@ -25,7 +25,7 @@ import com.getcapacitor.annotation.CapacitorPlugin;
  * alarm fires RestAlarmReceiver, which swaps the countdown for the alert unless you're in the app.
  *
  * JS: registerPlugin('RestTimer') →
- *   arm({ endsAt, title, body, alertTitle, alertBody, channelName, channelDescription, alertChannelName,
+ *   arm({ endsAt, title, body, alertTitle, alertBody, doneTitle, channelName, channelDescription, alertChannelName,
  *         alertChannelDescription }), disarm(),
  *   show({ … }) / hide() (show right now, for the test in Settings),
  *   status() → { enabled, countdownChannel, readyChannel, exact, sdk, liveUpdates }, openSettings({ which })
@@ -40,6 +40,7 @@ public class RestTimerPlugin extends Plugin {
     private static String armedBody = "";
     private static String armedAlertTitle = "";
     private static String armedAlertBody = "";
+    private static String armedDoneTitle = "Go!";
 
     /** A millisecond timestamp arrives as a Long, which PluginCall.getDouble() rejects, so read the raw number. */
     private static long endsAtOf(PluginCall call) {
@@ -71,6 +72,7 @@ public class RestTimerPlugin extends Plugin {
         armedBody = call.getString("body", "");
         armedAlertTitle = call.getString("alertTitle", "Get ready");
         armedAlertBody = call.getString("alertBody", "");
+        armedDoneTitle = call.getString("doneTitle", "Go!");
         Context ctx = getContext();
         RestAlarmReceiver.cancelShown(ctx);
         RestAlarmReceiver.schedule(ctx, endsAt, armedAlertTitle, armedAlertBody); // backup if the service is stopped
@@ -82,7 +84,7 @@ public class RestTimerPlugin extends Plugin {
     /** Out of the app mid-rest: the countdown, kept alive by the foreground service (plain notification if that's not allowed). */
     private static void showOutside(Context ctx) {
         if (armedEndsAt == 0) return;
-        if (!RestTimerService.start(ctx, armedEndsAt, armedTitle, armedBody, armedAlertTitle, armedAlertBody)) {
+        if (!RestTimerService.start(ctx, armedEndsAt, armedTitle, armedBody, armedAlertTitle, armedAlertBody, armedDoneTitle)) {
             RestCountdown.post(ctx, armedEndsAt, armedTitle, armedBody);
         }
     }
