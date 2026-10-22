@@ -136,6 +136,7 @@ final class RestCountdown {
         }
         if (open != null) b.setContentIntent(open);
         if (Build.VERSION.SDK_INT >= 30) b.setCategory(Notification.CATEGORY_STOPWATCH);
+        immediate(b);
         // Android 16: ask to show it as a Live Update (the time in a status-bar chip, a Live Alert on OnePlus)
         if (Build.VERSION.SDK_INT >= 36) {
             requestPromoted(b);
@@ -177,11 +178,20 @@ final class RestCountdown {
             .setDeleteIntent(onDismiss);
         if (open != null) b.setContentIntent(open);
         if (Build.VERSION.SDK_INT >= 30) b.setCategory(Notification.CATEGORY_STOPWATCH);
+        immediate(b);
         if (Build.VERSION.SDK_INT >= 36) {
             requestPromoted(b);
             shortCriticalText(b, doneTitle);
         }
         return b.build();
+    }
+
+    /**
+     * Show it straight away. Android 12+ holds back a foreground service's notification for up to
+     * 10 seconds (it appeared only once you pulled down the shade) unless the app asks for this.
+     */
+    static void immediate(Notification.Builder b) {
+        if (Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
     }
 
     /** The Live Update's text for the status-bar pill (setShortCriticalText, Android 16; looked up at run time). */
