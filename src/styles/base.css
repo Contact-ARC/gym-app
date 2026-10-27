@@ -242,3 +242,10 @@ textarea.field { resize: none; line-height: 1.4; }
 .tag-mine { background: var(--info-soft); color: var(--info); }
 .tag-edit { background: var(--warn-soft); color: var(--warn); }
 .tags-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+
+/* Tap targets: small controls keep their look but get a hit area of at least 48 px */
+.btn-sm, .chip, .fchip, .type-chip, .seg-opt, .st-btn, .ql, .swatch { position: relative; }
+.btn-sm::after, .chip::after, .fchip::after, .type-chip::after, .seg-opt::after, .st-btn::after, .ql::after, .swatch::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: max(100%, 48px); height: max(100%, 48px); transform: translate(-50%, -50%);
+}

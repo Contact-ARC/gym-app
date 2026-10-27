@@ -66,7 +66,7 @@ export function relativeDay (iso) {
   const diff = Math.round((today - that) / 86400000)
   if (diff === 0) return t('today')
   if (diff === 1) return t('yesterday')
-  if (diff < 7) return t('{n} days ago', { n: diff })
+  if (diff > 1 && diff < 7) return t('{n} days ago', { n: diff })
   return d.toLocaleDateString(locale(), { day: 'numeric', month: 'short' })
 }
 

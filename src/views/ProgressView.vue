@@ -51,7 +51,7 @@
         <div class="row streak-row">
           <Icon name="fire" :size="20" :class="streak.weeks ? 't-warn' : 't-muted'" />
           <span class="grow t-small">
-            <b>{{ tn(streak.weeks, '{n}-week streak', '{n}-week streak') }}</b>
+            <b>{{ streak.weeks ? tn(streak.weeks, '{n}-week streak', '{n}-week streak') : t('No streak right now') }}</b>
             <span class="t-muted"> · {{ t('best {n}', { n: streak.best }) }} · {{ tn(streak.min, '{n} workout a week counts', '{n} workouts a week count') }}</span>
           </span>
         </div>
@@ -61,7 +61,7 @@
       <template v-if="recentPRs.length">
         <h2 class="section-h">{{ t('Records in the last 30 days') }}</h2>
         <div class="group">
-          <button v-for="p in recentPRs.slice(0, showAllPRs ? 30 : 5)" :key="p.key" class="group-row pr" @click="select(p.exerciseId)">
+          <button v-for="p in recentPRs.slice(0, showAllPRs ? 30 : 3)" :key="p.key" class="group-row pr" @click="select(p.exerciseId)">
             <span class="pr-icon"><Icon name="trophy" :size="18" /></span>
             <div class="grow">
               <div class="t-h3 truncate">{{ exName(p.exerciseId) }}</div>
@@ -69,50 +69,33 @@
             </div>
           </button>
         </div>
-        <button v-if="recentPRs.length > 5" class="btn btn-ghost btn-sm more-btn" @click="showAllPRs = !showAllPRs">
-          {{ showAllPRs ? t('Show fewer') : t('Show all {n}', { n: recentPRs.length }) }}
+        <button v-if="recentPRs.length > 3" class="btn btn-ghost btn-sm more-btn" @click="showAllPRs = !showAllPRs">
+          {{ showAllPRs ? t('Show fewer') : t('See all {n}', { n: recentPRs.length }) }}
         </button>
       </template>
 
-      <!-- Per exercise -->
-      <h2 class="section-h">{{ t('Strength') }}</h2>
-      <button class="group group-row picker" @click="pickerOpen = true">
-        <div class="grow">
-          <div class="t-tiny t-muted">{{ t('Exercise') }}</div>
-          <div class="t-h3 truncate">{{ exerciseId ? exName(exerciseId) : t('Choose an exercise') }}</div>
-        </div>
-        <Icon name="chevronRight" class="chev" />
-      </button>
-
-      <div v-if="exerciseId && points.length" class="card card-pad chart-card">
-        <div class="row kpis">
-          <div class="kpi grow">
-            <div class="t-tiny t-muted">{{ repsMode ? t('Most reps') : exUnit === 'pin' ? t('Heaviest pin') : t('Best estimated max') }}</div>
-            <div class="t-num kv">{{ repsMode ? bestReps : fmtLoad(exUnit === 'pin' ? bestTop : bestE, exUnit) }}</div>
-          </div>
-          <div class="kpi">
-            <div class="t-tiny t-muted">{{ t('Since first time') }}</div>
-            <div class="t-num kv" :class="changeClass">{{ changeStr }}</div>
-          </div>
-        </div>
-        <div v-if="points.length > 1" class="chart">
-          <Line :data="lineData" :options="lineOptions" />
-        </div>
-        <p v-else class="t-small t-muted one">{{ t("One more session and you'll see a trend line.") }}</p>
-        <button class="btn btn-ghost btn-sm table-btn" @click="showTable = !showTable">{{ showTable ? t('Hide the numbers') : t('Show the numbers') }}</button>
-        <table v-if="showTable" class="tbl t-num">
-          <thead><tr><th>{{ t('Date') }}</th><th>{{ t('Best set') }}</th><th>{{ t('Est. max') }}</th></tr></thead>
-          <tbody>
-            <tr v-for="p in [...points].reverse()" :key="p.date">
-              <td>{{ shortDate(p.date) }}</td><td>{{ p.topStr }}</td><td>{{ repsMode ? '–' : fmtLoad(p.e1rm, exUnit) }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <p class="t-tiny t-muted explain">
-          {{ t('Estimated max is what you could lift once, worked out from your weight and reps. Use it to see the trend, not as a target to test.') }}
-        </p>
-        <RouterLink :to="`/exercise/${exerciseId}`" class="btn btn-ghost btn-sm table-btn">{{ t('Rep records and history') }}</RouterLink>
+      <!-- Per exercise: each opens its own page -->
+      <div class="row vol-h">
+        <h2 class="section-h grow">{{ t('Your exercises') }}</h2>
+        <button class="btn btn-sm btn-ghost pl-change" @click="pickerOpen = true"><Icon name="search" :size="18" />{{ t('Find') }}</button>
       </div>
+      <div class="group">
+        <RouterLink v-for="r in exList.slice(0, showAllEx ? 500 : 6)" :key="r.id" :to="`/exercise/${r.id}`" class="group-row exr">
+          <div class="grow ex-txt">
+            <div class="t-h3 truncate">{{ r.name }}</div>
+            <div class="t-small t-muted truncate">{{ r.sub }}</div>
+          </div>
+          <svg v-if="r.spark" class="spark" viewBox="0 0 64 24" aria-hidden="true"><polyline :points="r.spark" /></svg>
+          <div class="ex-best">
+            <div class="t-num rec">{{ r.best }}</div>
+            <div v-if="r.change" class="t-tiny t-num" :class="r.change.cls">{{ r.change.text }}</div>
+          </div>
+        </RouterLink>
+      </div>
+      <button v-if="exList.length > 6" class="btn btn-ghost btn-sm more-btn" @click="showAllEx = !showAllEx">
+        {{ showAllEx ? t('Show fewer') : t('See all {n}', { n: exList.length }) }}
+      </button>
+      <p class="t-tiny t-muted explain">{{ t('Most recent first. The number is your best estimated max, or your best set for bodyweight and timed exercises. Tap one for its chart, records and every session.') }}</p>
 
       <!-- Powerlifting: squat, bench, deadlift, total, DOTS -->
       <template v-if="pl.any">
@@ -156,7 +139,7 @@
         <div class="row legend t-tiny t-muted">
           <span class="band-key" />{{ t('Target: {a}–{b} sets a week', { a: target[0], b: target[1] }) }}
         </div>
-        <div v-for="m in volume" :key="m.muscle" class="vrow">
+        <div v-for="m in volume.slice(0, showAllVol ? 50 : 6)" :key="m.muscle" class="vrow">
           <div class="row vtop">
             <span class="grow t-small vname">{{ muscleLabel(m.muscle) }}</span>
             <span class="t-num vnum">{{ fmtNum(m.sets, 1) }}</span>
@@ -168,20 +151,15 @@
           </div>
         </div>
         <p v-if="!volume.length" class="t-small t-muted">{{ t('No sets yet in this period.') }}</p>
+        <button v-if="volume.length > 6" class="btn btn-ghost btn-sm more-btn" @click="showAllVol = !showAllVol">
+          {{ showAllVol ? t('Show fewer') : t('See all {n}', { n: volume.length }) }}
+        </button>
         <p class="t-tiny t-muted explain">
           {{ t('Main muscle counts as 1 set, helping muscles as half. Warm-ups don\'t count. Change the target in Settings.') }}
           <template v-if="volWeeks === 1 && weekDay < 6">{{ ' ' + t('The week is still going, so low numbers early on are normal.') }}</template>
         </p>
       </div>
 
-      <!-- Records -->
-      <h2 class="section-h">{{ t('Best estimated max') }}</h2>
-      <div class="group">
-        <button v-for="r in records" :key="r.id" class="group-row" @click="select(r.id)">
-          <span class="grow t-h3 truncate">{{ r.name }}</span>
-          <span class="t-num rec">{{ fmtLoad(r.e1rm, r.unit) }}</span>
-        </button>
-      </div>
     </template>
 
     <ExercisePicker v-model="pickerOpen" :title="t('Show progress for')" :only-ids="loggedIds" @pick="select" />
@@ -206,12 +184,8 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import { Line } from 'vue-chartjs'
-import {
-  Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend
-} from 'chart.js'
+import { computed, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import Segmented from '../ui/Segmented.vue'
 import ExercisePicker from '../ui/ExercisePicker.vue'
@@ -219,19 +193,13 @@ import Sheet from '../ui/Sheet.vue'
 import { state, persist, finishedSessions, exercisesById, historyFor, days, streak, goalsWithProgress, goalCtx } from '../store.js'
 import { plTotal, bodyweight } from '../lib/goals.js'
 import { dots } from '../lib/body.js'
-import { bestE1RM, heaviest, fmtLoad, unitFor, dateKey, convertLoad, detectPRs } from '../lib/training.js'
-import { muscleLabel, monthName, fmtNum, prText, relativeDay, fmtDate } from '../lib/format.js'
+import { bestE1RM, heaviest, fmtLoad, unitFor, dateKey, convertLoad, detectPRs, isWorkSet, bestSeconds } from '../lib/training.js'
+import { muscleLabel, monthName, fmtNum, prText, relativeDay } from '../lib/format.js'
 import { muscleVolume, monthsWithWorkouts } from '../lib/stats.js'
-import { useChartTheme } from '../lib/chartTheme.js'
 import { t, tn, tx, locale } from '../i18n/index.js'
 
-ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend)
-ChartJS.defaults.font.family = 'Barlow, system-ui, sans-serif'
-ChartJS.defaults.font.size = 13
-
 const route = useRoute()
-const ct = useChartTheme()
-const showTable = ref(false)
+const router = useRouter()
 const pickerOpen = ref(false)
 const unit = computed(() => state.data.profile.unit)
 const exName = (id) => tx(exercisesById.value[id], 'name') || id
@@ -289,79 +257,42 @@ const perWeek = computed(() => {
   return (trainedDays.value / weeks).toFixed(1)
 })
 
-// ── Exercise trend ──
+// ── Your exercises ──
 const loggedIds = computed(() => [...new Set(finishedSessions.value.flatMap(s => s.sets.map(x => x.exerciseId)))])
-const exerciseId = ref(route.query.exercise || null)
-watch(loggedIds, (ids) => {
-  if (!exerciseId.value && ids.length) {
-    // Default to the weighted exercise you've done most often
-    const counts = {}
-    for (const s of finishedSessions.value) for (const x of s.sets) if (x.load > 0 && x.unit !== 'pin') counts[x.exerciseId] = (counts[x.exerciseId] || 0) + 1
-    for (const id of ids) counts[id] = counts[id] || 0
-    exerciseId.value = ids.slice().sort((a, b) => counts[b] - counts[a])[0]
-  }
-}, { immediate: true })
-function select (id) {
-  exerciseId.value = id
-  showTable.value = false
-  window.scrollTo({ top: 0, behavior: 'smooth' })
-}
+const showAllEx = ref(false)
+const showAllVol = ref(false)
+// Old links to /progress?exercise=… go to the exercise's own page
+if (route.query.exercise) router.replace(`/exercise/${route.query.exercise}`)
+function select (id) { router.push(`/exercise/${id}`) }
 
-const exUnit = computed(() => unitFor(exercisesById.value[exerciseId.value], state.data.profile))
-const points = computed(() => {
-  if (!exerciseId.value) return []
-  return historyFor(exerciseId.value).slice().reverse().map(h => {
-    const weighted = h.sets.filter(s => s.reps && s.load > 0)
-    const top = weighted.reduce((b, s) => (!b || convertLoad(s.load, s.unit, unit.value) > convertLoad(b.load, b.unit, unit.value) ? s : b), null)
-    return {
-      date: h.date,
-      e1rm: bestE1RM(h.sets, unit.value),
-      top: heaviest(h.sets, unit.value),
-      reps: Math.max(0, ...h.sets.map(s => s.reps || 0)),
-      topStr: top ? `${fmtLoad(top.load, top.unit)} × ${top.reps}` : h.sets.map(s => (s.reps ? `${t('BW')} × ${s.reps}` : `${s.seconds}s`)).join(', ')
-    }
+const exList = computed(() => loggedIds.value.map(id => {
+  const ex = exercisesById.value[id]
+  const u = unitFor(ex, state.data.profile)
+  const hist = historyFor(id) // newest first
+  const per = hist.slice(0, 10).reverse().map(h => {
+    const sets = h.sets.filter(isWorkSet)
+    if (u === 'pin') return heaviest(sets, unit.value)
+    return bestE1RM(sets, unit.value) || bestSeconds(sets) || Math.max(0, ...sets.map(x => x.reps || 0))
   })
-})
-const bestE = computed(() => Math.max(0, ...points.value.map(p => p.e1rm)))
-const bestTop = computed(() => Math.max(0, ...points.value.map(p => p.top)))
-// Bodyweight exercises (no added weight): track reps instead
-const repsMode = computed(() => points.value.length > 0 && points.value.every(p => !p.e1rm && !p.top))
-const bestReps = computed(() => Math.max(0, ...points.value.map(p => p.reps)))
-const change = computed(() => {
-  const key = repsMode.value ? 'reps' : exUnit.value === 'pin' ? 'top' : 'e1rm'
-  const p = points.value.filter(x => x[key] > 0)
-  if (p.length < 2) return null
-  return ((p[p.length - 1][key] - p[0][key]) / p[0][key]) * 100
-})
-const changeStr = computed(() => (change.value == null ? '–' : `${change.value >= 0 ? '+' : ''}${change.value.toFixed(0)}%`))
-const changeClass = computed(() => (change.value > 0 ? 't-ok' : change.value < 0 ? 't-err' : ''))
-const shortDate = (iso) => new Date(iso).toLocaleDateString(locale(), { day: 'numeric', month: 'short' })
-
-const lineData = computed(() => ({
-  labels: points.value.map(p => shortDate(p.date)),
-  datasets: (repsMode.value ? [
-    { label: t('Most reps'), data: points.value.map(p => p.reps || null), borderColor: ct.value.series[0], backgroundColor: ct.value.series[0] }
-  ] : [
-    ...(exUnit.value === 'pin' ? [] : [{ label: t('Estimated max'), data: points.value.map(p => p.e1rm || null), borderColor: ct.value.series[0], backgroundColor: ct.value.series[0] }]),
-    { label: t('Heaviest set'), data: points.value.map(p => p.top || null), borderColor: ct.value.series[1], backgroundColor: ct.value.series[1] }
-  ]).map(d => ({
-    ...d, borderWidth: 2, tension: 0.25, spanGaps: true,
-    pointRadius: 4, pointHoverRadius: 6, pointBorderWidth: 2, pointBorderColor: ct.value.surface
-  }))
-}))
-const lineOptions = computed(() => ({
-  responsive: true,
-  maintainAspectRatio: false,
-  interaction: { mode: 'index', intersect: false },
-  plugins: {
-    legend: { display: exUnit.value !== 'pin' && !repsMode.value, position: 'top', align: 'start', labels: { color: ct.value.ink, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, boxHeight: 8, padding: 14 } },
-    tooltip: { padding: 10, cornerRadius: 10, callbacks: { label: (c) => `${c.dataset.label}: ${repsMode.value ? c.parsed.y : fmtLoad(c.parsed.y, exUnit.value)}` } }
-  },
-  scales: {
-    x: { ticks: { color: ct.value.ink, maxRotation: 0, autoSkip: true, maxTicksLimit: 6 }, grid: { display: false }, border: { display: false } },
-    y: { ticks: { color: ct.value.ink, maxTicksLimit: 5 }, grid: { color: ct.value.grid }, border: { display: false } }
+  const all = hist.flatMap(h => h.sets.filter(isWorkSet))
+  let best
+  const e = u === 'pin' ? heaviest(all, unit.value) : bestE1RM(all, unit.value)
+  if (e) best = fmtLoad(e, u === 'pin' ? 'pin' : unit.value)
+  else if (bestSeconds(all)) best = `${bestSeconds(all)} s`
+  else best = tn(Math.max(0, ...all.map(x => x.reps || 0)), '{n} rep', '{n} reps')
+  const vals = per.filter(v => v > 0)
+  let spark = null; let change = null
+  if (vals.length > 1) {
+    const lo = Math.min(...vals); const hi = Math.max(...vals); const span = hi - lo || 1
+    spark = vals.map((v, i) => `${(i / (vals.length - 1) * 62 + 1).toFixed(1)},${(22 - (v - lo) / span * 20).toFixed(1)}`).join(' ')
+    const pct = ((vals[vals.length - 1] - vals[0]) / vals[0]) * 100
+    if (Math.abs(pct) >= 1) change = { text: `${pct > 0 ? '+' : '−'}${Math.abs(pct).toFixed(0)}%`, cls: pct > 0 ? 't-ok' : 't-muted' }
   }
-}))
+  return {
+    id, name: exName(id), best, spark, change, last: hist[0]?.date || '',
+    sub: `${relativeDay(hist[0]?.date)} · ${tn(hist.length, '{n} session', '{n} sessions')}`
+  }
+}).sort((a, b) => b.last.localeCompare(a.last)))
 
 // ── Weekly volume per muscle ──
 // Early in the week "this week" is mostly empty, so start on the 4-week average until 2 workouts are in
@@ -432,12 +363,6 @@ const bodyLine = computed(() => {
   return e ? `${fmtNum(e.weight, 1)} ${e.unit} · ${relativeDay(e.date + 'T12:00:00')}` : t('Weight, measurements, photos')
 })
 
-// ── Records ──
-const records = computed(() => loggedIds.value.map(id => {
-  const sets = historyFor(id).flatMap(h => h.sets)
-  const u = unitFor(exercisesById.value[id], state.data.profile)
-  return { id, name: exName(id), e1rm: u === 'pin' ? heaviest(sets, unit.value) : bestE1RM(sets, unit.value), unit: u }
-}).filter(r => r.e1rm > 0).sort((a, b) => a.name.localeCompare(b.name, locale())))
 </script>
 
 <style scoped>
@@ -454,14 +379,11 @@ const records = computed(() => loggedIds.value.map(id => {
 .heat-sum { margin-top: 14px; }
 .big { font-size: 26px; font-weight: 700; }
 
-.picker { width: 100%; }
-.chart-card { margin-top: 10px; }
-.kpis { align-items: flex-start; }
-.kv { font-size: 30px; font-weight: 700; line-height: 1.1; }
-.kpi:last-child { text-align: right; }
-.chart { height: 240px; margin-top: 14px; }
-.one { margin-top: 12px; }
-.table-btn { margin-top: 8px; padding: 0 8px; }
+.exr { gap: 10px; }
+.ex-txt { min-width: 0; }
+.spark { width: 64px; height: 24px; flex: 0 0 auto; }
+.spark polyline { fill: none; stroke: var(--info); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.ex-best { text-align: right; min-width: 72px; }
 .tbl { width: 100%; border-collapse: collapse; font-size: 17px; margin-top: 6px; }
 .tbl th { text-align: left; font-family: var(--font); font-size: 13px; font-weight: 600; color: var(--ink-2); padding: 6px 4px; }
 .tbl td { padding: 8px 4px; border-top: 1px solid var(--line); }

@@ -24,7 +24,8 @@
           @blur="commit"
         >
         <button v-else class="st-display t-num" type="button" :aria-label="t('{what}: {value}. Tap to type', { what: label || t('Value'), value: display })" @click="startEdit">
-          {{ display }}
+          <!-- The number rolls up or down when it changes -->
+          <span :key="display" class="st-num" :class="rollClass">{{ display }}</span>
         </button>
         <div v-if="unit" class="st-unit">{{ unit }}</div>
       </div>
@@ -42,7 +43,7 @@
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onBeforeUnmount } from 'vue'
+import { ref, computed, nextTick, onBeforeUnmount, watch } from 'vue'
 import Icon from './Icon.vue'
 import { tap } from '../lib/native.js'
 
@@ -61,6 +62,12 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const round = (x) => Math.round(x * 100) / 100
+
+// Which way the number just moved, for the little roll animation
+const rollClass = ref('')
+watch(() => props.modelValue, (v, old) => {
+  rollClass.value = v == null || old == null || v === old ? '' : (v > old ? 'roll-up' : 'roll-down')
+})
 
 const display = computed(() => {
   const v = props.modelValue
@@ -142,6 +149,12 @@ function commit () {
 }
 .st-input { border-bottom: 2px solid var(--ink-3); }
 .empty .st-display { color: var(--ink-3); }
+.st-num { display: inline-block; }
+.st-num.roll-up { animation: rollUp 140ms ease-out; }
+.st-num.roll-down { animation: rollDown 140ms ease-out; }
+@keyframes rollUp { from { transform: translateY(35%); opacity: 0.2; } to { transform: none; opacity: 1; } }
+@keyframes rollDown { from { transform: translateY(-35%); opacity: 0.2; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .st-num.roll-up, .st-num.roll-down { animation: none; } }
 .st-unit { font-size: 13px; color: var(--ink-2); margin-top: -2px; }
 
 .s-md .st-btn { width: 44px; height: 48px; border-radius: 12px; }

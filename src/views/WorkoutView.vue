@@ -1,5 +1,5 @@
 <template>
-  <div v-if="session" class="wk" :style="plateVars">
+  <div v-if="session" class="wk" :style="{ ...plateVars, '--dock-h': dockH + 'px' }">
     <!-- Header -->
     <header class="wk-head">
       <button class="icon-btn" :aria-label="editingFinished ? t('Back to the summary') : t('Back to home (workout keeps running)')" @click="leave">
@@ -88,11 +88,11 @@
       <Transition :name="slideDir" mode="out-in">
         <section :key="current + ':' + item.exerciseId" class="ex">
           <div class="row ex-top">
-            <button v-if="thumb" class="thumb" :aria-label="t('How to do it')" @click="infoOpen = true">
+            <button v-if="thumb" class="thumb" :aria-label="t('How to do it')" @click="openExercise">
               <img :src="thumb" alt="" @error="(e) => (e.target.parentElement.style.display = 'none')">
             </button>
             <div class="grow">
-              <h1 class="t-title" :class="{ 'in-ss': !!group }" @click="infoOpen = true">{{ name(item.exerciseId) }}</h1>
+              <h1 class="t-title ex-name" :class="{ 'in-ss': !!group, long: name(item.exerciseId).length > 22 }" @click="openExercise">{{ name(item.exerciseId) }}</h1>
               <div class="t-small t-muted ex-meta">
                 <span>{{ prescription({ ...item, sets: rowCount(current) }, ex) }}</span>
                 <span v-if="restSecs">{{ restLabel(restSecs) }}</span>
@@ -100,7 +100,7 @@
                 <span v-if="item.track" class="t-faint">{{ t('beginner version') }}</span>
               </div>
             </div>
-            <button class="icon-btn info-btn" :aria-label="t('How to do it')" @click="infoOpen = true"><Icon name="info" /></button>
+            <button class="icon-btn info-btn" :aria-label="t('This exercise: your progress and how to do it')" @click="openExercise"><Icon name="info" /></button>
             <button class="icon-btn" :aria-label="t('Exercise options')" @click="exMenuOpen = true"><Icon name="more" /></button>
           </div>
 
@@ -153,10 +153,10 @@
           <!-- Sets -->
           <div v-if="!group" class="sets" :aria-label="t('Sets')">
             <button
-              v-for="s in logged(current)" :key="s.id" class="set done" :class="{ extra: !fillsPlannedSet(s) }"
-              :aria-label="t('{name}: {value}. Tap to edit', { name: setName(s), value: setText(s) })" @click="openEdit(s)"
+              v-for="s in logged(current)" :key="s.id" class="set done" :class="{ extra: !fillsPlannedSet(s), pr: prSets.has(s.id), fresh: s.id === freshSet }"
+              :aria-label="(prSets.has(s.id) ? t('Record') + '. ' : '') + t('{name}: {value}. Tap to edit', { name: setName(s), value: setText(s) })" @click="openEdit(s)"
             >
-              <span class="set-n">{{ setBadge(s) }}</span>
+              <span class="set-n"><Icon v-if="prSets.has(s.id)" name="trophy" :size="15" /><template v-else>{{ setBadge(s) }}</template></span>
               <span class="t-num set-v">{{ setText(s) }}</span>
             </button>
             <div
@@ -171,11 +171,20 @@
           <p v-if="lastSameSet" class="t-small t-muted last-line">
             {{ t('Set {n} last time:', { n: planLogged(current).length + 1 }) }} <b class="t-num">{{ lastSameSet }}</b>
           </p>
+          <button v-if="nextUp" class="next-up t-small" @click="goEntry(nextUp.entry, 'slide-next')">
+            <span class="t-muted">{{ t('Next:') }}</span> <b class="truncate">{{ nextUp.name }}</b> <Icon name="chevronRight" :size="18" />
+          </button>
 
           <!-- Inputs -->
           <div class="inputs">
             <div v-if="showLoad">
               <Stepper v-model="draft.load" :label="loadLabel" :unit="unitText" :step="inc" :min="0" :decimals="unit !== 'pin'" />
+              <div v-if="recentLoads.length" class="quick-loads" role="group" :aria-label="t('Recent weights')">
+                <button
+                  v-for="w in recentLoads" :key="w" class="ql t-num" :class="{ on: draft.load === w }"
+                  :aria-pressed="draft.load === w" @click="draft.load = w; tap()"
+                >{{ fmtLoad(w, unit) }}</button>
+              </div>
               <p v-if="plateLine" class="t-small t-muted plate-line t-num">{{ plateLine }}</p>
             </div>
 
@@ -184,7 +193,7 @@
               <Stepper v-model="draft.repsL" :label="t('Left reps')" :step="1" :min="0" size="md" />
               <Stepper v-model="draft.repsR" :label="t('Right reps')" :step="1" :min="0" size="md" />
             </div>
-            <Stepper v-else v-model="draft.reps" :label="ex?.perSide ? t('Reps per side') : t('Reps')" :step="1" :min="0" />
+            <Stepper v-else v-model="draft.reps" class="reps-input" :label="ex?.perSide ? t('Reps per side') : t('Reps')" :step="1" :min="0" />
             <button v-if="ex?.perSide && !isTimed" class="link-btn t-small" @click="toggleSplit">
               {{ split ? t('Same reps on both sides') : t('Different reps on each side?') }}
             </button>
@@ -223,7 +232,7 @@
     </div>
 
     <!-- Bottom dock: rest timer + log button -->
-    <div v-if="items.length" class="dock">
+    <div v-if="items.length" ref="dockEl" class="dock">
       <Transition name="fade">
         <div v-if="rest.endsAt && !editingFinished" class="rest" :class="{ done: rest.done }">
           <div class="rest-bar"><div :style="{ width: restPct + '%' }" /></div>
@@ -299,7 +308,7 @@
     <Sheet v-model="infoOpen" :title="name(item?.exerciseId)">
       <ExerciseDetails v-if="ex" :ex="ex" in-sheet />
       <RouterLink :to="`/exercise/${item?.exerciseId}`" class="btn btn-ghost btn-block full-link" @click="infoOpen = false">
-        {{ t('Your history and notes for this exercise') }}
+        {{ t('Your progress with this exercise') }}
       </RouterLink>
     </Sheet>
 
@@ -401,7 +410,7 @@ import {
 import { t, tn, tx } from '../i18n/index.js'
 import {
   unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, platesFor, nextSetAdjust,
-  warmupKind, warmupSize, isWorkSet
+  warmupKind, warmupSize, isWorkSet, bestE1RM, heaviest
 } from '../lib/training.js'
 import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle } from '../lib/format.js'
 import { effectiveRest, supersetNext } from '../lib/supersets.js'
@@ -465,6 +474,10 @@ const groupRounds = computed(() => (group.value ? Math.max(...group.value.indice
 const groupRest = computed(() => (group.value ? effectiveRest(items.value, group.value.indices[group.value.indices.length - 1]) : 0))
 const thumb = computed(() => (ex.value?.images?.[0] ? imageUrl(ex.value.images[0]) : ''))
 const infoOpen = ref(false)
+// The exercise's own page: your progress with it, and how to do it (the workout keeps running)
+function openExercise () {
+  if (item.value) router.push(`/exercise/${item.value.exerciseId}`)
+}
 
 const chips = []
 const shortName = (id) => name(id)
@@ -770,9 +783,13 @@ function logNow () {
     if (work.length) d.load = work[work.length - 1].load // back to the working weight
   }
   if (planLogged(i).length === 1) warmOpen.value = false
-  buzz(30)
+  const record = prSets.value.has(row.id)
+  freshSet.value = row.id
+  setTimeout(() => { if (freshSet.value === row.id) freshSet.value = null }, 1200)
+  buzz(record ? 220 : 30)
   const undo = { actionLabel: t('Undo'), action: () => { deleteSet(session.value.id, row.id); delete adjust[slot]; stopRest(); go(i) } }
-  toast(wasDrop ? t('Drop set of {name} logged', { name: name(it.exerciseId) }) : t('Set {n} of {name} logged', { n: planLogged(i).length, name: name(it.exerciseId) }), undo)
+  const logMsg = wasDrop ? t('Drop set of {name} logged', { name: name(it.exerciseId) }) : t('Set {n} of {name} logged', { n: planLogged(i).length, name: name(it.exerciseId) })
+  toast(record ? '🏆 ' + t('New record!') + ' ' + logMsg : logMsg, undo)
   if (editingFinished.value || wasDrop) return
 
   // Where to next, and what the rest timer should say
@@ -817,6 +834,73 @@ function logNow () {
   }
   if (next !== i) setTimeout(() => go(next, sameGroup ? 'swap' : 'slide-next'), sameGroup ? 120 : 350)
 }
+
+// ── Next exercise, recent weights, records ─────────────────
+const nextUp = computed(() => {
+  const ei = entryOf(current.value)
+  if (ei < 0) return null
+  // The next entry that still has sets to do, after this one
+  for (let k = ei + 1; k < entries.value.length; k++) {
+    const e = entries.value[k]
+    if (!entryComplete(e)) return { entry: k, name: e.indices.map(i => shortName(items.value[i].exerciseId)).join(' + ') }
+  }
+  return null
+})
+
+// Your last few different weights on this exercise (today's first), one tap to use again
+const recentLoads = computed(() => {
+  if (!item.value || !showLoad.value || isBodyweight.value) return []
+  const seen = []
+  const add = (v) => { if (v > 0 && !seen.includes(v) && seen.length < 3) seen.push(v) }
+  for (const s of [...logged(current.value)].reverse()) if (isWorkSet(s)) add(s.load)
+  for (const h of historyFor(item.value.exerciseId, session.value.id)) {
+    for (const s of [...h.sets].reverse()) if (isWorkSet(s) && s.unit === unit.value) add(s.load)
+    if (seen.length >= 3) break
+  }
+  return seen
+})
+
+// Sets that beat your best (estimated max or heaviest set) from earlier workouts: they get a trophy
+const prSets = computed(() => {
+  const out = new Set()
+  if (!item.value) return out
+  const toUnit = profile.value.unit
+  const hist = historyFor(item.value.exerciseId, session.value.id).flatMap(h => h.sets).filter(isWorkSet)
+  const pin = unit.value === 'pin'
+  let bestE = pin ? 0 : bestE1RM(hist, toUnit)
+  let bestH = heaviest(hist, toUnit)
+  if (!bestE && !bestH) return out // first time: that's the baseline, not a record
+  for (const s of logged(current.value).filter(isWorkSet)) {
+    const e = pin ? 0 : bestE1RM([s], toUnit)
+    const h = heaviest([s], toUnit)
+    if ((bestE > 0 && e > bestE + 1e-9) || (bestH > 0 && h > bestH + 1e-9)) out.add(s.id)
+    bestE = Math.max(bestE, e)
+    bestH = Math.max(bestH, h)
+  }
+  return out
+})
+const freshSet = ref(null)
+
+// ── Keep the controls clear of the dock (rest timer + log button) ──
+const dockEl = ref(null)
+const dockH = ref(170)
+let dockObs = null
+watch(dockEl, (el) => {
+  dockObs?.disconnect()
+  if (!el || typeof ResizeObserver === 'undefined') return
+  dockObs = new ResizeObserver(() => { dockH.value = Math.round(el.getBoundingClientRect().height) })
+  dockObs.observe(el)
+}, { immediate: true })
+onBeforeUnmount(() => dockObs?.disconnect())
+/** When the rest timer appears, scroll just enough that weight and reps aren't under it. */
+function keepInputsInView () {
+  const el = document.querySelector('.wk-main .reps-input') || document.querySelector('.wk-main .inputs')
+  if (!el) return
+  const limit = window.innerHeight - dockH.value - 12
+  const diff = el.getBoundingClientRect().bottom - limit
+  if (diff > 0) window.scrollBy({ top: diff, behavior: 'smooth' })
+}
+watch(() => rest.endsAt, (v, old) => { if (v && !old) setTimeout(keepInputsInView, 260) })
 
 // Rest by hand: the timer button next to Log starts this exercise's rest (the superset's, inside one)
 const manualRest = computed(() => {
@@ -1035,7 +1119,7 @@ function discard () {
 .chip-check { color: var(--ok); }
 .chip.on .chip-check { color: var(--paper); }
 
-.wk-main { flex: 1 1 auto; padding: 8px 16px calc(var(--safe-bottom) + 190px); overflow-x: hidden; }
+.wk-main { flex: 1 1 auto; padding: 8px 16px calc(var(--dock-h, 170px) + 28px); overflow-x: hidden; }
 .wk-empty { display: flex; flex-direction: column; gap: 14px; justify-content: center; text-align: left; }
 
 .tip .btn { white-space: nowrap; }
@@ -1043,6 +1127,9 @@ function discard () {
 
 .ex-top { align-items: flex-start; margin-top: 8px; gap: 8px; }
 .ex-top h1 { margin-top: 4px; cursor: pointer; }
+/* Long names: two lines at most, a little smaller, so weight and reps stay high on the screen */
+.ex-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.ex-name.long { font-size: 25px; }
 .ex-top h1.in-ss { font-size: 24px; }
 .thumb { flex: 0 0 auto; width: 64px; height: 48px; margin-top: 4px; border-radius: 10px; overflow: hidden; background: var(--card-2); }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
@@ -1133,6 +1220,23 @@ function discard () {
 .set.done.extra { background: var(--card-2); }
 .set.done.extra .set-n { background: var(--ink-2); }
 .set.next { border-style: solid; border-color: var(--ink-3); }
+/* A record: gold */
+.set.done.pr { background: var(--warn-soft); box-shadow: inset 0 0 0 1.5px var(--warn); }
+.set.done.pr .set-n { background: var(--warn); color: #fff; }
+/* Just logged: the chip fills in; a record also glows once */
+.set.fresh { animation: setIn 420ms cubic-bezier(.2,.8,.3,1.2); }
+.set.fresh.pr { animation: setIn 420ms cubic-bezier(.2,.8,.3,1.2), prGlow 1100ms ease-out; }
+@keyframes setIn { from { transform: scale(0.82); opacity: 0.3; } to { transform: scale(1); opacity: 1; } }
+@keyframes prGlow { 0% { box-shadow: inset 0 0 0 1.5px var(--warn), 0 0 0 0 rgba(242, 179, 61, 0.7); } 100% { box-shadow: inset 0 0 0 1.5px var(--warn), 0 0 0 14px rgba(242, 179, 61, 0); } }
+@media (prefers-reduced-motion: reduce) { .set.fresh, .set.fresh.pr { animation: none; } }
+.next-up {
+  display: flex; align-items: center; gap: 6px; margin: 10px 0 0 auto; max-width: 100%;
+  min-height: 40px; padding: 0 6px 0 12px; border-radius: 20px; background: var(--card); color: var(--ink);
+}
+.next-up b { min-width: 0; }
+.quick-loads { display: flex; justify-content: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.ql { min-height: 38px; min-width: 64px; padding: 0 14px; border-radius: 19px; background: var(--card); color: var(--ink-2); font-weight: 700; font-size: 16px; }
+.ql.on { background: var(--ink); color: var(--paper); }
 .set.next .set-n { color: var(--ink); }
 .set.add { padding: 0; width: 44px; justify-content: center; color: var(--ink-2); }
 .set.done:active, .set.add:active { transform: scale(0.96); }
@@ -1188,7 +1292,6 @@ function discard () {
 
 /* Short phones: tighter rest panel and spacing so the controls stay visible while resting */
 @media (max-height: 720px) {
-  .wk-main { padding-bottom: calc(var(--safe-bottom) + 150px); }
   .ex-top { margin-top: 2px; }
   .hint { margin-top: 10px; padding: 10px 12px; }
   .sets { margin-top: 12px; }

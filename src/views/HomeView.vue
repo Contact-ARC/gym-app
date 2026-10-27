@@ -347,7 +347,7 @@ function startFree () {
 .wd-l { font-size: 13px; font-weight: 600; color: var(--ink-2); }
 .wd.today .wd-l { color: var(--ink); }
 .week-sum { margin-top: 14px; display: flex; justify-content: space-between; gap: 12px; }
-.link { font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+.link { font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; display: inline-block; padding: 12px 4px; margin: -12px -4px; }
 
 .streak { gap: 10px; margin-top: 14px; padding: 10px 12px; border-radius: var(--r-ctl); background: var(--warn-soft); color: var(--warn); }
 .streak .t-small { color: var(--ink); }

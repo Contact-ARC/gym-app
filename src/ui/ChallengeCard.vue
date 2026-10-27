@@ -52,7 +52,7 @@ function bump (d) { tap(); bumpChallenge(d) }
 .top { gap: 12px; align-items: center; }
 .ch-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--card-2); color: var(--ink); }
 .done .ch-icon { background: var(--ok-soft); color: var(--ok); }
-.up { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+.up { letter-spacing: 0.02em; font-weight: 700; }
 .desc { margin-top: 10px; }
 .bar { height: 10px; border-radius: 5px; background: var(--card-2); margin-top: 14px; overflow: hidden; }
 .bar > div { height: 100%; background: var(--ink); border-radius: 5px; transition: width 400ms ease; }

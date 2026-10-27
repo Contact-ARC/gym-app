@@ -19,6 +19,17 @@
         </button>
       </div>
     </template>
+    <template v-for="sec in quick" :key="sec.label">
+      <div class="section-h">{{ sec.label }}</div>
+      <div class="group">
+        <button v-for="ex in sec.list" :key="sec.key + ex.id" class="group-row" @click="pick(ex.id)">
+          <div class="grow">
+            <div class="t-h3">{{ tx(ex, 'name') }}</div>
+            <div class="t-tiny t-muted truncate">{{ sec.sub(ex) }}</div>
+          </div>
+        </button>
+      </div>
+    </template>
     <div class="section-h">{{ q ? t('{n} found', { n: filtered.length }) : t('All exercises') }}</div>
     <div class="group">
       <button v-for="ex in filtered" :key="ex.id" class="group-row" @click="pick(ex.id)">
@@ -42,10 +53,10 @@ import Sheet from './Sheet.vue'
 import Toggle from './Toggle.vue'
 import Icon from './Icon.vue'
 import CustomExerciseSheet from './CustomExerciseSheet.vue'
-import { state, exercisesById } from '../store.js'
-import { muscleLabel } from '../lib/format.js'
+import { state, exercisesById, finishedSessions } from '../store.js'
+import { muscleLabel, relativeDay } from '../lib/format.js'
 import { canDoAtGym } from '../lib/training.js'
-import { t, tx, i18n } from '../i18n/index.js'
+import { t, tn, tx, i18n } from '../i18n/index.js'
 
 const props = defineProps({
   modelValue: Boolean,
@@ -74,7 +85,34 @@ const norm = (s) => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
 const filtered = computed(() => {
   const term = norm(q.value.trim())
   if (!term) return all.value
+  const u = usage.value
   return all.value.filter(e => norm(name(e)).includes(term) || norm(e.name).includes(term) || (e.primary || []).some(m => norm(muscleLabel(m)).includes(term)))
+    .sort((a, b) => (u[b.id]?.count || 0) - (u[a.id]?.count || 0)) // stable: alphabetical among equals
+})
+// What you've done: when you last did each exercise and in how many workouts
+const usage = computed(() => {
+  const out = {}
+  for (const s of finishedSessions.value) { // newest first
+    for (const id of new Set(s.sets.map(x => x.exerciseId))) {
+      if (!out[id]) out[id] = { last: s.startedAt, count: 0 }
+      out[id].count++
+    }
+  }
+  return out
+})
+const usable = (e) => e && e.id !== props.excludeId && !e.hidden && atGym(e) && (!props.onlyIds || props.onlyIds.includes(e.id))
+// Recent and most used first, when you aren't searching
+const quick = computed(() => {
+  if (q.value.trim()) return []
+  const taken = new Set(suggested.value.map(e => e.id))
+  const used = Object.entries(usage.value).map(([id, u]) => ({ ex: exercisesById.value[id], ...u })).filter(x => usable(x.ex))
+  const recent = used.slice().sort((a, b) => b.last.localeCompare(a.last)).filter(x => !taken.has(x.ex.id)).slice(0, 5)
+  recent.forEach(x => taken.add(x.ex.id))
+  const most = used.slice().sort((a, b) => b.count - a.count).filter(x => !taken.has(x.ex.id) && x.count > 1).slice(0, 5)
+  return [
+    { key: 'r', label: t('Recent'), list: recent.map(x => x.ex), sub: (ex) => t('Last done {when}', { when: relativeDay(usage.value[ex.id].last) }) },
+    { key: 'm', label: t('You do these most'), list: most.map(x => x.ex), sub: (ex) => tn(usage.value[ex.id].count, '{n} workout', '{n} workouts') }
+  ].filter(sec => sec.list.length)
 })
 const musclesOf = (ex) => [...(ex.primary || [])].map(muscleLabel).join(', ')
 

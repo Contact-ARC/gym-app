@@ -1,5 +1,10 @@
 // Chart colours, checked for colour-blind separation and contrast on each theme's card surface.
 import { ref, computed, onBeforeUnmount } from 'vue'
+import { Chart } from 'chart.js'
+
+// The app's font in every chart
+Chart.defaults.font.family = 'Barlow, system-ui, sans-serif'
+Chart.defaults.font.size = 13
 
 const SERIES = {
   light: ['#2457B5', '#C7322B'], // plate blue, plate red

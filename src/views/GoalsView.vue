@@ -301,7 +301,7 @@ function remove () {
 .gcard { margin-top: 14px; }
 .g-head { align-items: flex-start; gap: 8px; }
 .g-title-btn { text-align: left; }
-.up { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+.up { letter-spacing: 0.02em; font-weight: 700; }
 .bar { height: 10px; border-radius: 5px; background: var(--card-2); margin-top: 12px; overflow: hidden; }
 .bar > div { height: 100%; background: var(--ink); border-radius: 5px; transition: width 400ms ease; }
 .bar.ok > div { background: var(--ok); }

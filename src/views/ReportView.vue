@@ -219,7 +219,7 @@ async function shareImage () {
 .list { margin-top: 16px; }
 .head { gap: 4px; }
 .center { text-align: center; }
-.up { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+.up { letter-spacing: 0.02em; font-weight: 700; }
 .hero { margin-top: 16px; padding: 20px; text-align: center; }
 .hero-n { font-size: 72px; font-weight: 700; line-height: 1; }
 .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }

@@ -67,7 +67,8 @@ export function emptyData () {
       showDots: false, // your DOTS on the lifts board (it hints at your bodyweight)
       push: { enabled: false, token: null, prefs: {} }, // notifications: prefs fill in from PUSH_DEFAULTS
       badges: null, // { [badgeId]: date earned }; null until first worked out (those are recorded quietly)
-      sharedPlans: {} // { [planId]: what was last sent } for plans shared with the crew
+      sharedPlans: {}, // { [planId]: what was last sent } for plans shared with the crew
+      avatar: null // 0.7: { emoji, color } how you look on the board; null = your initial in your crew colour
     },
     // v0.5
     customExercises: [], // your own exercises: { id: 'my-…', name, primary, secondary, logType, loadUnit, incrementGroup, perSide, images, hidden }
@@ -75,7 +76,9 @@ export function emptyData () {
     plans: [], // My routines: [{ id, name, days: [{ id, label, name, items }], use, lastUse }]
     planNotices: [], // plan ids whose time ran out, to mention once
     editNotices: [], // [{ dayId, month, skipped }] changes that no longer applied after a new month
-    goals: [] // [{ id, type, target, unit, exerciseId, reps, basis, start, createdAt, by, pinned, doneAt }]
+    goals: [], // [{ id, type, target, unit, exerciseId, reps, basis, start, createdAt, by, pinned, doneAt }]
+    // 0.7
+    badgesSeen: null // { [badgeId]: date } badges already shown on the finish screen; null until the first finish
   }
 }
 

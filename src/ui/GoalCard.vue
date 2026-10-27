@@ -32,7 +32,7 @@ const pinned = computed(() => goalsWithProgress.value.filter(x => x.goal.pinned 
 .gc { display: block; margin-top: 18px; }
 .top { gap: 12px; }
 .g-icon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--card-2); color: var(--ink); }
-.up { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+.up { letter-spacing: 0.02em; font-weight: 700; }
 .g { margin-top: 14px; }
 .g-head { gap: 10px; align-items: baseline; }
 .g-title { font-size: 16px; }

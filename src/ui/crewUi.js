@@ -1,19 +1,31 @@
 // Small helpers shared by the crew screens.
-import { board, memberById } from '../lib/crew.js'
-import { days } from '../store.js'
+import { board, memberById, me } from '../lib/crew.js'
+import { days, state } from '../store.js'
 import { badgeTitle } from '../lib/crewStats.js'
 import { tn, i18n } from '../i18n/index.js'
 
 const AVATAR = ['var(--plate-red)', 'var(--plate-blue)', 'var(--plate-yellow)', 'var(--plate-green)', 'var(--ink-2)']
 
-/** Each member keeps one colour: their place in the crew picks a plate colour. */
-export function avatarStyle (id) {
-  const i = board.members.findIndex(m => m.id === id)
-  const bg = AVATAR[(i < 0 ? 4 : i) % AVATAR.length]
-  return { background: bg, color: bg.includes('yellow') ? '#15202E' : '#FFFFFF' }
+/** Colours and emoji you can pick for yourself (Crew settings). Others' picks are only used if they're on these lists. */
+export const AVATAR_COLORS = { red: 'var(--plate-red)', blue: 'var(--plate-blue)', yellow: 'var(--plate-yellow)', green: 'var(--plate-green)', purple: '#7A4FB5', teal: '#14808A', orange: '#D2691E', ink: 'var(--ink-2)' }
+export const AVATAR_EMOJI = ['💪', '🏋️', '🔥', '⚡', '🦍', '🐻', '🦁', '🐺', '🦅', '🦈', '🐂', '🚀', '⭐', '👑', '🎯', '🧱', '🌵', '🍕', '☕', '😎']
+
+function avatarOf (id) {
+  const a = id === me.value ? state.data.crew.avatar : memberById.value[id]?.stats?.avatar
+  if (!a || typeof a !== 'object') return {}
+  return { color: AVATAR_COLORS[a.color] ? a.color : null, emoji: AVATAR_EMOJI.includes(a.emoji) ? a.emoji : null }
 }
 
-export const initial = (id) => (memberById.value[id]?.name || '?').trim().charAt(0).toUpperCase()
+/** Each member keeps one colour: their own pick, or their place in the crew picks a plate colour. */
+export function avatarStyle (id) {
+  const a = avatarOf(id)
+  const i = board.members.findIndex(m => m.id === id)
+  const bg = a.color ? AVATAR_COLORS[a.color] : AVATAR[(i < 0 ? 4 : i) % AVATAR.length]
+  return { background: bg, color: bg.includes('yellow') ? '#15202E' : '#FFFFFF', ...(a.emoji ? { fontSize: '1.15em' } : {}) }
+}
+
+/** Their emoji, or the first letter of their name. */
+export const initial = (id) => avatarOf(id).emoji || (memberById.value[id]?.name || (id === me.value ? state.data.crew.name : '') || '?').trim().charAt(0).toUpperCase()
 
 export function plateIndex (dayId) {
   const i = days.value.findIndex(d => d.id === dayId)

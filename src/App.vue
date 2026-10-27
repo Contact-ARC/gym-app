@@ -263,7 +263,7 @@ watch(
 .upd-note { margin-top: 12px; }
 .ch { margin-top: 14px; background: var(--card-2); border-radius: var(--r-card); }
 .ch .t-small { margin-top: 4px; }
-.up { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
+.up { letter-spacing: 0.02em; font-weight: 700; }
 .choices { margin-top: 16px; background: var(--card-2); }
 .choices .group-row { align-items: flex-start; }
 .status-shade {

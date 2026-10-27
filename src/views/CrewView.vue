@@ -120,6 +120,7 @@
                   <Icon v-if="i === 0 && m.value > 0" name="crown" :size="18" />
                   <template v-else>{{ i + 1 }}</template>
                 </span>
+                <span class="avatar" :style="avatarStyle(m.id)" aria-hidden="true">{{ initial(m.id) }}</span>
                 <div class="grow">
                   <div class="t-h3 truncate">
                     <span v-if="m.live" class="live-dot sm" :aria-label="t('Training now')" />{{ m.name }}<span v-if="m.id === me" class="t-muted you"> · {{ t('you') }}</span>
@@ -210,6 +211,18 @@
       <div class="row gap">
         <input v-model="rename" class="field grow" type="text" maxlength="30">
         <button class="btn btn-soft" :disabled="!rename.trim() || rename.trim() === state.data.crew.name" @click="saveName">{{ t('Save') }}</button>
+      </div>
+
+      <div class="label mt">{{ t('Your picture') }}</div>
+      <div class="row av-pick">
+        <span class="avatar av-big" :style="avatarStyle(me)">{{ initial(me) }}</span>
+        <div class="grow av-colors" role="radiogroup" :aria-label="t('Colour')">
+          <button v-for="(css, key) in AVATAR_COLORS" :key="key" class="swatch" :class="{ on: (state.data.crew.avatar?.color || null) === key }" :style="{ background: css }" role="radio" :aria-checked="(state.data.crew.avatar?.color || null) === key" :aria-label="t('color|' + key)" @click="setAvatar({ color: key })" />
+        </div>
+      </div>
+      <div class="av-emoji" role="radiogroup" :aria-label="t('Emoji')">
+        <button class="emo letter" :class="{ on: !state.data.crew.avatar?.emoji }" role="radio" :aria-checked="!state.data.crew.avatar?.emoji" :aria-label="t('Your initial')" @click="setAvatar({ emoji: null })">{{ (state.data.crew.name || '?').charAt(0).toUpperCase() }}</button>
+        <button v-for="e in AVATAR_EMOJI" :key="e" class="emo" :class="{ on: state.data.crew.avatar?.emoji === e }" role="radio" :aria-checked="state.data.crew.avatar?.emoji === e" @click="setAvatar({ emoji: e })">{{ e }}</button>
       </div>
 
       <h3 class="sheet-h">{{ t('Sharing') }}</h3>
@@ -330,7 +343,7 @@ import Stepper from '../ui/Stepper.vue'
 import PlateBadge from '../ui/PlateBadge.vue'
 import CrewPost from '../ui/CrewPost.vue'
 import { toast } from '../ui/toast.js'
-import { METRICS, metricText } from '../ui/crewUi.js'
+import { METRICS, metricText, avatarStyle, initial, AVATAR_COLORS, AVATAR_EMOJI } from '../ui/crewUi.js'
 import { state, persist, challenge, goalCtx } from '../store.js'
 import {
   board, crewAvailable, inCrew, createCrew, joinCrew, leaveCrew, renameMe, syncNow, refreshBoard,
@@ -570,6 +583,14 @@ const settingsOpen = ref(false)
 const leaveOpen = ref(false)
 const rename = ref(state.data.crew.name || '')
 watch(settingsOpen, (o) => { if (o) { rename.value = state.data.crew.name || ''; checkPush() } })
+let avatarTimer = null
+function setAvatar (patch) {
+  state.data.crew.avatar = { ...(state.data.crew.avatar || {}), ...patch }
+  persist()
+  // Several taps in a row send once
+  clearTimeout(avatarTimer)
+  avatarTimer = setTimeout(() => syncNow({ withBoard: true }), 1200)
+}
 async function saveName () {
   try { await renameMe(rename.value); toast(t('Name updated')); refreshBoard() } catch (e) { toast(e.message) }
 }
@@ -647,6 +668,16 @@ async function togglePush (v) {
 .member.me { background: var(--card-2); }
 .member-btn { gap: 12px; text-align: left; padding: 0; min-height: 0; }
 button.member { text-align: left; width: 100%; }
+.avatar { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; flex: 0 0 auto; line-height: 1; }
+.av-pick { gap: 14px; margin-top: 8px; align-items: center; }
+.av-big { width: 60px; height: 60px; font-size: 26px; }
+.av-colors { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch { width: 40px; height: 40px; border-radius: 50%; box-shadow: inset 0 0 0 2px rgba(0,0,0,0.08); }
+.swatch.on { box-shadow: 0 0 0 3px var(--card), 0 0 0 5px var(--ink); }
+.av-emoji { display: grid; grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); gap: 6px; margin-top: 12px; }
+.emo { height: 48px; border-radius: 12px; background: var(--card-2); font-size: 24px; display: grid; place-items: center; }
+.emo.letter { font-size: 20px; font-weight: 700; color: var(--ink-2); }
+.emo.on { box-shadow: inset 0 0 0 2.5px var(--ink); background: var(--card); }
 .rank { width: 30px; height: 30px; flex: 0 0 auto; border-radius: 50%; display: grid; place-items: center; font-size: 17px; font-weight: 700; color: var(--ink-2); background: var(--card-2); }
 .member.me .rank { background: var(--card); }
 .rank.top { background: var(--warn-soft); color: var(--warn); }

@@ -163,6 +163,27 @@ function heavyStats () {
   return value
 }
 
+/**
+ * Badges this workout earned you, for the pop-up on the finish screen. Works without a crew.
+ * `state.data.badgesSeen` remembers what was already shown; the first time it starts from what you
+ * had before this workout, so old badges never pop up.
+ */
+export function newBadgesFrom (sessionId) {
+  const unit = state.data.profile.unit
+  const lifts = state.data.settings.lifts || DEFAULT_LIFTS
+  const now = heavyStats().badges
+  if (!state.data.badgesSeen) {
+    const others = state.data.sessions.filter(x => x.id !== sessionId)
+    const ps = periodStats(others, unit, new Date(state.today + 'T12:00:00'))
+    const before = badgeIds({ sessions: others, unit, lifts, bestStreak: streak.value.best, records: ps.all.records })
+    state.data.badgesSeen = Object.fromEntries(before.map(id => [id, state.today]))
+  }
+  const fresh = now.filter(id => !state.data.badgesSeen[id])
+  for (const id of fresh) state.data.badgesSeen[id] = state.today
+  if (fresh.length) persist()
+  return fresh
+}
+
 /** Stats shown on the board. Week and month keys let others ignore stale numbers. */
 export function myStats () {
   const h = heavyStats()
@@ -193,6 +214,7 @@ export function myStats () {
     pl,
     lines: h.lines,
     badges: h.badges,
+    avatar: state.data.crew.avatar || null,
     lastWorkoutAt: finishedSessions.value[0]?.startedAt || null
   }
 }
