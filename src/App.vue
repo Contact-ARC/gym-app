@@ -5,6 +5,8 @@
     </Transition>
   </RouterView>
 
+  <!-- Behind the phone's status bar: page content scrolls under it instead of under the clock and icons -->
+  <div class="status-shade" aria-hidden="true" />
   <BottomNav v-if="!route.meta.hideNav" :active="route.meta.tab" />
   <RestPill />
   <Toast :bottom="toastBottom" :top="toastTop" />
@@ -264,4 +266,8 @@ watch(
 .up { text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700; }
 .choices { margin-top: 16px; background: var(--card-2); }
 .choices .group-row { align-items: flex-start; }
+.status-shade {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--safe-top); z-index: 900;
+  background: var(--paper); pointer-events: none;
+}
 </style>

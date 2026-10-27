@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <h1 class="t-title head">{{ t('Tools') }}</h1>
+    <h1 class="t-title head">{{ t('nav|Tools') }}</h1>
     <Segmented v-model="tab" :options="tabs" :label="t('Tool')" class="tabs" />
 
     <!-- Effort: estimated max and what to lift next -->
@@ -60,7 +60,7 @@
     <!-- Plates -->
     <section v-else-if="tab === 'plates'" class="tool">
       <div class="card card-pad stack-lg">
-        <Stepper v-model="plateTarget" :label="t('Total weight')" :unit="unit" :step="unit === 'kg' ? 2.5 : 5" :min="0" :decimals="true" size="md" />
+        <Stepper v-model="plateTarget" :label="t('Total weight')" :unit="unit" :step="unit === 'kg' ? 2.5 : 5" :min="0" :max="unit === 'kg' ? 1000 : 2200" :decimals="true" size="md" />
         <div>
           <div class="label">{{ t('Bar') }}</div>
           <Segmented v-model="bar" :options="barOptions" :label="t('Bar weight')" />
@@ -70,17 +70,17 @@
       <div v-if="plateTarget" class="card card-pad plates-card">
         <p v-if="plates.error" class="t-err t-small">{{ plates.error }}</p>
         <template v-else>
-          <div class="bar-viz" aria-hidden="true">
+          <div class="bar-viz" :class="{ many: plates.perSide.length > 12 }" aria-hidden="true">
             <div class="sleeve" />
             <div class="collar" />
             <div
               v-for="(p, i) in plates.perSide" :key="i" class="wplate"
               :style="plateCss(p)"
-            ><span>{{ p }}</span></div>
+            ><span v-if="plates.perSide.length <= 10">{{ p }}</span></div>
             <div class="sleeve-end" />
           </div>
           <div class="t-small t-muted">{{ t('On each side') }}</div>
-          <div class="t-h2 t-num per-side">{{ plates.perSide.length ? plates.perSide.join(' + ') : t('Nothing, just the bar') }}</div>
+          <div class="t-h2 t-num per-side">{{ plates.perSide.length ? perSideText : t('Nothing, just the bar') }}</div>
           <div v-if="Math.abs(plates.remainder) > 0.001" class="note note-warn t-small">
             {{ plates.remainder > 0
               ? t('The closest you can load is {a}, which is {b} short.', { a: fmtLoad(plates.achieved, unit), b: fmtLoad(plates.remainder, unit) })
@@ -165,9 +165,14 @@ const nextLoad = computed(() => roundToIncrement(loadForReps(oneRM.value, target
 // Plates
 const plateTarget = ref(null)
 const bar = ref(state.data.profile.bar ?? DEFAULT_BAR[unit.value])
-const barOptions = computed(() => (unit.value === 'kg'
-  ? [{ label: '20 kg', value: 20 }, { label: '15 kg', value: 15 }, { label: '10 kg', value: 10 }]
-  : [{ label: '45 lb', value: 45 }, { label: '35 lb', value: 35 }, { label: '25 lb', value: 25 }]))
+// Common bars, plus the one saved in Settings → Barbell weight if it's something else
+const barOptions = computed(() => {
+  const u = unit.value
+  const list = u === 'kg' ? [25, 20, 15, 10] : [55, 45, 35, 25]
+  const saved = state.data.profile.bar
+  if (saved > 0 && !list.includes(saved)) list.push(saved)
+  return list.sort((a, b) => b - a).map(v => ({ label: `${v} ${u}`, value: v }))
+})
 const allPlates = computed(() => DEFAULT_PLATES[unit.value])
 // Your plates are saved (profile.plates) and used for barbell suggestions in workouts too
 const platesOn = computed(() => platesFor(state.data.profile))
@@ -182,6 +187,18 @@ function togglePlate (p) {
 }
 const plates = computed(() => platesPerSide(plateTarget.value, bar.value || 0, platesOn.value))
 const maxPlate = computed(() => Math.max(...allPlates.value))
+// A long list reads better grouped: 14 × 25 + 15 instead of fourteen 25s
+const perSideText = computed(() => {
+  const list = plates.value.perSide
+  if (list.length <= 6) return list.join(' + ')
+  const groups = []
+  for (const p of list) {
+    const last = groups[groups.length - 1]
+    if (last && last.p === p) last.n++
+    else groups.push({ p, n: 1 })
+  }
+  return groups.map(g => (g.n > 1 ? `${g.n} × ${g.p}` : String(g.p))).join(' + ')
+})
 function plateCss (p) {
   const [bg, fg] = weightPlateColors(p, unit.value)
   const h = 44 + Math.sqrt(p / maxPlate.value) * 76
@@ -222,16 +239,19 @@ const warmups = computed(() =>
 /* Barbell drawing: sleeve, collar, then plates in IWF colours */
 .plates-card { margin-top: 12px; }
 .plates-note { margin: -4px 4px 10px; }
-.bar-viz { display: flex; align-items: center; height: 130px; margin-bottom: 12px; }
-.sleeve { width: 54px; height: 12px; border-radius: 3px 0 0 3px; background: #A6AEB8; }
-.collar { width: 10px; height: 34px; border-radius: 3px; background: #7F8894; margin-right: 3px; }
+.bar-viz { display: flex; align-items: center; height: 130px; margin-bottom: 12px; overflow: hidden; }
+.sleeve { flex: 0 0 auto; width: 54px; height: 12px; border-radius: 3px 0 0 3px; background: #A6AEB8; }
+.collar { flex: 0 0 auto; width: 10px; height: 34px; border-radius: 3px; background: #7F8894; margin-right: 3px; }
+/* Plates shrink to fit however many there are (labels hide past 10; the line below lists them) */
 .wplate {
+  flex: 0 1 auto; min-width: 4px; overflow: hidden;
   margin-right: 3px; border-radius: 5px; display: grid; place-items: center;
   box-shadow: inset 0 0 0 1.5px rgba(0,0,0,0.12), 0 0 0 1px var(--plate-ring);
   font-family: var(--font-num); font-weight: 700; font-size: 12px;
   writing-mode: vertical-rl; transform: rotate(180deg);
 }
-.sleeve-end { flex: 1 1 auto; max-width: 40px; height: 12px; border-radius: 0 3px 3px 0; background: #A6AEB8; }
+.bar-viz.many .wplate { margin-right: 1px; }
+.sleeve-end { flex: 1 1 auto; min-width: 6px; max-width: 40px; height: 12px; border-radius: 0 3px 3px 0; background: #A6AEB8; }
 .per-side { margin-top: 2px; }
 .plates-card .note { margin-top: 12px; }
 

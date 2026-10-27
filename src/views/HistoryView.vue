@@ -167,7 +167,7 @@ const groups = computed(() => {
 .cal-day.today .dn { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 2px; }
 .cal-day.sel { background: var(--card-2); box-shadow: inset 0 0 0 2px var(--ink-3); }
 .cal-day:active { background: var(--press); }
-.dots { display: flex; gap: 3px; height: 8px; }
+.dots { display: flex; gap: 3px; height: 8px; margin-top: 5px; } /* clear of today's underline */
 .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 1px var(--plate-ring); }
 .rest-day { margin: 0 4px; }
 .report-btn { margin-top: 20px; }

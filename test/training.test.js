@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   estimate1RM, loadForReps, roundToIncrement, suggestNext, platesPerSide, warmupSets,
-  loadableAround, isLoadable, snapToPlates, platesFor,
+  loadableAround, isLoadable, snapToPlates, platesFor, warmupKind, warmupSize,
   detectPRs, compareVersions, pickActiveRoutine, convertLoad, routineWeek
 } from '../src/lib/training.js'
 
@@ -332,4 +332,51 @@ test('next-set advice on a barbell stays loadable and within its limits', () => 
 test('barbell warm-ups only use loadable weights', () => {
   const w = warmupSets(100, 2.5, 20, few)
   assert.deepEqual(w.map(s => s.load), [20, 60, 70])
+})
+
+// ── Warm-ups: who gets one, and how big ──
+const EX = {
+  squat: { id: 'squat', logType: 'weight', equipment: ['barbell', 'squat rack'], primary: ['quads', 'glutes'], secondary: ['adductors', 'lower_back'] },
+  legPress: { id: 'lp', logType: 'weight', equipment: ['machine'], primary: ['quads', 'glutes'], secondary: [] },
+  pullUp: { id: 'pu', logType: 'bodyweight', equipment: ['pull-up bar'], primary: ['lats', 'upper_back'], secondary: ['biceps', 'rear_delts'] },
+  dbRow: { id: 'row', logType: 'weight', equipment: ['dumbbell', 'bench'], primary: ['upper_back', 'lats'], secondary: ['biceps', 'rear_delts'] },
+  oneArmRow: { id: 'row1', logType: 'weight', equipment: ['dumbbell'], primary: ['lats', 'upper_back'], secondary: ['biceps'] },
+  dbPress: { id: 'dbp', logType: 'weight', equipment: ['dumbbell'], primary: ['chest', 'front_delts'], secondary: ['triceps'] },
+  curl: { id: 'curl', logType: 'weight', equipment: ['ez bar'], primary: ['biceps'], secondary: [] },
+  plank: { id: 'plank', logType: 'time', primary: ['abs'], secondary: [] }
+}
+const rr = (lo, hi) => ({ repRange: [lo, hi], sets: 3 })
+
+test('warm-up: first lift for a muscle gets one, sized by how heavy', () => {
+  assert.equal(warmupKind({ exercise: EX.squat, item: rr(8, 12) }), 'full') // barbell compound
+  assert.equal(warmupKind({ exercise: EX.dbPress, item: rr(4, 6) }), 'full') // heavy dumbbells
+  assert.equal(warmupKind({ exercise: EX.dbPress, item: rr(8, 12) }), 'light')
+  assert.equal(warmupKind({ exercise: EX.dbPress, item: rr(15, 20) }), null) // high reps
+  assert.equal(warmupKind({ exercise: EX.curl, item: rr(8, 12) }), null) // isolation
+  assert.equal(warmupKind({ exercise: EX.plank, item: rr(8, 12) }), null)
+  assert.equal(warmupKind({ exercise: { logType: 'weight', equipment: ['cable'], primary: ['abs', 'obliques'] }, item: rr(10, 12) }), null) // Pallof press
+})
+
+test('warm-up: muscles already worked with weight need none; bodyweight-warmed ones get a feeler', () => {
+  assert.equal(warmupKind({ exercise: EX.legPress, item: rr(8, 12), before: [{ exercise: EX.squat, weighted: true }] }), null)
+  // Day C: pull-ups, then the first weighted row, then another row
+  const afterPullUps = [{ exercise: EX.pullUp, weighted: false }]
+  assert.equal(warmupKind({ exercise: EX.dbRow, item: rr(8, 12), before: afterPullUps }), 'feeler')
+  assert.equal(warmupKind({ exercise: EX.oneArmRow, item: rr(8, 12), before: [...afterPullUps, { exercise: EX.dbRow, weighted: true }] }), null)
+  // Weighted pull-ups count as weight
+  assert.equal(warmupKind({ exercise: EX.dbRow, item: rr(8, 12), before: [{ exercise: EX.pullUp, weighted: true }] }), null)
+  // A muscle the earlier work didn't touch still gets the full treatment
+  assert.equal(warmupKind({ exercise: EX.dbPress, item: rr(8, 12), before: afterPullUps }), 'light')
+  assert.equal(warmupSize(EX.curl, rr(8, 12)), 'light')
+  assert.equal(warmupSize(EX.curl, rr(15, 20)), null)
+})
+
+test('warm-up sets: light ramp, feeler, dumbbell floor, barbell fallback', () => {
+  assert.deepEqual(warmupSets(14, 2, 0, null, 'light').map(s => [s.load, s.reps]), [[8, 6], [10, 4]])
+  assert.deepEqual(warmupSets(14, 2, 0, null, 'feeler').map(s => [s.load, s.reps]), [[8, 6]])
+  assert.deepEqual(warmupSets(30, 2, 0, null, 'full').map(s => [s.load, s.reps]), [[12, 8], [18, 5], [24, 3]])
+  assert.deepEqual(warmupSets(3, 2, 0, null, 'feeler'), []) // under the lightest dumbbell
+  // A light barbell lift: the bar itself
+  assert.deepEqual(warmupSets(30, 2.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'feeler').map(s => s.load), [20])
+  assert.deepEqual(warmupSets(100, 2.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'light').map(s => s.load), [50, 75])
 })

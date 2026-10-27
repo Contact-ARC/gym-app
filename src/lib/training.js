@@ -399,22 +399,74 @@ function greedyPlates (target, bar, plates) {
   return { perSide, achieved, remainder: round2(target - achieved), lighter: null, heavier: null }
 }
 
+// Warm-up ramps: [share of the working weight, reps]
+const RAMPS = {
+  full: [[0.4, 8], [0.6, 5], [0.8, 3]], // heavy first lift for a muscle
+  light: [[0.5, 6], [0.75, 4]], // first lift for a muscle, 7–12 reps
+  feeler: [[0.55, 6]] // muscle already warm from bodyweight work: one set to feel the weight
+}
+
 /**
  * Warm-up ramp toward a working weight. bar = 0 for dumbbells/machines.
  * With `plates` (barbell lifts), each warm-up is a weight you can load with them.
+ * kind: 'full' (empty bar + 40/60/80%), 'light' (50/75%) or 'feeler' (one set at ~55%).
+ * Dumbbells and machines never go under one weight step (`inc`), the lightest you can pick.
  */
-export function warmupSets (working, inc, bar = 0, plates = null) {
+export function warmupSets (working, inc, bar = 0, plates = null, kind = 'full') {
   if (!working || working <= 0) return []
   const out = []
-  if (bar > 0 && working > bar) out.push({ load: bar, reps: 10, label: t('Empty bar') })
-  for (const [pct, reps] of [[0.4, 8], [0.6, 5], [0.8, 3]]) {
+  if (kind === 'full' && bar > 0 && working > bar) out.push({ load: bar, reps: 10, label: t('Empty bar') })
+  for (const [pct, reps] of RAMPS[kind] || RAMPS.full) {
     const load = bar > 0 && plates ? snapToPlates(working * pct, bar, plates) : roundToIncrement(working * pct, inc)
     if (load == null || load <= bar || load >= working) continue
+    // Dumbbells/machines: at least the lightest step, and at least one step under the working weight
+    if (bar === 0 && inc && (load < inc - 1e-9 || working - load < inc - 1e-9)) continue
     if (out.some(s => s.load === load)) continue
     // With limited plates the weight can land a way off the step, so label what it really is
-    out.push({ load, reps, label: `${Math.round((bar > 0 && plates ? load / working : pct) * 100)}%` })
+    const label = kind === 'feeler' ? '' : `${Math.round((bar > 0 && plates ? load / working : pct) * 100)}%` // the card already says "Feeler set"
+    out.push({ load, reps, label })
+  }
+  // A light barbell lift: nothing between the bar and the working weight, so the bar is the warm-up
+  if (!out.length && kind !== 'full' && bar > 0 && working > bar) {
+    out.push({ load: bar, reps: kind === 'feeler' ? 6 : 10, label: t('Empty bar') })
   }
   return out
+}
+
+/** How big a warm-up an exercise's working sets call for, ignoring what you've done before it. */
+export function warmupSize (exercise, item) {
+  const [lo, hi] = item?.repRange || [8, 12]
+  if (isBarbellLift(exercise) || hi <= 6) return 'full'
+  return lo >= 13 ? null : 'light'
+}
+
+/**
+ * Which warm-up an exercise gets in this workout: 'full' | 'light' | 'feeler' | null.
+ *  - Its main muscles already worked with weight earlier (main or helping muscles of an earlier
+ *    exercise): none, they're warm.
+ *  - Warmed only by bodyweight work (pull-ups before rows): one feeler set, the first time under load.
+ *  - First time for a main muscle: a full ramp for heavy work (barbell lifts or 6 reps or fewer),
+ *    a light one for 7–12 reps.
+ *  - Isolation (one main muscle, not a barbell lift), core work or 13+ reps: none; the first reps are the warm-up.
+ * `before`: [{ exercise, weighted }] for exercises you've logged sets of earlier in this workout.
+ */
+export function warmupKind ({ exercise, item, before = [] }) {
+  if (!exercise || exercise.logType !== 'weight' || !item?.repRange) return null
+  const primary = exercise.primary || []
+  const loaded = new Set()
+  const warmed = new Set()
+  for (const b of before) {
+    for (const m of [...(b.exercise?.primary || []), ...(b.exercise?.secondary || [])]) {
+      warmed.add(m)
+      if (b.weighted) loaded.add(m)
+    }
+  }
+  if (primary.length && primary.every(m => loaded.has(m))) return null
+  // Isolation (one main muscle) and core work (Pallof press, cable crunch) start light anyway
+  const isolation = (primary.length <= 1 || primary.every(m => m === 'abs' || m === 'obliques')) && !isBarbellLift(exercise)
+  if (item.repRange[0] >= 13 || isolation) return null
+  if (primary.length && primary.every(m => warmed.has(m))) return 'feeler'
+  return warmupSize(exercise, item)
 }
 
 // ── Set types ───────────────────────────────────────────

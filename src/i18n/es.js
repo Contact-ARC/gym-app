@@ -1324,5 +1324,14 @@ export default {
   "{name}'s {day}": "{day} de {name}",
   "{n} record": "{n} récord",
   "{n} records": "{n} récords",
-  "{n} {what} together {when}": "{n} {what} entre todos {when}"
+  "{n} {what} together {when}": "{n} {what} entre todos {when}",
+  // ── 0.6.2: warm-ups ──
+  "A few pins lighter": "Unas placas menos",
+  "About half the pins": "Más o menos la mitad de placas",
+  "Enter the weight you're working up to first.": "Primero pon el peso al que vas a llegar.",
+  "Feeler set": "Serie de tanteo",
+  "Hide warm-up sets": "Ocultar series de calentamiento",
+  "Warm-up sets": "Series de calentamiento",
+  "Warm-ups aren't counted in your records.": "Los calentamientos no cuentan para tus récords.",
+  "Your muscles are warm, but this is their first time with weight today.": "Tus músculos ya están calientes, pero es la primera vez que cargan peso hoy."
 }

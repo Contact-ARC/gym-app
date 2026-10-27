@@ -125,11 +125,11 @@
           </p>
           <p v-if="tx(item, 'notes')" class="t-small t-muted mini-note">{{ tx(item, 'notes') }}</p>
 
-          <!-- Warm-up ramp (first lift of the day, or when the routine asks for it) -->
+          <!-- Warm-up: first exercise for a muscle (see warmupKind), when the routine asks, or picked from ⋯ -->
           <div v-if="showWarmup" class="warm card">
             <button class="warm-head" :aria-expanded="warmOpen" @click="warmOpen = !warmOpen">
               <span class="grow">
-                <b>{{ t('Warm-up') }}</b>
+                <b>{{ warmKind === 'feeler' ? t('Feeler set') : t('Warm-up') }}</b>
                 <span class="t-small t-muted">{{ t('{a} of {b} done', { a: warmDoneCount, b: warmups.length }) }}</span>
               </span>
               <Icon :name="warmOpen ? 'minus' : 'plus'" :size="20" />
@@ -140,10 +140,13 @@
                 :aria-pressed="warmDone(k)" @click="toggleWarm(k)"
               >
                 <span class="tick"><Icon v-if="warmDone(k)" name="checkBold" :size="16" /></span>
-                <span class="grow t-num wv">{{ fmtLoad(w.load, unit) }} × {{ w.reps }}</span>
+                <span class="grow t-num wv">{{ w.text || fmtLoad(w.load, unit) }} × {{ w.reps }}</span>
                 <span class="t-tiny t-muted">{{ w.label }}</span>
               </button>
-              <p class="t-tiny t-muted warm-foot">{{ t("Based on {load}. Warm-ups aren't counted in your records.", { load: fmtLoad(warmBase, unit) }) }}</p>
+              <p class="t-tiny t-muted warm-foot">
+                <template v-if="warmKind === 'feeler'">{{ t('Your muscles are warm, but this is their first time with weight today.') + ' ' }}</template>
+                {{ unit === 'pin' ? t("Warm-ups aren't counted in your records.") : t("Based on {load}. Warm-ups aren't counted in your records.", { load: fmtLoad(warmBase, unit) }) }}
+              </p>
             </div>
           </div>
 
@@ -276,6 +279,7 @@
         <button class="group-row" @click="exMenuOpen = false; infoOpen = true"><Icon name="info" /><span class="grow">{{ t('How to do it') }}</span></button>
         <button class="group-row" @click="exMenuOpen = false; msOpen = true"><Icon name="settings" /><span class="grow">{{ t('Machine settings') }}</span></button>
         <button class="group-row" @click="exMenuOpen = false; openNote()"><Icon name="note" /><span class="grow">{{ state.data.exerciseNotes[item.exerciseId] ? t('Edit your note') : t('Add a note for next time') }}</span></button>
+        <button v-if="canWarm" class="group-row" @click="toggleWarmup"><Icon name="up" /><span class="grow">{{ showWarmup ? t('Hide warm-up sets') : t('Warm-up sets') }}</span></button>
         <button class="group-row" @click="addSet(); exMenuOpen = false"><Icon name="plus" /><span class="grow">{{ t('Add a set') }}</span></button>
         <button v-if="rowCount(current) > Math.max(1, planLogged(current).length)" class="group-row" @click="removeSet(); exMenuOpen = false">
           <Icon name="minus" /><span class="grow">{{ t('Remove a set') }}</span>
@@ -396,7 +400,8 @@ import {
 } from '../store.js'
 import { t, tn, tx } from '../i18n/index.js'
 import {
-  unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, platesFor, nextSetAdjust
+  unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, platesFor, nextSetAdjust,
+  warmupKind, warmupSize, isWorkSet
 } from '../lib/training.js'
 import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle } from '../lib/format.js'
 import { effectiveRest, supersetNext } from '../lib/supersets.js'
@@ -635,22 +640,64 @@ const plateLine = computed(() => {
 })
 
 // ── Warm-ups ───────────────────────────────────────────────
+// Exercises you've already logged sets of in this workout, and whether they had weight on them
+const doneBefore = computed(() => {
+  const out = new Map()
+  for (const s of session.value?.sets || []) {
+    if (s.itemIndex === current.value || !isWorkSet(s) || (!s.reps && !s.seconds)) continue
+    const e = exercisesById.value[s.exerciseId]
+    if (!e) continue
+    const weighted = (e.logType === 'weight' || e.logType === 'bodyweight') && s.load > 0
+    const prev = out.get(s.exerciseId)
+    out.set(s.exerciseId, { exercise: e, weighted: weighted || !!prev?.weighted })
+  }
+  return [...out.values()]
+})
+const warmKey = computed(() => `${current.value}:${item.value?.exerciseId}`)
+const canWarm = computed(() => !editingFinished.value && ex.value?.logType === 'weight')
+// What to show: your choice from ⋯ first, then the routine's, then the muscle rule
+const warmKind = computed(() => {
+  if (!canWarm.value || !item.value) return null
+  const pick = session.value.warmupPick?.[warmKey.value]
+  const sized = () => warmupKind({ exercise: ex.value, item: item.value, before: doneBefore.value }) || warmupSize(ex.value, item.value) || 'light'
+  if (pick === false) return null
+  if (pick === true) return sized()
+  if (item.value.warmup === false) return null
+  if (item.value.warmup === true) return sized()
+  return warmupKind({ exercise: ex.value, item: item.value, before: doneBefore.value })
+})
 const warmBase = computed(() => planLogged(current.value)[0]?.load ?? draft.value.load)
 const warmups = computed(() => {
+  const kind = warmKind.value
+  if (!kind) return []
+  // Pin-stack machines have no real weight: describe it
+  if (unit.value === 'pin') {
+    const lighter = t('A few pins lighter')
+    const half = t('About half the pins')
+    return ({ full: [[half, 8], [lighter, 5]], light: [[half, 6], [lighter, 4]], feeler: [[lighter, 6]] }[kind] || [])
+      .map(([text, reps]) => ({ load: null, text, reps, label: '' }))
+  }
   const w = warmBase.value
   if (!w) return []
   const onBar = isBarbellLift(ex.value)
   const bar = onBar ? (profile.value.bar || 0) : 0
-  return warmupSets(w, inc.value, bar, onBar && bar > 0 ? platesFor(profile.value) : null)
+  return warmupSets(w, inc.value, bar, onBar && bar > 0 ? platesFor(profile.value) : null, kind)
 })
-const showWarmup = computed(() => {
-  if (editingFinished.value || !item.value || !ex.value) return false
-  if (item.value.warmup === false) return false
-  const wanted = item.value.warmup === true || (current.value === 0 && session.value.dayIndex != null)
-  return wanted && ex.value.logType === 'weight' && unit.value !== 'pin' && warmups.value.length > 0
-})
+const showWarmup = computed(() => !!warmKind.value && warmups.value.length > 0)
+function toggleWarmup () {
+  exMenuOpen.value = false
+  const s = session.value
+  const on = !showWarmup.value
+  s.warmupPick = { ...(s.warmupPick || {}), [warmKey.value]: on }
+  if (on && !warmups.value.length) {
+    delete s.warmupPick[warmKey.value]
+    toast(warmBase.value ? t("That's light enough to go straight to your working sets.") : t('Enter the weight you\'re working up to first.'))
+    return
+  }
+  warmOpen.value = on
+  persist()
+}
 const warmOpen = ref(true)
-const warmKey = computed(() => `${current.value}:${item.value?.exerciseId}`)
 const warmDone = (k) => !!session.value.warmups?.[warmKey.value]?.includes(k)
 const warmDoneCount = computed(() => warmups.value.filter((_, k) => warmDone(k)).length)
 function toggleWarm (k) {

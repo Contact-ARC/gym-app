@@ -94,6 +94,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior-y: none;
+  overflow-x: clip; /* a too-wide element can't make the whole page scroll sideways */
 }
 h1, h2, h3, h4, p, ul, ol { margin: 0; }
 ul, ol { padding: 0; }
