@@ -6,17 +6,16 @@
     <div v-if="photos.length" class="gallery" :class="{ single: photos.length < 2 }" role="group" :aria-label="t('Photos of the movement')">
       <button v-if="photos.length > 1" class="arrow" :disabled="shown === 0" :aria-label="t('Previous photo')" @click="go(shown - 1)"><Icon name="chevronLeft" /></button>
       <div ref="strip" class="strip" @scroll.passive="onScroll">
-        <img
-          v-for="(src, i) in photos" :key="src" :src="src" loading="lazy"
-          :alt="i === 0 ? t('{name}, start position', { name: tx(ex, 'name') }) : t('{name}, end position', { name: tx(ex, 'name') })"
-          @error="(e) => (e.target.style.display = 'none')"
-        >
+        <button v-for="(p, i) in viewerPhotos" :key="p.src" class="shot" :aria-label="t('Show {what} full screen', { what: p.alt })" @click="openViewer(i)">
+          <img :src="p.src" loading="lazy" :alt="p.alt" @error="(e) => (e.target.closest('.shot').style.display = 'none')">
+        </button>
       </div>
       <button v-if="photos.length > 1" class="arrow" :disabled="shown === photos.length - 1" :aria-label="t('Next photo')" @click="go(shown + 1)"><Icon name="chevronRight" /></button>
     </div>
     <div v-if="photos.length > 1" class="dots" aria-hidden="true">
       <span v-for="(_, i) in photos" :key="i" :class="{ on: i === shown }" />
     </div>
+    <PhotoViewer v-model="viewerOpen" :photos="viewerPhotos" :start="shown" :title="tx(ex, 'name')" @index="go" />
 
     <div class="card card-pad map-card">
       <MuscleMap :primary="ex.primary || []" :secondary="ex.secondary || []" />
@@ -65,6 +64,7 @@
 import { computed, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import MuscleMap from './MuscleMap.vue'
+import PhotoViewer from './PhotoViewer.vue'
 import { state, imageUrl } from '../store.js'
 import { muscleLabel, youtubeSearchUrl } from '../lib/format.js'
 import { openUrl } from '../lib/native.js'
@@ -77,6 +77,12 @@ const props = defineProps({
 })
 
 const photos = computed(() => (props.ex.images || []).map(imageUrl))
+const viewerPhotos = computed(() => photos.value.map((src, i) => ({
+  src,
+  alt: i === 0 ? t('{name}, start position', { name: tx(props.ex, 'name') }) : t('{name}, end position', { name: tx(props.ex, 'name') })
+})))
+const viewerOpen = ref(false)
+function openViewer (i) { go(i); viewerOpen.value = true }
 const strip = ref(null)
 const shown = ref(0)
 function onScroll () {
@@ -112,7 +118,8 @@ const equipmentLine = computed(() => {
 .gallery.single { padding: 0 46px; }
 .strip { flex: 1 1 auto; min-width: 0; max-width: 360px; margin: 0 auto; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 14px; background: var(--card-2); }
 .strip::-webkit-scrollbar { display: none; }
-.strip img { flex: 0 0 100%; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; scroll-snap-align: center; display: block; }
+.shot { flex: 0 0 100%; width: 100%; scroll-snap-align: center; cursor: zoom-in; }
+.strip img { width: 100%; aspect-ratio: 3 / 2; object-fit: cover; display: block; }
 .arrow { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--card); color: var(--ink); transition: opacity 150ms ease; }
 .in-sheet .arrow { background: var(--card-2); }
 .arrow:disabled { opacity: 0.3; }
