@@ -1434,5 +1434,11 @@ export default {
   "Close match": "Muy parecido",
   "Partial match": "Parecido",
   "Loose match": "Poco parecido",
-  "Suggested ones are picked for this exercise. The match says how closely each works the same main and secondary muscles.": "Los sugeridos están elegidos para este ejercicio. El parecido indica cuánto coinciden los músculos principales y secundarios que trabaja cada uno."
+  "Suggested ones are picked for this exercise. The match says how closely each works the same main and secondary muscles.": "Los sugeridos están elegidos para este ejercicio. El parecido indica cuánto coinciden los músculos principales y secundarios que trabaja cada uno.",
+  // 0.7.4
+  "Original": "Original",
+  "Swap for this workout": "Cambiar en este entrenamiento",
+  "Sets you logged for this exercise today are removed. The finish screen asks whether to keep the swap.": "Las series que ya apuntaste de este ejercicio hoy se borran. Al terminar te pregunta si quieres conservar el cambio.",
+  "Previous photo": "Foto anterior",
+  "Next photo": "Foto siguiente"
 }

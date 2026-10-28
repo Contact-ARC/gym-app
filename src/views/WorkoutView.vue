@@ -290,10 +290,9 @@
       </div>
     </Sheet>
 
-    <ExercisePicker
-      v-model="swapOpen" :title="t('Swap exercise')"
-      :suggested-ids="swapSuggestions" :suggested-label="t('Works the same muscles')"
-      :exclude-id="item?.exerciseId" allow-create @pick="doSwap"
+    <SwapSheet
+      v-model="swapOpen" mode="workout" :exercise-id="item?.exerciseId || ''"
+      :original-id="item?.originalExerciseId || ''" @swap="({ id }) => doSwap(id)"
     />
     <ExercisePicker v-model="addOpen" :title="t('Add an exercise')" allow-create @pick="doAdd" />
     <MachineSettingsSheet v-if="item" v-model="msOpen" :exercise-id="item.exerciseId" />
@@ -393,6 +392,7 @@ import Sheet from '../ui/Sheet.vue'
 import Stepper from '../ui/Stepper.vue'
 import Segmented from '../ui/Segmented.vue'
 import ExercisePicker from '../ui/ExercisePicker.vue'
+import SwapSheet from '../ui/SwapSheet.vue'
 import MachineSettingsSheet from '../ui/MachineSettingsSheet.vue'
 import ExerciseDetails from '../ui/ExerciseDetails.vue'
 import { plateStyle } from '../ui/plates.js'
@@ -404,7 +404,7 @@ import {
 import { t, tn, tx } from '../i18n/index.js'
 import {
   unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, platesFor, nextSetAdjust,
-  warmupKind, warmupSize, isWorkSet, bestE1RM, heaviest, canDoAtGym, gymAlternatives
+  warmupKind, warmupSize, isWorkSet, bestE1RM, heaviest, canDoAtGym
 } from '../lib/training.js'
 import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle } from '../lib/format.js'
 import { effectiveRest, supersetNext } from '../lib/supersets.js'
@@ -967,12 +967,6 @@ const swapOpen = ref(false)
 const addOpen = ref(false)
 const msOpen = ref(false)
 const notInGym = computed(() => !!ex.value && !canDoAtGym(ex.value, state.data.settings.equipment))
-const swapSuggestions = computed(() => {
-  const orig = exercisesById.value[item.value?.originalExerciseId]
-  // The picker hides what your gym doesn't have; fill up with same-muscle exercises it does
-  const more = gymAlternatives(orig || ex.value, exercisesById.value, state.data.settings.equipment)
-  return [...new Set([...(orig?.alternatives || []), item.value?.originalExerciseId, ...more])].filter(id => id && id !== item.value?.exerciseId)
-})
 function resetSuggestions () {
   Object.keys(suggCache).forEach(k => delete suggCache[k])
   // Forget drafts for slots you haven't logged yet so they pick up the new suggestion

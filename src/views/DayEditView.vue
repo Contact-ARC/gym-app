@@ -60,7 +60,7 @@
     <!-- One exercise -->
     <Sheet v-model="itemOpen" :title="cur ? exName(draft.exerciseId) : ''">
       <template v-if="cur">
-        <button class="group group-row ex-pick" @click="addAt = null; pickOpen = true">
+        <button class="group group-row ex-pick" @click="swapOpen = true">
           <div class="grow">
             <div class="t-tiny t-muted">{{ t('Exercise') }}</div>
             <div class="t-h3">{{ exName(draft.exerciseId) }}</div>
@@ -101,7 +101,8 @@
       </template>
     </Sheet>
 
-    <ExercisePicker v-model="pickOpen" :title="addAt !== null ? t('Add an exercise') : t('Swap exercise')" :exclude-id="addAt === null ? draft.exerciseId : undefined" allow-create @pick="picked" />
+    <ExercisePicker v-model="pickOpen" :title="t('Add an exercise')" allow-create @pick="picked" />
+    <SwapSheet v-model="swapOpen" mode="edit" :exercise-id="draft.exerciseId || ''" :original-id="cur?.swappedFrom || ''" @swap="({ id }) => { addAt = null; picked(id) }" />
 
     <Sheet v-model="delOpen" :title="t('Delete this day?')">
       <p class="t-body">{{ t('It will be removed from this routine. Workouts you did with it stay in your history.') }}</p>
@@ -126,6 +127,7 @@ import Sheet from '../ui/Sheet.vue'
 import Stepper from '../ui/Stepper.vue'
 import Toggle from '../ui/Toggle.vue'
 import ExercisePicker from '../ui/ExercisePicker.vue'
+import SwapSheet from '../ui/SwapSheet.vue'
 import { plateStyle } from '../ui/plates.js'
 import { toast } from '../ui/toast.js'
 import {
@@ -282,6 +284,7 @@ function move (i, dir) {
 
 // ── Picking an exercise: add (addAt = 'end' or a ref) or swap (addAt = null) ──
 const pickOpen = ref(false)
+const swapOpen = ref(false)
 const addAt = ref('end')
 function newItem (id) {
   const e = ex(id)

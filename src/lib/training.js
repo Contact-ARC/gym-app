@@ -658,10 +658,14 @@ export function missingEquipment (exercise, available) {
 }
 
 /**
- * How well exercise b can stand in for a, from the muscles they work: a weighted overlap where a
- * main muscle counts 1 and a secondary one 0.4 (shared ÷ combined, so muscles only one of them
- * trains pull the score down). Same log type (weighted, bodyweight, timed) adds a little.
- * level: 'close' | 'partial' | 'loose'. null when they share no main muscle.
+ * How well exercise b can stand in for a.
+ *  - Muscles: a weighted overlap where a main muscle counts 1 and a secondary one 0.4 (shared ÷ combined,
+ *    so muscles only one of them trains pull it down).
+ *  - Movement: the same pattern (vertical pull, hinge, chest fly…) adds 0.25. A lat pulldown and a row
+ *    work much the same muscles, but only the pulldown moves like a pull-up.
+ *  - Same log type (weighted, bodyweight, timed) adds 0.05.
+ * level: 'close' needs both the muscles and, when both have one, the same pattern; otherwise at most
+ * 'partial'. null when they share no main muscle.
  */
 export function exerciseMatch (a, b) {
   const w = (e) => {
@@ -678,9 +682,12 @@ export function exerciseMatch (a, b) {
     all += Math.max(wa[m] || 0, wb[m] || 0)
   }
   const overlap = all ? shared / all : 0
+  const known = !!(a.pattern && b.pattern)
+  const samePattern = known && a.pattern === b.pattern
+  const level = overlap >= 0.55 && (samePattern || !known) ? 'close' : overlap >= 0.4 || samePattern ? 'partial' : 'loose'
   return {
-    score: overlap + (a.logType && a.logType === b.logType ? 0.05 : 0),
-    level: overlap >= 0.6 ? 'close' : overlap >= 0.4 ? 'partial' : 'loose'
+    score: overlap + (samePattern ? 0.25 : 0) + (a.logType && a.logType === b.logType ? 0.05 : 0),
+    level
   }
 }
 
@@ -707,6 +714,25 @@ export function gymAlternatives (exercise, byId, available, usage = {}, max = 6)
     for (const x of ranked) { if (out.length >= max) break; out.push(x.e.id) }
   }
   return out.slice(0, max)
+}
+
+/**
+ * The list every swap screen shows. Measured against what the routine had (original) when you've
+ * already swapped, so going back is one tap and the ranking doesn't drift with each swap.
+ *   → [{ id, original?, picked?, level }]  (picked = hand-picked in the library; level from exerciseMatch)
+ */
+export function swapOptions ({ current, original = null, byId, available, usage = {}, max = 8 }) {
+  const base = byId[original] || byId[current]
+  if (!base) return []
+  const out = []
+  if (original && original !== current && canDoAtGym(base, available) && !base.hidden) out.push({ id: original, original: true, level: null })
+  const picked = new Set(base.alternatives || [])
+  for (const id of gymAlternatives(base, byId, available, usage, max + 2)) {
+    if (id === current || out.some(o => o.id === id)) continue
+    if (out.length >= max) break
+    out.push({ id, picked: picked.has(id), level: exerciseMatch(base, byId[id])?.level || null })
+  }
+  return out
 }
 
 /** Is this loaded on a straight barbell, so a plate breakdown makes sense? */

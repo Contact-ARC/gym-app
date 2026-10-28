@@ -2,12 +2,20 @@
   <div class="xd" :class="{ 'in-sheet': inSheet }">
     <p class="t-small t-muted equip">{{ equipmentLine }}</p>
 
-    <div v-if="photos.length" class="photos" :aria-label="t('Photos of the movement')">
-      <img
-        v-for="(src, i) in photos" :key="src" :src="src" loading="lazy"
-        :alt="i === 0 ? t('{name}, start position', { name: tx(ex, 'name') }) : t('{name}, end position', { name: tx(ex, 'name') })"
-        @error="(e) => (e.target.style.display = 'none')"
-      >
+    <!-- Photos: one at a time, arrows either side (faded at the ends), swipe works too -->
+    <div v-if="photos.length" class="gallery" :class="{ single: photos.length < 2 }" role="group" :aria-label="t('Photos of the movement')">
+      <button v-if="photos.length > 1" class="arrow" :disabled="shown === 0" :aria-label="t('Previous photo')" @click="go(shown - 1)"><Icon name="chevronLeft" /></button>
+      <div ref="strip" class="strip" @scroll.passive="onScroll">
+        <img
+          v-for="(src, i) in photos" :key="src" :src="src" loading="lazy"
+          :alt="i === 0 ? t('{name}, start position', { name: tx(ex, 'name') }) : t('{name}, end position', { name: tx(ex, 'name') })"
+          @error="(e) => (e.target.style.display = 'none')"
+        >
+      </div>
+      <button v-if="photos.length > 1" class="arrow" :disabled="shown === photos.length - 1" :aria-label="t('Next photo')" @click="go(shown + 1)"><Icon name="chevronRight" /></button>
+    </div>
+    <div v-if="photos.length > 1" class="dots" aria-hidden="true">
+      <span v-for="(_, i) in photos" :key="i" :class="{ on: i === shown }" />
     </div>
 
     <div class="card card-pad map-card">
@@ -54,7 +62,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import MuscleMap from './MuscleMap.vue'
 import { state, imageUrl } from '../store.js'
@@ -69,6 +77,21 @@ const props = defineProps({
 })
 
 const photos = computed(() => (props.ex.images || []).map(imageUrl))
+const strip = ref(null)
+const shown = ref(0)
+function onScroll () {
+  const el = strip.value
+  if (el?.clientWidth) shown.value = Math.round(el.scrollLeft / el.clientWidth)
+}
+function go (i) {
+  const el = strip.value
+  if (!el) return
+  const n = Math.max(0, Math.min(photos.value.length - 1, i))
+  el.scrollTo({ left: n * el.clientWidth, behavior: 'smooth' })
+  shown.value = n
+}
+// Another exercise (alternatives link to the same page): back to the first photo
+watch(() => props.ex.id, () => { shown.value = 0; if (strip.value) strip.value.scrollLeft = 0 })
 const setup = computed(() => tx(props.ex, 'setup'))
 const steps = computed(() => tx(props.ex, 'steps'))
 const cues = computed(() => tx(props.ex, 'cues'))
@@ -85,10 +108,17 @@ const equipmentLine = computed(() => {
 
 <style scoped>
 .equip { margin-top: 6px; }
-.photos { display: flex; gap: 8px; overflow-x: auto; margin: 16px -16px 0; padding: 0 16px; scroll-snap-type: x mandatory; scrollbar-width: none; }
-.in-sheet .photos { margin: 14px -20px 0; padding: 0 20px; }
-.photos::-webkit-scrollbar { display: none; }
-.photos img { flex: 0 0 82%; max-width: 420px; aspect-ratio: 3 / 2; object-fit: cover; border-radius: 14px; background: var(--card-2); scroll-snap-align: center; }
+.gallery { display: flex; align-items: center; gap: 6px; margin-top: 16px; }
+.gallery.single { padding: 0 46px; }
+.strip { flex: 1 1 auto; min-width: 0; max-width: 360px; margin: 0 auto; display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; border-radius: 14px; background: var(--card-2); }
+.strip::-webkit-scrollbar { display: none; }
+.strip img { flex: 0 0 100%; width: 100%; aspect-ratio: 3 / 2; object-fit: cover; scroll-snap-align: center; display: block; }
+.arrow { flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--card); color: var(--ink); transition: opacity 150ms ease; }
+.in-sheet .arrow { background: var(--card-2); }
+.arrow:disabled { opacity: 0.3; }
+.dots { display: flex; justify-content: center; gap: 6px; margin-top: 8px; }
+.dots span { width: 7px; height: 7px; border-radius: 50%; background: var(--ink-3); opacity: 0.35; transition: opacity 150ms ease, transform 150ms ease; }
+.dots span.on { opacity: 1; transform: scale(1.15); }
 .map-card { margin-top: 16px; }
 /* Inside a sheet the background is already the card colour, so cards step down a shade */
 .in-sheet .card { background: var(--card-2); }

@@ -50,8 +50,8 @@
     </div>
 
     <ol class="group list">
-      <li v-for="(it, i) in items" :key="it.ref || i">
-        <RouterLink :to="`/exercise/${it.exerciseId}`" class="group-row">
+      <li v-for="(it, i) in items" :key="it.ref || i" class="ex-li">
+        <RouterLink :to="`/exercise/${it.exerciseId}`" class="group-row ex-link">
           <span class="num t-num">{{ i + 1 }}</span>
           <div class="grow">
             <div class="t-h3">{{ exName(it.exerciseId) }}</div>
@@ -67,8 +67,8 @@
             <div v-if="tx(it, 'notes')" class="t-tiny t-muted item-note">{{ tx(it, 'notes') }}</div>
             <div class="t-tiny suggest">{{ suggestionFor(it).text }}</div>
           </div>
-          <Icon name="chevronRight" class="chev" />
         </RouterLink>
+        <button class="icon-btn swap-btn" :aria-label="t('Swap {name}', { name: exName(it.exerciseId) })" @click="openSwap(it)"><Icon name="swap" :size="22" /></button>
         <div v-if="once[it.ref]?.from === it.exerciseId" class="gym-row once">
           <Icon name="swap" :size="16" />
           <span class="grow t-small">{{ t('Next time only: {name}', { name: exName(once[it.ref].to) }) }}</span>
@@ -77,7 +77,7 @@
         <div v-else-if="gapRefs.has(it.ref)" class="gym-row lack">
           <Icon name="alert" :size="16" />
           <span class="grow t-small">{{ t('Not in your gym') }}</span>
-          <button class="btn btn-sm btn-soft" @click="openGymSwap(it)"><Icon name="swap" :size="18" />{{ t('Swap') }}</button>
+          <button class="btn btn-sm btn-soft" @click="openSwap(it)"><Icon name="swap" :size="18" />{{ t('Swap') }}</button>
         </div>
       </li>
       <li v-if="!items.length" class="group-row t-muted">{{ t('No exercises yet.') }}</li>
@@ -146,7 +146,7 @@
       </template>
     </Sheet>
 
-    <GymSwapSheet v-model="gymSwap.open" :day-key="day.key" :item-ref="gymSwap.ref" :exercise-id="gymSwap.exerciseId" />
+    <SwapSheet v-model="swap.open" mode="day" :exercise-id="swap.exerciseId" :original-id="swap.originalId" @swap="doSwap" />
 
     <Sheet v-model="resetOpen" :title="t('Back to the original?')">
       <p class="t-body">{{ tn(edit?.ops?.length || 0, 'Your {n} change to this day will be removed. Your workouts stay as they are.', 'Your {n} changes to this day will be removed. Your workouts stay as they are.') }}</p>
@@ -169,12 +169,12 @@ import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import Sheet from '../ui/Sheet.vue'
 import PlateBadge from '../ui/PlateBadge.vue'
-import GymSwapSheet from '../ui/GymSwapSheet.vue'
+import SwapSheet from '../ui/SwapSheet.vue'
 import { plateStyle } from '../ui/plates.js'
 import { toast } from '../ui/toast.js'
 import {
   state, days, findDay, dayIndexOf, exercisesById, activeSession, startSession, suggestionFor, todayPlan, routine,
-  routineEdit, undoRoutineEdit, resetRoutineDay, saveDayAsMine, planById, gymGaps, clearOneTimeSwap
+  routineEdit, undoRoutineEdit, resetRoutineDay, saveDayAsMine, planById, gymGaps, clearOneTimeSwap, swapInDay
 } from '../store.js'
 import { t, tn, tx } from '../i18n/index.js'
 import { plannedSetsFor } from '../lib/training.js'
@@ -204,11 +204,18 @@ const plan_ = computed(() => (day.value?.planId ? planById(day.value.planId) : n
 const gaps = computed(() => gymGaps.value[key.value] || [])
 const gapRefs = computed(() => new Set(gaps.value.map(g => g.ref)))
 const once = computed(() => state.data.oneTimeSwaps?.[key.value] || {})
-const gymSwap = reactive({ open: false, ref: '', exerciseId: '' })
-function openGymSwap (it) {
-  gymSwap.ref = it.ref
-  gymSwap.exerciseId = it.exerciseId
-  gymSwap.open = true
+// Swap any exercise: next time only, or always (a change to the day)
+const swap = reactive({ open: false, ref: '', exerciseId: '', originalId: '' })
+function openSwap (it) {
+  swap.ref = it.ref
+  swap.exerciseId = it.exerciseId
+  swap.originalId = it.swappedFrom || ''
+  swap.open = true
+}
+function doSwap ({ id, how }) {
+  const from = exName(swap.exerciseId)
+  if (!swapInDay(key.value, swap.ref, id, how)) return
+  toast(how === 'once' ? t('Next time: {b} instead of {a}', { a: from, b: exName(id) }) : t('{b} instead of {a} from now on', { a: from, b: exName(id) }))
 }
 
 function start () {
@@ -262,6 +269,9 @@ function saveMine () {
 .item-note { margin-top: 4px; }
 .track-note { background: var(--card); }
 .gym-note { align-items: flex-start; }
+.ex-li { position: relative; }
+.ex-link { padding-right: 56px; }
+.swap-btn { position: absolute; right: 6px; top: 8px; color: var(--ink-2); }
 .gym-row { display: flex; align-items: center; gap: 8px; margin: -6px 16px 0 60px; padding: 0 0 12px; }
 .gym-row.lack { color: var(--warn); }
 .gym-row.lack .t-small { font-weight: 600; }

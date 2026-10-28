@@ -184,7 +184,7 @@ test('routine week', () => {
 })
 
 // ── v0.3: plans, set types, equipment ──────────────────
-import { resolvePlan, plannedSetsFor, equipmentTags, canDoAtGym, isBarbellLift, bestE1RM, gymAlternatives, missingEquipment, exerciseMatch } from '../src/lib/training.js'
+import { resolvePlan, plannedSetsFor, equipmentTags, canDoAtGym, isBarbellLift, bestE1RM, gymAlternatives, missingEquipment, exerciseMatch, swapOptions } from '../src/lib/training.js'
 
 test('plan: month default rir, week overrides, deload drops a set', () => {
   const r = {
@@ -431,4 +431,39 @@ test('muscle match: two main muscles and the secondaries count', () => {
   assert.equal(exerciseMatch(sumo, kickback).level, 'loose')
   // A row isn't a good stand-in for a curl even though both use the biceps (biceps is only secondary there)
   assert.equal(exerciseMatch(curl, { primary: ['upper_back', 'lats'], secondary: ['biceps'] }), null)
+})
+
+test('swap list: same ranking for any swap, original first once swapped', () => {
+  const byId = {
+    'pull-up': { id: 'pull-up', name: 'Pull-up', logType: 'bodyweight', equipment: ['pull-up bar'], primary: ['lats'], secondary: ['biceps', 'upper_back'], alternatives: ['inverted-row', 'lat-pulldown', 'chin-up'] },
+    'lat-pulldown': { id: 'lat-pulldown', name: 'Lat Pulldown', logType: 'weight', equipment: ['lat pulldown station'], primary: ['lats'], secondary: ['biceps', 'upper_back'] },
+    'chin-up': { id: 'chin-up', name: 'Chin-up', logType: 'bodyweight', equipment: ['pull-up bar'], primary: ['lats', 'biceps'], secondary: ['upper_back'] },
+    'inverted-row': { id: 'inverted-row', name: 'Inverted Row', logType: 'bodyweight', equipment: ['rack'], primary: ['upper_back', 'lats'], secondary: ['biceps'] },
+    'db-row': { id: 'db-row', name: 'Dumbbell Row', logType: 'weight', equipment: ['dumbbell'], primary: ['lats', 'upper_back'], secondary: ['biceps'] },
+    'curl': { id: 'curl', name: 'Curl', logType: 'weight', equipment: ['dumbbells'], primary: ['biceps'] }
+  }
+  // Nothing missing, you just want something else: hand-picked first, best match first (chin-up and
+  // inverted row tie, so the library's order decides), then the rest
+  const a = swapOptions({ current: 'pull-up', byId, available: {} })
+  assert.deepEqual(a.map(o => o.id), ['lat-pulldown', 'inverted-row', 'chin-up', 'db-row'])
+  assert.deepEqual(a.map(o => !!o.picked), [true, true, true, false])
+  assert.equal(a[0].level, 'close')
+  // Already swapped to the pulldown: pull-up comes first as the original, the pulldown itself isn't offered
+  const b = swapOptions({ current: 'lat-pulldown', original: 'pull-up', byId, available: {} })
+  assert.deepEqual(b.map(o => o.id), ['pull-up', 'inverted-row', 'chin-up', 'db-row'])
+  assert.equal(b[0].original, true)
+  // Your gym has no pull-up bar: the original and the chin-up drop out
+  const c = swapOptions({ current: 'lat-pulldown', original: 'pull-up', byId, available: { pullup: false } })
+  assert.deepEqual(c.map(o => o.id), ['inverted-row', 'db-row'])
+})
+
+test('same movement pattern ranks first and is needed for a close match', () => {
+  const pullUp = { logType: 'bodyweight', pattern: 'vertical_pull', primary: ['lats'], secondary: ['biceps', 'upper_back', 'abs'] }
+  const pulldown = { logType: 'weight', pattern: 'vertical_pull', primary: ['lats'], secondary: ['biceps', 'upper_back', 'rear_delts'] }
+  const invRow = { logType: 'bodyweight', pattern: 'horizontal_pull', primary: ['upper_back', 'lats'], secondary: ['biceps', 'rear_delts', 'abs'] }
+  assert.ok(exerciseMatch(pullUp, pulldown).score > exerciseMatch(pullUp, invRow).score)
+  assert.equal(exerciseMatch(pullUp, pulldown).level, 'close')
+  assert.equal(exerciseMatch(pullUp, invRow).level, 'partial')
+  // Your own exercises have no pattern: muscles alone decide
+  assert.equal(exerciseMatch(pullUp, { ...pulldown, pattern: undefined }).level, 'close')
 })
