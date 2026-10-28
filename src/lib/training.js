@@ -1,6 +1,7 @@
 // Pure training math — no Capacitor. Covered by test/training.test.js.
 // Text goes through t() so the suggestions follow the app language (English is the key).
 import { t } from '../i18n/index.js'
+import { climbsIn, climbRecords, CLIMB_SET_WEIGHT } from './climbing.js'
 
 export const KG_PER_LB = 0.45359237
 
@@ -559,6 +560,11 @@ export function detectPRs (session, previous, toUnit) {
     const mine = session.sets.filter(s => s.exerciseId === id && isWorkSet(s))
     const before = previous.flatMap(p => (p.sets || []).filter(s => s.exerciseId === id && isWorkSet(s)))
     if (!before.length || !mine.length) continue // first time isn't a PR, it's a baseline
+    // Climbs: hardest send and hardest flash, per grade system
+    if (mine.some(s => s.climb)) {
+      prs.push(...climbRecords(climbsIn(mine), climbsIn(before), id))
+      continue
+    }
     // Machine pins aren't real weights, so an "estimated max" in pins means nothing
     const pin = mine.some(s => s.unit === 'pin')
     const e = pin ? 0 : bestE1RM(mine, toUnit); const eb = pin ? 0 : bestE1RM(before, toUnit)
@@ -582,16 +588,17 @@ export function detectPRs (session, previous, toUnit) {
   return prs
 }
 
-/** Hard sets per muscle. Primary muscles count 1, secondary 0.5. */
+/** Hard sets per muscle. Primary muscles count 1, secondary 0.5. A logged climb counts a quarter of that. */
 export function setsPerMuscle (sessions, exercisesById) {
   const out = {}
   for (const sess of sessions) {
     for (const s of sess.sets || []) {
-      if (!isWorkSet(s) || (!s.reps && !s.seconds)) continue
+      if (!isWorkSet(s) || (!s.reps && !s.seconds && !s.climb)) continue
       const ex = exercisesById[s.exerciseId]
       if (!ex) continue
-      for (const m of ex.primary || []) out[m] = (out[m] || 0) + 1
-      for (const m of ex.secondary || []) out[m] = (out[m] || 0) + 0.5
+      const w = s.climb ? CLIMB_SET_WEIGHT : 1
+      for (const m of ex.primary || []) out[m] = (out[m] || 0) + w
+      for (const m of ex.secondary || []) out[m] = (out[m] || 0) + 0.5 * w
     }
   }
   return out
@@ -623,14 +630,15 @@ export const EQUIPMENT = {
   medball: 'Medicine ball or slam ball',
   ball: 'Exercise ball',
   battlerope: 'Battle rope',
-  rower: 'Rowing machine'
+  rower: 'Rowing machine',
+  hangboard: 'Hangboard'
 }
 // First match wins for each piece of equipment, so the specific machines come first
 const EQUIP_RULES = [
   [/hip (ab|ad)duction machine/, 'hipmachine'], [/leg extension/, 'legext'], [/pec deck/, 'pecdeck'],
   [/(chest|shoulder) press machine/, 'pressmachine'], [/hack squat/, 'hacksquat'], [/seated calf/, 'calfmachine'],
   [/assisted pull-up/, 'assisted'], [/back extension/, 'backext'], [/preacher/, 'preacher'], [/dip bars/, 'dips'],
-  [/battle rope/, 'battlerope'], [/medicine ball(?! or)|slam ball/, 'medball'], [/exercise ball/, 'ball'], [/rowing machine/, 'rower'],
+  [/hangboard/, 'hangboard'], [/battle rope/, 'battlerope'], [/medicine ball(?! or)|slam ball/, 'medball'], [/exercise ball/, 'ball'], [/rowing machine/, 'rower'],
   [/smith/, 'smith'], [/leg press/, 'legpress'], [/leg curl/, 'legcurl'],
   [/ez bar/i, 'ezbar'], [/barbell|bar pad/, 'barbell'], [/rack/, 'rack'], [/bench/, 'bench'],
   [/dumbbell|kettlebell/, 'dumbbells'], [/cable|pulldown|row station|functional trainer/, 'cable'],

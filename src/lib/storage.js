@@ -39,7 +39,8 @@ export function emptyData () {
       autoBackup: 'weekly', // off | weekly | workout
       volumeTarget: [10, 20], // hard sets per muscle per week
       lifts: { squat: 'barbell-back-squat', bench: 'barbell-bench-press', deadlift: 'barbell-deadlift' }, // powerlifting total
-      plBasis: 'e1rm' // e1rm | actual
+      plBasis: 'e1rm', // e1rm | actual
+      climbing: { boulder: 'font', route: 'french', colours: null } // 0.8: grade systems; colours = your gym's circuit, easiest first (null = defaults)
     },
     sessions: [], // [{ id, startedAt, finishedAt, routineMonth, dayId, dayName, items:[], sets:[], notes }]
     activeSessionId: null,
@@ -108,6 +109,7 @@ export function migrate (data) {
     oneTimeSwaps: { ...(data.oneTimeSwaps || {}) }
   }
   out.settings.lifts = { ...base.settings.lifts, ...(data.settings?.lifts || {}) }
+  out.settings.climbing = { ...base.settings.climbing, ...(data.settings?.climbing || {}) }
   if (!Array.isArray(out.settings.volumeTarget) || out.settings.volumeTarget.length !== 2) out.settings.volumeTarget = base.settings.volumeTarget
   if ((data.schemaVersion || 1) < 2) {
     // 0.5: the rotation remembers a day by key instead of its position in the list

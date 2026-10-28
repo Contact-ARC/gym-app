@@ -390,8 +390,22 @@ export function startSession (keyOrIndex) {
   return session.id
 }
 
+/**
+ * A climbing session: a free session that starts with bouldering or roped climbing.
+ *   kind: 'boulder' | 'route'
+ */
+export function startClimbSession (kind = 'boulder') {
+  if (activeSession.value) return activeSession.value.id
+  const id = startFreeSession('Climbing', 'Escalada')
+  const ex = Object.values(exercisesById.value).find(e => e.logType === 'climb' && (kind === 'route' ? e.climbType === 'route' : e.climbType !== 'route'))
+  if (ex) addItemToSession(id, ex.id)
+  const s = getSession(id)
+  if (s) { s.kind = 'climb'; persist() }
+  return id
+}
+
 /** Ad-hoc session (e.g. a PT session) — starts empty, you add exercises yourself. */
-export function startFreeSession (name = t('Free session')) {
+export function startFreeSession (name = t('Free session'), nameEs = null) {
   if (activeSession.value) return activeSession.value.id
   const session = {
     id: uid(),
@@ -402,6 +416,7 @@ export function startFreeSession (name = t('Free session')) {
     dayId: 'free',
     source: 'free',
     dayName: name,
+    ...(nameEs ? { dayNameEs: nameEs } : {}),
     items: [],
     sets: [],
     notes: ''
@@ -417,9 +432,11 @@ export function addItemToSession (sessionId, exerciseId) {
   const s = getSession(sessionId)
   if (!s) return
   const ex = exercisesById.value[exerciseId]
-  const item = ex?.logType === 'time'
-    ? { exerciseId, originalExerciseId: exerciseId, sets: 3, durationSec: [30, 45], restSec: 60, added: true }
-    : { exerciseId, originalExerciseId: exerciseId, sets: 3, repRange: [8, 12], restSec: 90, added: true }
+  const item = ex?.logType === 'climb'
+    ? { exerciseId, originalExerciseId: exerciseId, sets: 0, restSec: 180, added: true } // open-ended: log climbs as you go
+    : ex?.logType === 'time'
+      ? { exerciseId, originalExerciseId: exerciseId, sets: 3, durationSec: [30, 45], restSec: 60, added: true }
+      : { exerciseId, originalExerciseId: exerciseId, sets: 3, repRange: [8, 12], restSec: 90, added: true }
   s.items.push(item)
   persist()
 }

@@ -14,7 +14,8 @@
     <Segmented v-model="tab" class="tabs" :options="[{ label: t('Your progress'), value: 'progress' }, { label: t('How to do it'), value: 'how' }]" :label="t('View')" />
 
     <!-- ── Your progress ── -->
-    <template v-if="tab === 'progress'">
+    <ClimbProgress v-if="tab === 'progress' && ex.logType === 'climb'" :ex="ex" />
+    <template v-else-if="tab === 'progress'">
       <div v-if="!history.length" class="card card-pad empty">
         <p class="t-h3">{{ t("You haven't logged this one yet") }}</p>
         <p class="t-small t-muted">{{ t('Your trend, records and every session will show here after the first time.') }}</p>
@@ -152,6 +153,7 @@ import Icon from '../ui/Icon.vue'
 import Segmented from '../ui/Segmented.vue'
 import { toast } from '../ui/toast.js'
 import ExerciseDetails from '../ui/ExerciseDetails.vue'
+import ClimbProgress from '../ui/ClimbProgress.vue'
 import MachineSettingsSheet from '../ui/MachineSettingsSheet.vue'
 import CustomExerciseSheet from '../ui/CustomExerciseSheet.vue'
 import Sheet from '../ui/Sheet.vue'

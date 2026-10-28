@@ -244,6 +244,7 @@ function workoutDetail (s) {
     if (x.type && x.type !== 'normal') set.type = x.type
     if (x.rir != null) set.rir = x.rir
     if (x.repsL != null) { set.repsL = x.repsL; set.repsR = x.repsR }
+    if (x.climb) set.climb = { ...x.climb }
     by[x.exerciseId].push(set)
   }
   const detail = order.map(id => ({
@@ -261,7 +262,7 @@ function workoutPayload (s) {
   const sum = sessionSummary(s)
   const ex = exercisesById.value
   // One line per exercise: the most telling record
-  const order = { reps: 0, load: 1, e1rm: 2, time: 3 }
+  const order = { grade: 0, flash: 1, reps: 0, load: 1, e1rm: 2, time: 3 }
   const best = {}
   for (const p of sum.prs) if (!best[p.exerciseId] || order[p.type] < order[best[p.exerciseId].type]) best[p.exerciseId] = p
   const payload = {
@@ -272,6 +273,7 @@ function workoutPayload (s) {
     month: s.routineMonth || undefined,
     minutes: sessionMinutes(s),
     sets: workSets(s).length,
+    climbs: (s.sets || []).filter(x => x.climb).length || undefined,
     exercises: sum.exercises.length,
     volume: Math.round(sum.volume),
     unit: sum.unit,

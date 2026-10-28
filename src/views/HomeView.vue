@@ -198,24 +198,44 @@
       </RouterLink>
     </section>
 
-    <button v-if="!activeSession" class="btn btn-soft btn-block free" @click="startFree">
-      <Icon name="plus" />{{ t('Log a session outside the routine') }}
-    </button>
+    <div v-if="!activeSession" class="row free">
+      <button class="btn btn-soft grow" @click="startFree"><Icon name="plus" />{{ t('Free session') }}</button>
+      <button class="btn btn-soft grow" @click="climbOpen = true"><Icon name="climb" />{{ t('Climbing') }}</button>
+    </div>
+
+    <Sheet v-model="climbOpen" :title="t('Climbing session')">
+      <p class="t-small t-muted">{{ t('Log each climb as you go: grade, wall, flash or not, tries and time. You can add the other kind, or any exercise, during the session.') }}</p>
+      <div class="group climb-kinds">
+        <button class="group-row" @click="startClimb('boulder')">
+          <Icon name="climb" />
+          <div class="grow"><div class="t-h3">{{ t('Bouldering') }}</div><div class="t-tiny t-muted">{{ t('Problems · {g}', { g: gradeHint('boulder') }) }}</div></div>
+          <Icon name="chevronRight" class="chev" />
+        </button>
+        <button class="group-row" @click="startClimb('route')">
+          <Icon name="climb" />
+          <div class="grow"><div class="t-h3">{{ t('Rope climbing') }}</div><div class="t-tiny t-muted">{{ t('Top rope or lead · {g}', { g: gradeHint('route') }) }}</div></div>
+          <Icon name="chevronRight" class="chev" />
+        </button>
+      </div>
+      <p class="t-tiny t-muted mt-s">{{ t('Change the grade systems in Settings, Climbing.') }}</p>
+    </Sheet>
   </div>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import PlateBadge from '../ui/PlateBadge.vue'
 import ChallengeCard from '../ui/ChallengeCard.vue'
 import GoalCard from '../ui/GoalCard.vue'
 import PlanRow from '../ui/PlanRow.vue'
+import Sheet from '../ui/Sheet.vue'
+import { systemFor, SYSTEMS } from '../lib/climbing.js'
 import { plateStyle } from '../ui/plates.js'
 import {
   state, routine, days, currentWeek, isDeloadWeek, todayPlan, updateAvailable, refreshRoutines,
-  activeSession, exercisesById, startSession, startFreeSession, finishedSessions, daysSinceBackup,
+  activeSession, exercisesById, startSession, startFreeSession, startClimbSession, finishedSessions, daysSinceBackup,
   trackItem, streak, routineWarning, nextDay, nextDayIndex, routineReplaced, restoreRoutine, isPlanActive, dismissEditNotice, gymGaps
 } from '../store.js'
 import { openUrl } from '../lib/native.js'
@@ -316,6 +336,16 @@ function start (key) {
   const id = startSession(key)
   if (id) router.push(`/workout/${id}`)
 }
+const climbOpen = ref(false)
+function startClimb (kind) {
+  climbOpen.value = false
+  const id = startClimbSession(kind)
+  if (id) router.push(`/workout/${id}`)
+}
+const gradeHint = (kind) => {
+  const sys = systemFor(kind, state.data.settings)
+  return t(SYSTEMS[kind].find(o => o.value === sys)?.label || '')
+}
 function startFree () {
   const id = startFreeSession(t('Free session'))
   if (id) router.push(`/workout/${id}`)
@@ -365,7 +395,10 @@ function startFree () {
 .streak .t-small { color: var(--ink); }
 .streak.safe { background: var(--ok-soft); color: var(--ok); }
 .report-note { background: var(--card); }
-.free { margin-top: 20px; }
+.free { margin-top: 20px; gap: 10px; }
+.climb-kinds { margin-top: 12px; background: var(--card-2); }
+.climb-kinds .group-row { text-align: left; }
+.mt-s { margin-top: 10px; }
 .day-sub { margin-top: 3px; }
 .replaced { margin-bottom: 10px; gap: 10px; }
 .sec-row { align-items: flex-end; }

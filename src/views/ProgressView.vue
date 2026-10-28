@@ -95,7 +95,7 @@
       <button v-if="exList.length > 6" class="btn btn-ghost btn-sm more-btn" @click="showAllEx = !showAllEx">
         {{ showAllEx ? t('Show fewer') : t('See all {n}', { n: exList.length }) }}
       </button>
-      <p class="t-tiny t-muted explain">{{ t('Most recent first. The number is your best estimated max, or your best set for bodyweight and timed exercises. Tap one for its chart, records and every session.') }}</p>
+      <p class="t-tiny t-muted explain">{{ t('Most recent first. The number is your best estimated max, your best set for bodyweight and timed exercises, or your hardest send for climbing. Tap one for its chart, records and every session.') }}</p>
 
       <!-- Powerlifting: squat, bench, deadlift, total, DOTS -->
       <template v-if="pl.any">
@@ -194,6 +194,7 @@ import { state, persist, finishedSessions, exercisesById, historyFor, days, stre
 import { plTotal, bodyweight } from '../lib/goals.js'
 import { dots } from '../lib/body.js'
 import { bestE1RM, heaviest, fmtLoad, unitFor, dateKey, convertLoad, detectPRs, isWorkSet, bestSeconds } from '../lib/training.js'
+import { climbKind, systemFor, hardest, climbsIn, isSent } from '../lib/climbing.js'
 import { muscleLabel, monthName, fmtNum, prText, relativeDay } from '../lib/format.js'
 import { muscleVolume, monthsWithWorkouts } from '../lib/stats.js'
 import { t, tn, tx, locale } from '../i18n/index.js'
@@ -269,6 +270,23 @@ const exList = computed(() => loggedIds.value.map(id => {
   const ex = exercisesById.value[id]
   const u = unitFor(ex, state.data.profile)
   const hist = historyFor(id) // newest first
+  if (ex?.logType === 'climb') {
+    // Climbing: hardest send in your current grade system, and how it moved
+    const sys = systemFor(climbKind(ex), state.data.settings)
+    const tops = hist.slice(0, 10).reverse().map(h => hardest(climbsIn(h.sets).filter(c => c.system === sys))[sys]?.rank ?? -1)
+    const vals = tops.filter(v => v >= 0)
+    const top = hardest(climbsIn(hist.flatMap(h => h.sets)).filter(c => c.system === sys))[sys]
+    let spark = null
+    if (vals.length > 1) {
+      const lo = Math.min(...vals); const hi = Math.max(...vals); const span = hi - lo || 1
+      spark = vals.map((v, i) => `${(i / (vals.length - 1) * 62 + 1).toFixed(1)},${(22 - (v - lo) / span * 20).toFixed(1)}`).join(' ')
+    }
+    const sends = climbsIn(hist.flatMap(h => h.sets)).filter(isSent).length
+    return {
+      id, name: exName(id), best: top?.grade || '–', spark, change: null, last: hist[0]?.date || '',
+      sub: `${relativeDay(hist[0]?.date)} · ${tn(hist.length, '{n} session', '{n} sessions')} · ${t('{n} sent', { n: sends })}`
+    }
+  }
   const per = hist.slice(0, 10).reverse().map(h => {
     const sets = h.sets.filter(isWorkSet)
     if (u === 'pin') return heaviest(sets, unit.value)
@@ -346,7 +364,7 @@ const recentPRs = computed(() => {
     }
   })
   // One line per exercise per day: the most telling record
-  const order = { reps: 0, load: 1, e1rm: 2, time: 3 }
+  const order = { grade: 0, flash: 1, reps: 0, load: 1, e1rm: 2, time: 3 }
   const best = {}
   for (const p of out) {
     const k = p.exerciseId + dateKey(p.date)

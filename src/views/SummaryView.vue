@@ -21,8 +21,14 @@
 
     <div class="stats">
       <div class="stat"><div class="t-num v">{{ fmtMins(sum.minutes) }}</div><div class="t-tiny t-muted">{{ t('minutes') }}</div></div>
-      <div class="stat"><div class="t-num v">{{ sum.sets }}</div><div class="t-tiny t-muted">{{ t('sets') }}</div></div>
-      <div class="stat"><div class="t-num v">{{ fmtNum(sum.volume, 0) }}</div><div class="t-tiny t-muted">{{ t('{unit} lifted', { unit: sum.unit }) }}</div></div>
+      <template v-if="climbOnly">
+        <div class="stat"><div class="t-num v">{{ climbs.climbs }}</div><div class="t-tiny t-muted">{{ tn(climbs.climbs, 'climb', 'climbs') }}</div></div>
+        <div class="stat"><div class="t-num v">{{ climbs.sends }}</div><div class="t-tiny t-muted">{{ tn(climbs.sends, 'one|sent', 'sent') }}<template v-if="climbs.flashes"> · {{ tn(climbs.flashes, '{n} flash', '{n} flashes') }}</template></div></div>
+      </template>
+      <template v-else>
+        <div class="stat"><div class="t-num v">{{ sum.sets }}</div><div class="t-tiny t-muted">{{ t('sets') }}</div></div>
+        <div class="stat"><div class="t-num v">{{ fmtNum(sum.volume, 0) }}</div><div class="t-tiny t-muted">{{ t('{unit} lifted', { unit: sum.unit }) }}</div></div>
+      </template>
     </div>
 
     <div v-if="justFinished && (streak.weeks || streak.thisWeek)" class="row streak t-small" :class="{ safe: streak.safe }">
@@ -66,7 +72,7 @@
     </section>
 
     <!-- Changes made during the workout -->
-    <section v-if="justFinished && changes.length" class="card card-pad keep">
+    <section v-if="justFinished && changes.length && !climbOnly" class="card card-pad keep">
       <div class="t-h3">{{ isFree ? t('Save this workout as one of your days?') : t('Keep these changes?') }}</div>
       <ul v-if="!isFree" class="ch-list t-small">
         <li v-for="(c, i) in changes" :key="i">{{ changeText(c) }}</li>
@@ -95,7 +101,7 @@
               <Icon name="chevronRight" class="chev" />
             </div>
             <div class="sets-grid">
-              <div v-for="r in setRows(id)" :key="r.id" class="srow" :class="{ wu: r.warm }">
+              <div v-for="r in setRows(id)" :key="r.id" class="srow" :class="[{ wu: r.warm }, r.climb]">
                 <span class="sn t-num">{{ r.n }}</span>
                 <span class="t-num st">{{ r.text }}</span>
                 <span v-if="r.delta" class="delta t-num" :class="r.cls">{{ r.delta }}</span>
@@ -177,6 +183,7 @@ import {
 import { parseKey } from '../lib/routines.js'
 import { goalTitle } from '../lib/goalText.js'
 import { fmtLoad, unitFor, convertLoad, isWorkSet } from '../lib/training.js'
+import { climbText, climbTotals, climbsIn } from '../lib/climbing.js'
 import { fmtDate, fmtNum, fmtMins, dayTitle, prText, PR_ORDER, sessionTitle } from '../lib/format.js'
 import { shareText } from '../lib/native.js'
 import { drawCard, shareCanvas } from '../lib/shareCard.js'
@@ -190,6 +197,9 @@ const route = useRoute()
 const router = useRouter()
 const session = computed(() => getSession(route.params.id))
 const sum = computed(() => sessionSummary(session.value))
+// Climbing: count climbs and sends instead of sets and kilos when that's all the workout was
+const climbs = computed(() => climbTotals(climbsIn(session.value?.sets)))
+const climbOnly = computed(() => climbs.value.climbs > 0 && (session.value?.sets || []).every(s => s.climb || !isWorkSet(s)))
 const name = (id) => tx(exercisesById.value[id], 'name') || id
 const unitOf = (id) => unitFor(exercisesById.value[id], state.data.profile)
 const justFinished = computed(() => session.value?.finishedAt && Date.now() - new Date(session.value.finishedAt) < 30 * 60000)
@@ -254,7 +264,7 @@ function previousSets (id) {
   const h = historyFor(id, session.value.id).find(x => x.date < session.value.startedAt)
   return h ? h.sets.filter(isWorkSet) : null
 }
-const hasPrev = computed(() => sum.value.exercises.some(id => previousSets(id)))
+const hasPrev = computed(() => sum.value.exercises.some(id => previousSets(id)?.some(s => !s.climb)))
 function signed (n, unitStr) {
   const v = Math.round(Math.abs(n) * 100) / 100
   return `${n > 0 ? '+' : '−'}${unitStr(v)}`
@@ -281,6 +291,7 @@ function setRows (id) {
   const prev = previousSets(id)
   let w = 0
   return session.value.sets.filter(s => s.exerciseId === id).map(s => {
+    if (s.climb) { w++; return { id: s.id, warm: false, n: w, text: climbText(s.climb), climb: s.climb.result } }
     const warm = !isWorkSet(s)
     const d = warm ? null : deltaOf(s, prev?.[w])
     if (!warm) w++
@@ -308,6 +319,7 @@ onMounted(() => {
 const TAGS = { warmup: 'warm-up', drop: 'drop', failure: 'to failure', amrap: 'max reps' }
 function setsFor (id) {
   return session.value.sets.filter(s => s.exerciseId === id).map(s => {
+    if (s.climb) return climbText(s.climb)
     if (s.seconds) return s.load ? t('{load} for {s}s', { load: fmtLoad(s.load, s.unit), s: s.seconds }) : `${s.seconds}s`
     const reps = s.repsL != null && s.repsR != null && s.repsL !== s.repsR ? `${s.repsL}/${s.repsR}` : s.reps
     const tag = TAGS[s.type] ? ` (${t(TAGS[s.type])})` : ''
@@ -317,7 +329,9 @@ function setsFor (id) {
 
 async function share () {
   const lines = [
-    t('{day}: {min} min, {sets} sets, {vol} {unit} lifted', { day: sessionTitle(session.value), min: fmtMins(sum.value.minutes), sets: sum.value.sets, vol: fmtNum(sum.value.volume, 0), unit: sum.value.unit })
+    climbOnly.value
+      ? t('{day}: {min} min, {n} climbs, {s} sent', { day: sessionTitle(session.value), min: fmtMins(sum.value.minutes), n: climbs.value.climbs, s: climbs.value.sends })
+      : t('{day}: {min} min, {sets} sets, {vol} {unit} lifted', { day: sessionTitle(session.value), min: fmtMins(sum.value.minutes), sets: sum.value.sets, vol: fmtNum(sum.value.volume, 0), unit: sum.value.unit })
   ]
   for (const g of prGroups.value) lines.push(`🏆 ${name(g.id)}: ${prText(g.prs[0], unitOf(g.id)).main}`)
   for (const id of sum.value.exercises) lines.push(`${name(id)}: ${setsFor(id)}`)
@@ -345,11 +359,17 @@ async function shareImage () {
       kicker: fmtDate(s.startedAt),
       title: sessionTitle(s),
       subtitle: prGroups.value.length ? tn(prGroups.value.length, '{n} new record', '{n} new records') : t('Workout done'),
-      stats: [
-        { value: fmtMins(sum.value.minutes), label: t('minutes') },
-        { value: sum.value.sets, label: t('sets') },
-        { value: fmtNum(sum.value.volume, 0), label: t('{unit} lifted', { unit: sum.value.unit }) }
-      ],
+      stats: climbOnly.value
+        ? [
+            { value: fmtMins(sum.value.minutes), label: t('minutes') },
+            { value: climbs.value.climbs, label: tn(climbs.value.climbs, 'climb', 'climbs') },
+            { value: climbs.value.sends, label: t('sent') }
+          ]
+        : [
+            { value: fmtMins(sum.value.minutes), label: t('minutes') },
+            { value: sum.value.sets, label: t('sets') },
+            { value: fmtNum(sum.value.volume, 0), label: t('{unit} lifted', { unit: sum.value.unit }) }
+          ],
       heading: prItems.length ? t('Records') : t('Exercises'),
       items: [...prItems, ...exItems],
       footer: [who, streak.value.weeks ? tn(streak.value.weeks, '{n}-week streak', '{n}-week streak') : ''].filter(Boolean).join('  ·  ')
@@ -391,6 +411,8 @@ function del () {
 .sets-grid { margin-top: 6px; display: grid; gap: 2px; }
 .srow { display: flex; align-items: baseline; gap: 10px; font-size: 17px; }
 .srow.wu { color: var(--ink-3); }
+.srow.flash .st { color: var(--warn); font-weight: 700; }
+.srow.project .st { color: var(--ink-3); }
 .sn { width: 18px; color: var(--ink-3); font-size: 14px; font-weight: 700; text-align: center; flex: 0 0 auto; }
 .st { color: var(--ink-2); }
 .delta { margin-left: auto; font-size: 14px; font-weight: 700; white-space: nowrap; }

@@ -134,7 +134,12 @@ const dayAria = (d) => d.sessions.length
   ? `${d.day}: ${d.sessions.map(s => sessionTitle(s)).join(', ')}`
   : String(d.day)
 
-const line = (s) => `${tn(workSets(s).length, '{n} set', '{n} sets')}, ${t('{n} min', { n: fmtMins(sessionMinutes(s)) })}`
+const line = (s) => {
+  const climbs = (s.sets || []).filter(x => x.climb).length
+  const sets = workSets(s).length
+  const what = [sets ? tn(sets, '{n} set', '{n} sets') : '', climbs ? tn(climbs, '{n} climb', '{n} climbs') : ''].filter(Boolean).join(', ') || tn(0, '{n} set', '{n} sets')
+  return `${what}, ${t('{n} min', { n: fmtMins(sessionMinutes(s)) })}`
+}
 const when = (iso) => new Date(iso).toLocaleDateString(locale(), { weekday: 'short', day: 'numeric', month: 'short' })
 
 const groups = computed(() => {

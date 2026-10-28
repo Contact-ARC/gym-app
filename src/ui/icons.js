@@ -85,5 +85,8 @@ export {
   mdiFlagCheckered as finish,
   mdiAccountGroupOutline as team,
   mdiSwordCross as versus,
-  mdiAccountOutline as person
+  mdiAccountOutline as person,
+  mdiLightningBolt as flash,
+  mdiCarabiner as climb,
+  mdiImageFilterHdr as wall
 } from '@mdi/js'

@@ -129,13 +129,15 @@ export function prText (p, unit) {
       was: t('was {n}', { n: p.prev })
     }
     case 'time': return { main: t('Longest set {n} s', { n: p.value }), was: t('was {n} s', { n: p.prev }) }
+    case 'grade': return { main: t('Hardest send {g}', { g: p.value }), was: t('was {n}', { n: p.prev }) }
+    case 'flash': return { main: t('Hardest flash {g}', { g: p.value }), was: t('was {n}', { n: p.prev }) }
     case 'load': return { main: t('Heaviest set {v}', { v: fmtLoad(p.value, unit) }), was: t('was {n}', { n: fmtLoad(p.prev, unit) }) }
     default: return { main: t('Estimated max {v}', { v: fmtLoad(p.value, unit) }), was: t('was {n}', { n: fmtLoad(p.prev, unit) }) }
   }
 }
 
-/** Most telling record first: reps, heaviest, estimated max, time. */
-export const PR_ORDER = { reps: 0, load: 1, e1rm: 2, time: 3 }
+/** Most telling record first: reps, heaviest, estimated max, time (climbing: hardest send, then flash). */
+export const PR_ORDER = { grade: 0, flash: 1, reps: 0, load: 1, e1rm: 2, time: 3 }
 
 /** "12 Dec" from a YYYY-MM-DD key. */
 export function shortDay (key) {

@@ -15,7 +15,7 @@
     <template v-if="event.kind === 'workout'">
       <div class="t-h3 post-title">{{ sessionTitle({ dayName: p.dayName, dayNameEs: p.dayNameEs, dayId: p.day }) }}</div>
       <div class="t-small t-muted t-num">
-        {{ t('{n} min', { n: fmtMins(p.minutes) }) }} · {{ tn(p.sets, '{n} set', '{n} sets') }}<template v-if="p.volume"> · {{ fmtNum(volume, 0) }} {{ unit }}</template>
+        {{ t('{n} min', { n: fmtMins(p.minutes) }) }}<template v-if="p.sets || !p.climbs"> · {{ tn(p.sets, '{n} set', '{n} sets') }}</template><template v-if="p.climbs"> · {{ tn(p.climbs, '{n} climb', '{n} climbs') }}</template><template v-if="p.volume"> · {{ fmtNum(volume, 0) }} {{ unit }}</template>
       </div>
       <ul v-if="p.prs?.length" class="prs">
         <li v-for="r in p.prs" :key="r.exerciseId + r.type" class="t-small">

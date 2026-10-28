@@ -9,6 +9,7 @@
         <div class="t-h3 truncate">{{ editingFinished ? t('Editing workout') : sessionTitle(session) }}</div>
         <div class="t-tiny t-muted t-num">
           <template v-if="editingFinished">{{ fmtDate(session.startedAt) }}</template>
+          <template v-else-if="allOpen">{{ elapsed }}<span class="sep" />{{ tn(doneSets, '{n} climb', '{n} climbs') }}</template>
           <template v-else>{{ elapsed }}<span class="sep" />{{ t('{a} of {b} sets', { a: doneSets, b: plannedSets }) }}</template>
         </div>
       </div>
@@ -32,6 +33,7 @@
         <Icon v-if="e.indices.length > 1" name="superset" :size="16" class="chip-link" />
         <span class="chip-name">{{ e.indices.map(i => shortName(items[i].exerciseId)).join(' + ') }}</span>
         <Icon v-if="entryComplete(e)" name="checkBold" :size="15" class="chip-check" />
+        <span v-else-if="e.indices.every(isOpen)" class="chip-count t-num">{{ entryDone(e) }}</span>
         <span v-else class="chip-count t-num">{{ entryDone(e) }}/{{ entryTotal(e) }}</span>
       </button>
     </div>
@@ -94,7 +96,8 @@
             <div class="grow">
               <h1 class="t-title ex-name" :class="{ 'in-ss': !!group, long: name(item.exerciseId).length > 22 }" @click="openExercise">{{ name(item.exerciseId) }}</h1>
               <div class="t-small t-muted ex-meta">
-                <span>{{ prescription({ ...item, sets: rowCount(current) }, ex) }}</span>
+                <span v-if="isClimbEx">{{ t('Log every climb as you go') }}</span>
+                <span v-else>{{ prescription({ ...item, sets: rowCount(current) }, ex) }}</span>
                 <span v-if="restSecs">{{ restLabel(restSecs) }}</span>
                 <span v-if="item.exerciseId !== item.originalExerciseId" class="t-faint">{{ t('replaces {name}', { name: name(item.originalExerciseId) }) }}</span>
                 <span v-if="item.track" class="t-faint">{{ t('beginner version') }}</span>
@@ -104,6 +107,8 @@
             <button class="icon-btn" :aria-label="t('Exercise options')" @click="exMenuOpen = true"><Icon name="more" /></button>
           </div>
 
+          <ClimbPanel v-if="isClimbEx" ref="climbPanel" :session-id="session.id" :item-index="current" :exercise-id="item.exerciseId" />
+          <template v-else>
           <div v-if="targetLine || session.easy || machine.length || notInGym" class="tags">
             <button v-if="notInGym && !logged(current).length" class="pill pill-warn" @click="swapOpen = true">
               <Icon name="alert" :size="16" />{{ t('Not in your gym') }} · <b>{{ t('Swap') }}</b>
@@ -213,6 +218,7 @@
               </div>
             </template>
           </div>
+          </template>
         </section>
       </Transition>
     </main>
@@ -248,7 +254,10 @@
         >
           <Icon name="timer" /><span class="t-num">{{ restShort(manualRest) }}</span>
         </button>
-        <button class="btn btn-lg btn-plate log grow" :disabled="!canLog" @click="logNow">
+        <button v-if="isClimbEx" class="btn btn-lg btn-plate log grow" :disabled="!climbPanel?.canLog" @click="climbPanel?.log()">
+          <Icon name="check" />{{ t('Log climb') }}
+        </button>
+        <button v-else class="btn btn-lg btn-plate log grow" :disabled="!canLog" @click="logNow">
           <Icon name="check" />{{ logLabel }}
         </button>
       </div>
@@ -392,6 +401,7 @@ import Sheet from '../ui/Sheet.vue'
 import Stepper from '../ui/Stepper.vue'
 import Segmented from '../ui/Segmented.vue'
 import ExercisePicker from '../ui/ExercisePicker.vue'
+import ClimbPanel from '../ui/ClimbPanel.vue'
 import SwapSheet from '../ui/SwapSheet.vue'
 import MachineSettingsSheet from '../ui/MachineSettingsSheet.vue'
 import ExerciseDetails from '../ui/ExerciseDetails.vue'
@@ -424,6 +434,10 @@ const plateVars = computed(() => plateStyle(session.value?.dayIndex ?? -1))
 const current = ref(Math.min(session.value?.currentIndex ?? firstIncomplete(), Math.max(0, items.value.length - 1)))
 const item = computed(() => items.value[current.value])
 const ex = computed(() => exercisesById.value[item.value?.exerciseId])
+// Climbing: open-ended (no planned sets), logged with its own panel
+const isClimbEx = computed(() => ex.value?.logType === 'climb')
+const isOpen = (i) => exercisesById.value[items.value[i]?.exerciseId]?.logType === 'climb'
+const climbPanel = ref(null)
 const slideDir = ref('slide-next')
 
 function go (i, dir) {
@@ -485,14 +499,16 @@ const planLogged = (i) => logged(i).filter(fillsPlannedSet)
 const rowCount = (i) => {
   const it = items.value[i]
   if (!it) return 0
+  if (isOpen(i)) return planLogged(i).length
   const planned = Math.max(1, (it.sets || 1) + (it.extraSets || 0) - (it.removedSets || 0))
   return Math.max(planned, planLogged(i).length)
 }
-function isComplete (i) { return planLogged(i).length >= rowCount(i) }
+function isComplete (i) { return !isOpen(i) && planLogged(i).length >= rowCount(i) }
 const plannedSets = computed(() => items.value.reduce((t, _, i) => t + rowCount(i), 0))
 const doneSets = computed(() => (session.value?.sets || []).filter(fillsPlannedSet).length)
 const progressPct = computed(() => (plannedSets.value ? Math.min(100, (doneSets.value / plannedSets.value) * 100) : 0))
 const allDone = computed(() => items.value.length > 0 && items.value.every((_, i) => isComplete(i)))
+const allOpen = computed(() => items.value.length > 0 && items.value.every((_, i) => isOpen(i)))
 
 function firstIncomplete () {
   const s = getSession(route.params.id)
@@ -571,6 +587,7 @@ function setName (s) {
 // ── Suggestions (frozen per slot so they don't shift mid-workout) ──
 const suggCache = reactive({})
 const sugg = computed(() => {
+  if (isClimbEx.value) return { text: '', kind: 'same' }
   const key = `${current.value}:${item.value?.exerciseId}`
   if (!suggCache[key] && item.value) suggCache[key] = suggestionFor(item.value, session.value.id)
   return suggCache[key] || { text: '', kind: 'same' }

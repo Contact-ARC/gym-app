@@ -58,6 +58,31 @@
     </div>
     <p class="t-tiny t-muted foot">{{ t('Exercise lists and swaps only show what your gym has. Routines still show everything.') }}</p>
 
+    <h2 class="section-h">{{ t('Climbing') }}</h2>
+    <div class="card card-pad climb-set">
+      <div class="label">{{ t('Bouldering grades') }}</div>
+      <div class="group radios">
+        <button v-for="o in SYSTEMS.boulder" :key="o.value" class="group-row radio-row" role="radio" :aria-checked="climbSet.boulder === o.value" @click="setClimb('boulder', o.value)">
+          <span class="grow">{{ t(o.label) }}</span><Icon v-if="climbSet.boulder === o.value" name="checkBold" :size="20" />
+        </button>
+      </div>
+      <div class="label mt">{{ t('Route grades') }}</div>
+      <div class="group radios">
+        <button v-for="o in SYSTEMS.route" :key="o.value" class="group-row radio-row" role="radio" :aria-checked="climbSet.route === o.value" @click="setClimb('route', o.value)">
+          <span class="grow">{{ t(o.label) }}</span><Icon v-if="climbSet.route === o.value" name="checkBold" :size="20" />
+        </button>
+      </div>
+      <template v-if="climbSet.boulder === 'colour' || climbSet.route === 'colour'">
+        <label class="label mt" for="climb-colours">{{ t("Your gym's colours, easiest first") }}</label>
+        <div class="row gap">
+          <input id="climb-colours" v-model="coloursText" class="field grow" type="text" :placeholder="defaultColours">
+          <button class="btn btn-soft" @click="saveColours">{{ t('Save') }}</button>
+        </div>
+        <p class="t-tiny t-muted">{{ t('Separate them with commas. Climbs you already logged keep their place, so reordering later won\'t change your records.') }}</p>
+      </template>
+      <p class="t-tiny t-muted mt">{{ t('Records and progress compare climbs within the same grade system.') }}</p>
+    </div>
+
     <h2 class="section-h">{{ t('Reminders') }}</h2>
     <div class="card card-pad">
       <div class="label">{{ t('Remind me on') }}</div>
@@ -305,6 +330,7 @@ import {
 } from '../store.js'
 import { APP_VERSION, DEFAULT_ROUTINES_URL } from '../config.js'
 import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT } from '../lib/training.js'
+import { SYSTEMS, DEFAULT_COLOURS, climbSettings } from '../lib/climbing.js'
 import { previewRestSound } from '../lib/restTimer.js'
 import {
   isNative, shareBackupFile, openUrl, copyText, disarmRestCountdown, ensureNotifyPermission, notificationStatus, openNotificationSettings,
@@ -377,6 +403,22 @@ const incRows = computed(() => {
     { key: 'pin', label: t('Machine pins'), help: t('Positions per jump on a stack'), step: 1, max: 5 }
   ]
 })
+
+// ── Climbing grades ──
+const climbSet = computed(() => climbSettings(state.data.settings))
+const defaultColours = computed(() => DEFAULT_COLOURS.map(c => t('colour|' + c)).join(', '))
+const coloursText = ref((state.data.settings.climbing?.colours || []).join(', '))
+function setClimb (key, value) {
+  state.data.settings.climbing = { ...(state.data.settings.climbing || {}), [key]: value }
+  persist()
+}
+function saveColours () {
+  const list = [...new Set(coloursText.value.split(',').map(x => x.trim()).filter(Boolean))].slice(0, 20)
+  state.data.settings.climbing = { ...(state.data.settings.climbing || {}), colours: list.length ? list : null }
+  coloursText.value = list.join(', ')
+  persist()
+  toast(list.length ? t('Colours saved') : t('Back to the default colours'))
+}
 
 function setEquip (tag, on) {
   if (on) delete state.data.settings.equipment[tag]
@@ -592,4 +634,10 @@ async function copyDebug () {
 .mt-card { margin-top: 10px; }
 .mt-card p { margin-top: 4px; }
 .csv { margin-top: 8px; }
+.climb-set .label { margin-top: 0; }
+.climb-set .mt { margin-top: 14px; }
+.radios { margin-top: 6px; background: var(--card-2); }
+.radio-row { min-height: 52px; text-align: left; }
+.radio-row .icon { color: var(--ink); }
+.climb-set .row.gap { gap: 8px; margin: 6px 0; }
 </style>
