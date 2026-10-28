@@ -1439,7 +1439,5 @@ export default {
   "Original": "Original",
   "Swap for this workout": "Cambiar en este entrenamiento",
   "Sets you logged for this exercise today are removed. The finish screen asks whether to keep the swap.": "Las series que ya apuntaste de este ejercicio hoy se borran. Al terminar te pregunta si quieres conservar el cambio.",
-  "Previous photo": "Foto anterior",
-  "Next photo": "Foto siguiente",
   "Show {what} full screen": "Ver a pantalla completa: {what}"
 }

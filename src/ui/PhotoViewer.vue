@@ -12,8 +12,6 @@
           </div>
         </div>
         <template v-if="photos.length > 1">
-          <button class="pv-btn pv-arrow left" :disabled="shown === 0" :aria-label="t('Previous photo')" @click="go(shown - 1)"><Icon name="chevronLeft" /></button>
-          <button class="pv-btn pv-arrow right" :disabled="shown === photos.length - 1" :aria-label="t('Next photo')" @click="go(shown + 1)"><Icon name="chevronRight" /></button>
           <div class="pv-dots" aria-hidden="true"><span v-for="(_, i) in photos" :key="i" :class="{ on: i === shown }" /></div>
         </template>
       </div>
@@ -22,7 +20,7 @@
 </template>
 
 <script setup>
-// Full-screen photos: swipe or use the arrows; the X, the Android back button or Escape closes.
+// Full-screen photos: swipe between them (dots show where you are); the X, the Android back button or Escape closes.
 import { nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import Icon from './Icon.vue'
 import { pushOverlay } from './overlay.js'
@@ -96,9 +94,6 @@ onBeforeUnmount(() => {
   background: rgba(255, 255, 255, 0.14); color: #fff; transition: opacity 150ms ease;
 }
 .pv-btn:disabled { opacity: 0.25; }
-.pv-arrow { position: absolute; z-index: 2; top: 50%; transform: translateY(-50%); }
-.pv-arrow.left { left: 10px; }
-.pv-arrow.right { right: 10px; }
 .pv-dots {
   position: absolute; z-index: 2; left: 0; right: 0; bottom: calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 24px);
   display: flex; justify-content: center; gap: 8px;
