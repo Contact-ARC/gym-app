@@ -80,7 +80,7 @@
         <button class="btn btn-sm btn-ghost pl-change" @click="pickerOpen = true"><Icon name="search" :size="18" />{{ t('Find') }}</button>
       </div>
       <div class="group">
-        <RouterLink v-for="r in exList.slice(0, showAllEx ? 500 : 6)" :key="r.id" :to="`/exercise/${r.id}`" class="group-row exr">
+        <RouterLink v-for="r in exList.slice(0, showAllEx ? 500 : 6)" :key="r.id" :to="`/exercise/${r.id}?tab=progress`" class="group-row exr">
           <div class="grow ex-txt">
             <div class="t-h3 truncate">{{ r.name }}</div>
             <div class="t-small t-muted truncate">{{ r.sub }}</div>
@@ -262,8 +262,8 @@ const loggedIds = computed(() => [...new Set(finishedSessions.value.flatMap(s =>
 const showAllEx = ref(false)
 const showAllVol = ref(false)
 // Old links to /progress?exercise=… go to the exercise's own page
-if (route.query.exercise) router.replace(`/exercise/${route.query.exercise}`)
-function select (id) { router.push(`/exercise/${id}`) }
+if (route.query.exercise) router.replace(`/exercise/${route.query.exercise}?tab=progress`)
+function select (id) { router.push(`/exercise/${id}?tab=progress`) }
 
 const exList = computed(() => loggedIds.value.map(id => {
   const ex = exercisesById.value[id]

@@ -188,14 +188,13 @@ const alternatives = computed(() => (ex.value?.alternatives || []).map(id => exe
 const history = computed(() => (ex.value ? historyFor(ex.value.id) : []))
 const workSetsOf = (h) => h.sets.filter(isWorkSet)
 
-// Your progress first when there is some; ?tab=how opens the how-to
-const tab = ref(route.query.tab === 'how' ? 'how' : 'progress')
+// How to do it first; Progress links straight to the progress tab with ?tab=progress
+const tab = ref(route.query.tab === 'progress' ? 'progress' : 'how')
 watch(() => route.params.id, () => {
-  tab.value = route.query.tab === 'how' || !historyFor(route.params.id).length ? 'how' : 'progress'
+  tab.value = route.query.tab === 'progress' ? 'progress' : 'how'
   showAllRecords.value = false
   showAllSessions.value = false
-}, { immediate: false })
-if (!history.value.length && route.query.tab !== 'progress') tab.value = 'how'
+})
 
 // ── Per-session numbers ──
 const kind = computed(() => {

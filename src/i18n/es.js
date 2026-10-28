@@ -1354,14 +1354,12 @@ export default {
   "New badges": "Nuevas insignias",
   "New record!": "¡Nuevo récord!",
   "Next time ({day}): {text}": "La próxima vez ({day}): {text}",
-  "Next:": "Siguiente:",
   "Nice": "¡Genial!",
   "No streak right now": "Sin racha ahora mismo",
   "Nothing in this range yet.": "Todavía no hay nada en este periodo.",
   "One more session in this range and you'll see a trend line.": "Con una sesión más en este periodo verás la línea de tendencia.",
   "Only you can see it.": "Solo la ves tú.",
   "Recent": "Recientes",
-  "Recent weights": "Pesos recientes",
   "See all {n}": "Ver los {n}",
   "This exercise: your progress and how to do it": "Este ejercicio: tu progreso y cómo se hace",
   "Time range": "Periodo",
@@ -1391,5 +1389,7 @@ export default {
   "color|purple": "Morado",
   "color|teal": "Verde azulado",
   "color|orange": "Naranja",
-  "color|ink": "Gris"
+  "color|ink": "Gris",
+  // 0.7.1
+  "Warm-up set of {name} logged": "Serie de calentamiento de {name} apuntada"
 }

@@ -171,20 +171,11 @@
           <p v-if="lastSameSet" class="t-small t-muted last-line">
             {{ t('Set {n} last time:', { n: planLogged(current).length + 1 }) }} <b class="t-num">{{ lastSameSet }}</b>
           </p>
-          <button v-if="nextUp" class="next-up t-small" @click="goEntry(nextUp.entry, 'slide-next')">
-            <span class="t-muted">{{ t('Next:') }}</span> <b class="truncate">{{ nextUp.name }}</b> <Icon name="chevronRight" :size="18" />
-          </button>
 
           <!-- Inputs -->
           <div class="inputs">
             <div v-if="showLoad">
               <Stepper v-model="draft.load" :label="loadLabel" :unit="unitText" :step="inc" :min="0" :decimals="unit !== 'pin'" />
-              <div v-if="recentLoads.length" class="quick-loads" role="group" :aria-label="t('Recent weights')">
-                <button
-                  v-for="w in recentLoads" :key="w" class="ql t-num" :class="{ on: draft.load === w }"
-                  :aria-pressed="draft.load === w" @click="draft.load = w; tap()"
-                >{{ fmtLoad(w, unit) }}</button>
-              </div>
               <p v-if="plateLine" class="t-small t-muted plate-line t-num">{{ plateLine }}</p>
             </div>
 
@@ -548,7 +539,7 @@ const targetLine = computed(() => {
 
 const rirOptions = [0, 1, 2, 3, 4].map(n => ({ label: n === 4 ? '4+' : String(n), value: n }))
 const typeOptions = computed(() => [
-  { label: t('Drop set'), value: 'drop' }, { label: t('To failure'), value: 'failure' }, { label: t('Max reps'), value: 'amrap' }
+  { label: t('Warm-up'), value: 'warmup' }, { label: t('Drop set'), value: 'drop' }, { label: t('To failure'), value: 'failure' }, { label: t('Max reps'), value: 'amrap' }
 ])
 const editTypeOptions = computed(() => [
   { label: t('Normal'), value: null }, { label: t('Warm-up'), value: 'warmup' }, { label: t('Drop'), value: 'drop' },
@@ -760,6 +751,7 @@ function logNow () {
     ...(d.type ? { type: d.type } : {})
   })
   const wasDrop = d.type === 'drop'
+  const wasWarm = d.type === 'warmup'
   const slot = `${i}:${it.exerciseId}`
   // The next set of this exercise: suggest a weight from how this one went (not after drop, failure or max-rep sets)
   if (!editingFinished.value && !d.type && planLogged(i).length < rowCount(i)) {
@@ -782,15 +774,26 @@ function logNow () {
     const work = planLogged(i)
     if (work.length) d.load = work[work.length - 1].load // back to the working weight
   }
+  if (wasWarm) {
+    // Back to the working set: your last one today, or the suggestion
+    const work = planLogged(i)
+    const last = work[work.length - 1]
+    const s = sugg.value
+    if (last) { d.load = last.load; d.reps = last.reps; d.seconds = last.seconds }
+    else { d.load = s.load ?? d.load; d.reps = s.reps ?? d.reps }
+  }
   if (planLogged(i).length === 1) warmOpen.value = false
   const record = prSets.value.has(row.id)
   freshSet.value = row.id
   setTimeout(() => { if (freshSet.value === row.id) freshSet.value = null }, 1200)
   buzz(record ? 220 : 30)
   const undo = { actionLabel: t('Undo'), action: () => { deleteSet(session.value.id, row.id); delete adjust[slot]; stopRest(); go(i) } }
-  const logMsg = wasDrop ? t('Drop set of {name} logged', { name: name(it.exerciseId) }) : t('Set {n} of {name} logged', { n: planLogged(i).length, name: name(it.exerciseId) })
+  const logMsg = wasDrop ? t('Drop set of {name} logged', { name: name(it.exerciseId) })
+    : wasWarm ? t('Warm-up set of {name} logged', { name: name(it.exerciseId) })
+      : t('Set {n} of {name} logged', { n: planLogged(i).length, name: name(it.exerciseId) })
   toast(record ? '🏆 ' + t('New record!') + ' ' + logMsg : logMsg, undo)
-  if (editingFinished.value || wasDrop) return
+  // Drop sets and warm-ups: no rest and no moving on; the planned sets are still to do
+  if (editingFinished.value || wasDrop || wasWarm) return
 
   // Where to next, and what the rest timer should say
   const e = entries.value[entryOf(i)]
@@ -835,32 +838,7 @@ function logNow () {
   if (next !== i) setTimeout(() => go(next, sameGroup ? 'swap' : 'slide-next'), sameGroup ? 120 : 350)
 }
 
-// ── Next exercise, recent weights, records ─────────────────
-const nextUp = computed(() => {
-  const ei = entryOf(current.value)
-  if (ei < 0) return null
-  // The next entry that still has sets to do, after this one
-  for (let k = ei + 1; k < entries.value.length; k++) {
-    const e = entries.value[k]
-    if (!entryComplete(e)) return { entry: k, name: e.indices.map(i => shortName(items.value[i].exerciseId)).join(' + ') }
-  }
-  return null
-})
-
-// Your last few different weights on this exercise (today's first), one tap to use again
-const recentLoads = computed(() => {
-  if (!item.value || !showLoad.value || isBodyweight.value) return []
-  const seen = []
-  const add = (v) => { if (v > 0 && !seen.includes(v) && seen.length < 3) seen.push(v) }
-  for (const s of [...logged(current.value)].reverse()) if (isWorkSet(s)) add(s.load)
-  for (const h of historyFor(item.value.exerciseId, session.value.id)) {
-    for (const s of [...h.sets].reverse()) if (isWorkSet(s) && s.unit === unit.value) add(s.load)
-    if (seen.length >= 3) break
-  }
-  return seen
-})
-
-// Sets that beat your best (estimated max or heaviest set) from earlier workouts: they get a trophy
+// ── Records set in this workout ─────────────────
 const prSets = computed(() => {
   const out = new Set()
   if (!item.value) return out
@@ -1229,14 +1207,6 @@ function discard () {
 @keyframes setIn { from { transform: scale(0.82); opacity: 0.3; } to { transform: scale(1); opacity: 1; } }
 @keyframes prGlow { 0% { box-shadow: inset 0 0 0 1.5px var(--warn), 0 0 0 0 rgba(242, 179, 61, 0.7); } 100% { box-shadow: inset 0 0 0 1.5px var(--warn), 0 0 0 14px rgba(242, 179, 61, 0); } }
 @media (prefers-reduced-motion: reduce) { .set.fresh, .set.fresh.pr { animation: none; } }
-.next-up {
-  display: flex; align-items: center; gap: 6px; margin: 10px 0 0 auto; max-width: 100%;
-  min-height: 40px; padding: 0 6px 0 12px; border-radius: 20px; background: var(--card); color: var(--ink);
-}
-.next-up b { min-width: 0; }
-.quick-loads { display: flex; justify-content: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
-.ql { min-height: 38px; min-width: 64px; padding: 0 14px; border-radius: 19px; background: var(--card); color: var(--ink-2); font-weight: 700; font-size: 16px; }
-.ql.on { background: var(--ink); color: var(--paper); }
 .set.next .set-n { color: var(--ink); }
 .set.add { padding: 0; width: 44px; justify-content: center; color: var(--ink-2); }
 .set.done:active, .set.add:active { transform: scale(0.96); }
