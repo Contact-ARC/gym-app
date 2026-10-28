@@ -244,6 +244,20 @@ test('equipment tags and gym filter', () => {
   assert.equal(isBarbellLift({ equipment: ['cable stack'], loadUnit: 'pin' }), false)
 })
 
+test('machines and extras get their own tags, before the generic ones', () => {
+  assert.deepEqual(equipmentTags({ equipment: ['preacher curl bench', 'EZ bar'] }), ['preacher', 'ezbar'])
+  assert.deepEqual(equipmentTags({ equipment: ['back extension bench'] }), ['backext'])
+  assert.deepEqual(equipmentTags({ equipment: ['hip adduction machine'] }), ['hipmachine'])
+  assert.deepEqual(equipmentTags({ equipment: ['seated calf raise machine', 'plates'] }), ['calfmachine'])
+  assert.deepEqual(equipmentTags({ equipment: ['leg press machine', 'plates'] }), ['legpress'])
+  // A plate works for Russian twists, so "medicine ball or plate" needs no medicine ball
+  assert.deepEqual(equipmentTags({ equipment: ['medicine ball or plate'] }), [])
+  assert.deepEqual(equipmentTags({ equipment: ['medicine ball'] }), ['medball'])
+  // Cable versions stay available when the machine isn't there
+  assert.equal(canDoAtGym({ equipment: ['hip abduction machine'] }, { hipmachine: false }), false)
+  assert.equal(canDoAtGym({ equipment: ['cable stack', 'ankle strap'] }, { hipmachine: false }), true)
+})
+
 import { nextSetAdjust } from '../src/lib/training.js'
 
 test('next set: easy set (more reps left than planned) goes up a jump', () => {

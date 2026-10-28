@@ -608,10 +608,29 @@ export const EQUIPMENT = {
   smith: 'Smith machine',
   legpress: 'Leg press',
   legcurl: 'Leg curl machine',
+  legext: 'Leg extension machine',
+  hacksquat: 'Hack squat machine',
+  hipmachine: 'Hip abduction and adduction machines',
+  calfmachine: 'Seated calf raise machine',
+  pressmachine: 'Chest and shoulder press machines',
+  pecdeck: 'Pec deck (chest fly and rear delt machine)',
+  assisted: 'Assisted pull-up machine',
+  preacher: 'Preacher curl bench',
+  backext: 'Back extension bench',
   pullup: 'Pull-up bar',
-  box: 'Plyo box or step'
+  dips: 'Dip bars',
+  box: 'Plyo box or step',
+  medball: 'Medicine ball or slam ball',
+  ball: 'Exercise ball',
+  battlerope: 'Battle rope',
+  rower: 'Rowing machine'
 }
+// First match wins for each piece of equipment, so the specific machines come first
 const EQUIP_RULES = [
+  [/hip (ab|ad)duction machine/, 'hipmachine'], [/leg extension/, 'legext'], [/pec deck/, 'pecdeck'],
+  [/(chest|shoulder) press machine/, 'pressmachine'], [/hack squat/, 'hacksquat'], [/seated calf/, 'calfmachine'],
+  [/assisted pull-up/, 'assisted'], [/back extension/, 'backext'], [/preacher/, 'preacher'], [/dip bars/, 'dips'],
+  [/battle rope/, 'battlerope'], [/medicine ball(?! or)|slam ball/, 'medball'], [/exercise ball/, 'ball'], [/rowing machine/, 'rower'],
   [/smith/, 'smith'], [/leg press/, 'legpress'], [/leg curl/, 'legcurl'],
   [/ez bar/i, 'ezbar'], [/barbell|bar pad/, 'barbell'], [/rack/, 'rack'], [/bench/, 'bench'],
   [/dumbbell|kettlebell/, 'dumbbells'], [/cable|pulldown|row station|functional trainer/, 'cable'],
