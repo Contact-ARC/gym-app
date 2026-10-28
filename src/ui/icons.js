@@ -88,5 +88,6 @@ export {
   mdiAccountOutline as person,
   mdiLightningBolt as flash,
   mdiCarabiner as climb,
-  mdiImageFilterHdr as wall
+  mdiImageFilterHdr as wall,
+  mdiMapMarkerOutline as place
 } from '@mdi/js'

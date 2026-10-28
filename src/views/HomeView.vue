@@ -205,6 +205,15 @@
 
     <Sheet v-model="climbOpen" :title="t('Climbing session')">
       <p class="t-small t-muted">{{ t('Log each climb as you go: grade, wall, flash or not, tries and time. You can add the other kind, or any exercise, during the session.') }}</p>
+      <template v-if="climbGymList.length > 1">
+        <div class="label mt-s">{{ t('Where are you climbing?') }}</div>
+        <div class="gym-pick" role="radiogroup" :aria-label="t('Gym')">
+          <button
+            v-for="g in climbGymList" :key="g.id" class="gym-chip" :class="{ on: g.id === climbGym }" role="radio" :aria-checked="g.id === climbGym"
+            @click="climbGym = g.id"
+          ><Icon name="place" :size="16" />{{ gymName(g) }}</button>
+        </div>
+      </template>
       <div class="group climb-kinds">
         <button class="group-row" @click="startClimb('boulder')">
           <Icon name="climb" />
@@ -217,13 +226,13 @@
           <Icon name="chevronRight" class="chev" />
         </button>
       </div>
-      <p class="t-tiny t-muted mt-s">{{ t('Change the grade systems in Settings, Climbing.') }}</p>
+      <p class="t-tiny t-muted mt-s">{{ t('Add the gyms you climb at, and how each one grades, in Settings, Climbing.') }}</p>
     </Sheet>
   </div>
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import PlateBadge from '../ui/PlateBadge.vue'
@@ -231,7 +240,7 @@ import ChallengeCard from '../ui/ChallengeCard.vue'
 import GoalCard from '../ui/GoalCard.vue'
 import PlanRow from '../ui/PlanRow.vue'
 import Sheet from '../ui/Sheet.vue'
-import { systemFor, SYSTEMS } from '../lib/climbing.js'
+import { systemFor, systemLabel, systemOptionLabel, isColour, activeGyms, currentGymId, gymName } from '../lib/climbing.js'
 import { plateStyle } from '../ui/plates.js'
 import {
   state, routine, days, currentWeek, isDeloadWeek, todayPlan, updateAvailable, refreshRoutines,
@@ -337,14 +346,17 @@ function start (key) {
   if (id) router.push(`/workout/${id}`)
 }
 const climbOpen = ref(false)
+const climbGymList = computed(() => activeGyms(state.data.settings))
+const climbGym = ref(currentGymId(state.data.settings))
+watch(climbOpen, (o) => { if (o) climbGym.value = currentGymId(state.data.settings) })
 function startClimb (kind) {
   climbOpen.value = false
-  const id = startClimbSession(kind)
+  const id = startClimbSession(kind, climbGym.value)
   if (id) router.push(`/workout/${id}`)
 }
 const gradeHint = (kind) => {
-  const sys = systemFor(kind, state.data.settings)
-  return t(SYSTEMS[kind].find(o => o.value === sys)?.label || '')
+  const sys = systemFor(kind, state.data.settings, climbGym.value)
+  return isColour(sys) ? systemLabel(sys, state.data.settings) : systemOptionLabel(kind, sys)
 }
 function startFree () {
   const id = startFreeSession(t('Free session'))
@@ -397,6 +409,9 @@ function startFree () {
 .report-note { background: var(--card); }
 .free { margin-top: 20px; gap: 10px; }
 .climb-kinds { margin-top: 12px; background: var(--card-2); }
+.gym-pick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.gym-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 20px; background: var(--card-2); color: var(--ink-2); font-weight: 600; font-size: 15px; }
+.gym-chip.on { background: var(--ink); color: var(--paper); }
 .climb-kinds .group-row { text-align: left; }
 .mt-s { margin-top: 10px; }
 .day-sub { margin-top: 3px; }

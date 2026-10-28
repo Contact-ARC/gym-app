@@ -59,29 +59,22 @@
     <p class="t-tiny t-muted foot">{{ t('Exercise lists and swaps only show what your gym has. Routines still show everything.') }}</p>
 
     <h2 class="section-h">{{ t('Climbing') }}</h2>
-    <div class="card card-pad climb-set">
-      <div class="label">{{ t('Bouldering grades') }}</div>
-      <div class="group radios">
-        <button v-for="o in SYSTEMS.boulder" :key="o.value" class="group-row radio-row" role="radio" :aria-checked="climbSet.boulder === o.value" @click="setClimb('boulder', o.value)">
-          <span class="grow">{{ t(o.label) }}</span><Icon v-if="climbSet.boulder === o.value" name="checkBold" :size="20" />
-        </button>
-      </div>
-      <div class="label mt">{{ t('Route grades') }}</div>
-      <div class="group radios">
-        <button v-for="o in SYSTEMS.route" :key="o.value" class="group-row radio-row" role="radio" :aria-checked="climbSet.route === o.value" @click="setClimb('route', o.value)">
-          <span class="grow">{{ t(o.label) }}</span><Icon v-if="climbSet.route === o.value" name="checkBold" :size="20" />
-        </button>
-      </div>
-      <template v-if="climbSet.boulder === 'colour' || climbSet.route === 'colour'">
-        <label class="label mt" for="climb-colours">{{ t("Your gym's colours, easiest first") }}</label>
-        <div class="row gap">
-          <input id="climb-colours" v-model="coloursText" class="field grow" type="text" :placeholder="defaultColours">
-          <button class="btn btn-soft" @click="saveColours">{{ t('Save') }}</button>
+    <div class="group">
+      <button v-for="g in climbGymList" :key="g.id" class="group-row gym-row" @click="openGym(g.id)">
+        <Icon name="place" class="t-muted" />
+        <div class="grow">
+          <div class="t-h3 truncate">{{ gymName(g) }}<span v-if="climbGymList.length > 1 && g.id === lastGym" class="t-tiny t-muted last"> · {{ t('last time') }}</span></div>
+          <div class="t-small t-muted">{{ gymLine(g) }}</div>
+          <div v-if="usesColours(g)" class="dots">
+            <span v-for="c in gymColours(g)" :key="c" class="dot" :style="{ background: swatch(c) || 'var(--card-2)' }" :title="c" />
+          </div>
         </div>
-        <p class="t-tiny t-muted">{{ t('Separate them with commas. Climbs you already logged keep their place, so reordering later won\'t change your records.') }}</p>
-      </template>
-      <p class="t-tiny t-muted mt">{{ t('Records and progress compare climbs within the same grade system.') }}</p>
+        <Icon name="chevronRight" class="chev" />
+      </button>
+      <button class="group-row gym-row add" @click="openGym(null)"><Icon name="plus" />{{ t('Add a gym') }}</button>
     </div>
+    <p class="t-tiny t-muted foot">{{ t('Each gym has its own grades and walls. Font, V, French and YDS grades are compared across gyms; colours only within their own gym.') }}</p>
+    <ClimbGymSheet v-model="gymOpen" :gym-id="gymEditId" />
 
     <h2 class="section-h">{{ t('Reminders') }}</h2>
     <div class="card card-pad">
@@ -330,7 +323,8 @@ import {
 } from '../store.js'
 import { APP_VERSION, DEFAULT_ROUTINES_URL } from '../config.js'
 import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT } from '../lib/training.js'
-import { SYSTEMS, DEFAULT_COLOURS, climbSettings } from '../lib/climbing.js'
+import { activeGyms, currentGymId, gymName, gymColours, systemLabel, swatch } from '../lib/climbing.js'
+import ClimbGymSheet from '../ui/ClimbGymSheet.vue'
 import { previewRestSound } from '../lib/restTimer.js'
 import {
   isNative, shareBackupFile, openUrl, copyText, disarmRestCountdown, ensureNotifyPermission, notificationStatus, openNotificationSettings,
@@ -404,20 +398,20 @@ const incRows = computed(() => {
   ]
 })
 
-// ── Climbing grades ──
-const climbSet = computed(() => climbSettings(state.data.settings))
-const defaultColours = computed(() => DEFAULT_COLOURS.map(c => t('colour|' + c)).join(', '))
-const coloursText = ref((state.data.settings.climbing?.colours || []).join(', '))
-function setClimb (key, value) {
-  state.data.settings.climbing = { ...(state.data.settings.climbing || {}), [key]: value }
-  persist()
+// ── Climbing gyms ──
+const climbGymList = computed(() => activeGyms(state.data.settings))
+const lastGym = computed(() => currentGymId(state.data.settings))
+const usesColours = (g) => g.boulder === 'colour' || g.route === 'colour'
+const gymLine = (g) => {
+  const b = g.boulder === 'colour' ? t('Colours') : systemLabel(g.boulder || 'font', state.data.settings)
+  const r = g.route === 'colour' ? t('Colours') : systemLabel(g.route || 'french', state.data.settings)
+  return t('Boulders: {b} · Routes: {r}', { b, r })
 }
-function saveColours () {
-  const list = [...new Set(coloursText.value.split(',').map(x => x.trim()).filter(Boolean))].slice(0, 20)
-  state.data.settings.climbing = { ...(state.data.settings.climbing || {}), colours: list.length ? list : null }
-  coloursText.value = list.join(', ')
-  persist()
-  toast(list.length ? t('Colours saved') : t('Back to the default colours'))
+const gymOpen = ref(false)
+const gymEditId = ref(null)
+function openGym (id) {
+  gymEditId.value = id
+  gymOpen.value = true
 }
 
 function setEquip (tag, on) {
@@ -634,10 +628,9 @@ async function copyDebug () {
 .mt-card { margin-top: 10px; }
 .mt-card p { margin-top: 4px; }
 .csv { margin-top: 8px; }
-.climb-set .label { margin-top: 0; }
-.climb-set .mt { margin-top: 14px; }
-.radios { margin-top: 6px; background: var(--card-2); }
-.radio-row { min-height: 52px; text-align: left; }
-.radio-row .icon { color: var(--ink); }
-.climb-set .row.gap { gap: 8px; margin: 6px 0; }
+.gym-row { text-align: left; }
+.gym-row.add { color: var(--ink-2); font-weight: 600; gap: 10px; }
+.gym-row .last { font-weight: 500; }
+.gym-row .dots { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+.gym-row .dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.18); }
 </style>

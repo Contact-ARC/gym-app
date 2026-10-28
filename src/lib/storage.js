@@ -40,7 +40,7 @@ export function emptyData () {
       volumeTarget: [10, 20], // hard sets per muscle per week
       lifts: { squat: 'barbell-back-squat', bench: 'barbell-bench-press', deadlift: 'barbell-deadlift' }, // powerlifting total
       plBasis: 'e1rm', // e1rm | actual
-      climbing: { boulder: 'font', route: 'french', colours: null } // 0.8: grade systems; colours = your gym's circuit, easiest first (null = defaults)
+      climbing: { gyms: [], gymId: null } // 0.8.1: [{ id, name, boulder: font|v|colour, route: french|yds|colour, colours: [easiest…hardest] | null, hidden }]
     },
     sessions: [], // [{ id, startedAt, finishedAt, routineMonth, dayId, dayName, items:[], sets:[], notes }]
     activeSessionId: null,
@@ -109,7 +109,7 @@ export function migrate (data) {
     oneTimeSwaps: { ...(data.oneTimeSwaps || {}) }
   }
   out.settings.lifts = { ...base.settings.lifts, ...(data.settings?.lifts || {}) }
-  out.settings.climbing = { ...base.settings.climbing, ...(data.settings?.climbing || {}) }
+  out.settings.climbing = migrateClimbing(data.settings?.climbing, out.sessions)
   if (!Array.isArray(out.settings.volumeTarget) || out.settings.volumeTarget.length !== 2) out.settings.volumeTarget = base.settings.volumeTarget
   if ((data.schemaVersion || 1) < 2) {
     // 0.5: the rotation remembers a day by key instead of its position in the list
@@ -117,6 +117,25 @@ export function migrate (data) {
     out.nextDayKey = d ? `r-${d.id}` : null
   }
   out.schemaVersion = DATA_SCHEMA_VERSION
+  return out
+}
+
+/**
+ * 0.8.1: climbing gyms. 0.8.0 had one set of grade systems and colours; that becomes your first gym, and
+ * climbs logged in its colours ('colour') move to that gym's circuit ('colour:gym1'). Safe to run every load.
+ */
+function migrateClimbing (c = {}, sessions = []) {
+  const out = { gyms: [], gymId: null, ...c }
+  if (!Array.isArray(out.gyms) || !out.gyms.length) {
+    out.gyms = [{ id: 'gym1', name: '', boulder: c.boulder || 'font', route: c.route || 'french', colours: Array.isArray(c.colours) && c.colours.length ? c.colours : null }]
+    out.gymId = 'gym1'
+  }
+  delete out.boulder; delete out.route; delete out.colours
+  for (const s of sessions || []) {
+    for (const x of s.sets || []) {
+      if (x.climb?.system === 'colour') x.climb.system = 'colour:gym1'
+    }
+  }
   return out
 }
 

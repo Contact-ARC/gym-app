@@ -271,8 +271,8 @@ const exList = computed(() => loggedIds.value.map(id => {
   const u = unitFor(ex, state.data.profile)
   const hist = historyFor(id) // newest first
   if (ex?.logType === 'climb') {
-    // Climbing: hardest send in your current grade system, and how it moved
-    const sys = systemFor(climbKind(ex), state.data.settings)
+    // Climbing: hardest send in the grade system you climbed in last (your gym's), and how it moved
+    const sys = climbsIn(hist[0]?.sets).at(-1)?.system || systemFor(climbKind(ex), state.data.settings)
     const tops = hist.slice(0, 10).reverse().map(h => hardest(climbsIn(h.sets).filter(c => c.system === sys))[sys]?.rank ?? -1)
     const vals = tops.filter(v => v >= 0)
     const top = hardest(climbsIn(hist.flatMap(h => h.sets)).filter(c => c.system === sys))[sys]

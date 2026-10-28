@@ -6,6 +6,11 @@
     </div>
 
     <template v-else>
+      <!-- Grade scale: one per system you've climbed in (each colour circuit is its own gym) -->
+      <div v-if="systems.length > 1" class="chips scales" role="tablist" :aria-label="t('Grades')">
+        <button v-for="sy in systems" :key="sy" class="chip" :class="{ on: system === sy }" role="tab" :aria-selected="system === sy" @click="picked = sy">{{ systemLabel(sy, state.data.settings) }}</button>
+      </div>
+
       <!-- Headline -->
       <div class="card card-pad head">
         <div class="row heads">
@@ -24,7 +29,6 @@
           <span><b class="t-num">{{ sessions.length }}</b> {{ tn(sessions.length, 'session', 'sessions') }}</span>
           <span v-if="all.seconds >= 60"><b class="t-num">{{ fmtHours(all.seconds) }}</b> {{ t('on the wall') }}</span>
         </div>
-        <p v-if="otherSystems" class="t-tiny t-muted other">{{ t('Climbs logged in another grade system are counted, but only {sys} grades are compared.', { sys: sysLabel }) }}</p>
       </div>
 
       <!-- Hardest send per session -->
@@ -60,10 +64,10 @@
       <template v-if="walls.length">
         <h2 class="section-h">{{ t('Walls') }}</h2>
         <div class="group">
-          <div v-for="w in walls" :key="w.wall" class="group-row">
+          <div v-for="w in walls" :key="w.key" class="group-row">
             <Icon name="wall" :size="20" class="t-muted" />
             <div class="grow">
-              <div class="t-h3 truncate">{{ w.wall }}</div>
+              <div class="t-h3 truncate">{{ w.wall }}<span v-if="manyGyms" class="t-small t-muted"> · {{ w.gym }}</span></div>
               <div class="t-small t-muted">{{ tn(w.climbs, '{n} climb', '{n} climbs') }} · {{ t('{n} sent', { n: w.sends }) }}</div>
             </div>
             <span v-if="w.top" class="t-num top">{{ w.top }}</span>
@@ -104,7 +108,7 @@ import { Line } from 'vue-chartjs'
 import { Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Legend } from 'chart.js'
 import Icon from './Icon.vue'
 import { state, historyFor } from '../store.js'
-import { climbKind, systemFor, gradeList, hardest, climbTotals, isSent, SYSTEMS } from '../lib/climbing.js'
+import { climbKind, systemFor, gradeList, hardest, climbTotals, isSent, systemLabel, climbGymId, gymById, gymName } from '../lib/climbing.js'
 import { relativeDay } from '../lib/format.js'
 import { useChartTheme } from '../lib/chartTheme.js'
 import { t, tn, locale } from '../i18n/index.js'
@@ -114,21 +118,34 @@ ChartJS.register(LineElement, PointElement, LinearScale, CategoryScale, Tooltip,
 const props = defineProps({ ex: { type: Object, required: true } })
 const ct = useChartTheme()
 const kind = computed(() => climbKind(props.ex))
-const system = computed(() => systemFor(kind.value, state.data.settings))
+// Newest first: every session with this exercise's climbs
+const history = computed(() => historyFor(props.ex.id)
+  .map(h => ({ date: h.date, sessionId: h.sessionId, all: h.sets.filter(s => s.climb).map(s => s.climb) }))
+  .filter(h => h.all.length))
+// Grade systems you've climbed in, most recent first. Grades are only compared within one, so the page
+// shows one at a time: your current gym's first.
+const systems = computed(() => {
+  const seen = []
+  for (const h of history.value) for (const c of h.all) if (!seen.includes(c.system)) seen.push(c.system)
+  return seen
+})
+const picked = ref(null)
+const system = computed(() => {
+  if (picked.value && systems.value.includes(picked.value)) return picked.value
+  const here = systemFor(kind.value, state.data.settings)
+  return systems.value.includes(here) ? here : (systems.value[0] || here)
+})
 const grades = computed(() => gradeList(system.value, state.data.settings))
-const sysLabel = computed(() => t(SYSTEMS[kind.value].find(o => o.value === system.value)?.label || ''))
 
-// Oldest first, with this exercise's climbs
-const sessions = computed(() => historyFor(props.ex.id)
+// The sessions with climbs in that system
+const sessions = computed(() => history.value
   .map(h => {
-    const climbs = h.sets.filter(s => s.climb).map(s => s.climb)
-    const mine = climbs.filter(c => c.system === system.value)
-    return { date: h.date, sessionId: h.sessionId, climbs, mine, totals: climbTotals(climbs), top: hardest(mine)[system.value]?.grade || '' }
+    const climbs = h.all.filter(c => c.system === system.value)
+    return { date: h.date, sessionId: h.sessionId, climbs, mine: climbs, totals: climbTotals(climbs), top: hardest(climbs)[system.value]?.grade || '' }
   })
   .filter(s => s.climbs.length))
 const allClimbs = computed(() => sessions.value.flatMap(s => s.climbs))
-const otherSystems = computed(() => allClimbs.value.some(c => c.system !== system.value))
-const mineAll = computed(() => allClimbs.value.filter(c => c.system === system.value))
+const mineAll = allClimbs
 const all = computed(() => climbTotals(allClimbs.value))
 const flashRate = computed(() => (all.value.sends ? Math.round((all.value.flashes / all.value.sends) * 100) : 0))
 const best = computed(() => hardest(mineAll.value)[system.value])
@@ -196,7 +213,9 @@ const walls = computed(() => {
   for (const s of inRange.value) {
     for (const c of s.climbs) {
       if (!c.wall) continue
-      const w = (by[c.wall] ||= { wall: c.wall, climbs: 0, sends: 0, list: [] })
+      const gid = climbGymId(c)
+      const key = gid + '|' + c.wall.toLowerCase()
+      const w = (by[key] ||= { key, wall: c.wall, gymId: gid, gym: gymName(gymById(state.data.settings, gid)), climbs: 0, sends: 0, list: [] })
       w.climbs++
       if (isSent(c)) w.sends++
       if (c.system === system.value) w.list.push(c)
@@ -207,6 +226,9 @@ const walls = computed(() => {
     .sort((a, b) => b.climbs - a.climbs)
     .slice(0, 8)
 })
+
+// Same wall name at two gyms: say which
+const manyGyms = computed(() => new Set(walls.value.map(w => w.gymId)).size > 1)
 
 // ── Records ──
 const records = computed(() => {
@@ -231,7 +253,7 @@ const showAll = ref(false)
 .mid { font-size: 28px; font-weight: 700; }
 .right { text-align: right; }
 .nums { flex-wrap: wrap; gap: 4px 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
-.other { margin-top: 8px; }
+.scales { margin-top: 16px; }
 .chart-card { margin-top: 10px; }
 .chart { height: 220px; margin-top: 10px; }
 .one { margin: 18px 0 6px; text-align: center; }

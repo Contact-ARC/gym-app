@@ -1,28 +1,62 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  GRADES, climbSettings, gradeList, rankOf, hardest, climbTotals, climbRecords, climbText, isSent, swatch, systemFor, climbKind
+  GRADES, gradeList, rankOf, hardest, climbTotals, climbRecords, climbText, isSent, swatch, systemFor, climbKind,
+  climbGyms, activeGyms, currentGymId, systemLabel, climbGymId
 } from '../src/lib/climbing.js'
 import { detectPRs, setsPerMuscle } from '../src/lib/training.js'
 
 const c = (grade, result = 'send', extra = {}) => ({ kind: 'boulder', system: 'font', grade, rank: GRADES.font.indexOf(grade), result, attempts: 1, seconds: 0, wall: '', note: '', ...extra })
 
 test('grade systems and ranks', () => {
-  assert.equal(climbSettings({}).boulder, 'font')
-  assert.equal(climbSettings({}).route, 'french')
-  assert.equal(systemFor('route', { climbing: { route: 'yds' } }), 'yds')
+  assert.equal(systemFor('boulder', {}), 'font')
+  assert.equal(systemFor('route', {}), 'french')
+  assert.equal(systemFor('route', { climbing: { gyms: [{ id: 'a', route: 'yds' }] } }), 'yds')
   assert.equal(climbKind({ climbType: 'route' }), 'route')
   assert.equal(climbKind({}), 'boulder')
   assert.ok(rankOf('6B+', 'font') > rankOf('6B', 'font'))
   assert.ok(rankOf('7a', 'french') > rankOf('6c+', 'french'))
   assert.ok(rankOf('5.10a', 'yds') > rankOf('5.9', 'yds'))
-  // Your gym's colours, easiest first
-  const settings = { climbing: { boulder: 'colour', colours: ['Green', 'Blue', 'Red'] } }
-  assert.deepEqual(gradeList('colour', settings), ['Green', 'Blue', 'Red'])
-  assert.equal(rankOf('Red', 'colour', settings), 2)
   assert.equal(swatch('Blue'), '#2F6FD6')
   assert.equal(swatch('Azul'), '#2F6FD6')
   assert.equal(swatch('6B'), null)
+})
+
+test('gyms: each has its own grades, and a colour circuit belongs to its gym', () => {
+  const settings = {
+    climbing: {
+      gymId: 'arkose',
+      gyms: [
+        { id: 'sharma', name: 'Sharma', boulder: 'colour', route: 'french', colours: ['Green', 'Blue', 'Red'] },
+        { id: 'arkose', name: 'Arkose', boulder: 'colour', route: 'french', colours: ['Yellow', 'Green', 'Blue', 'Purple'] },
+        { id: 'old', name: 'Old', boulder: 'v', route: 'yds', hidden: true }
+      ]
+    }
+  }
+  assert.equal(currentGymId(settings), 'arkose')
+  assert.deepEqual(activeGyms(settings).map(g => g.id), ['sharma', 'arkose'])
+  assert.equal(climbGyms(settings).length, 3) // removed gyms are kept for their old climbs
+  // Boulders in colours, routes in French at the same gym
+  assert.equal(systemFor('boulder', settings, 'sharma'), 'colour:sharma')
+  assert.equal(systemFor('route', settings, 'sharma'), 'french')
+  assert.equal(systemFor('boulder', settings), 'colour:arkose') // where you climbed last
+  // Same colour, different place in each circuit
+  assert.equal(rankOf('Blue', 'colour:sharma', settings), 1)
+  assert.equal(rankOf('Blue', 'colour:arkose', settings), 2)
+  assert.deepEqual(gradeList('colour:old', settings).length, 8) // no circuit set: the default colours
+  assert.equal(systemLabel('colour:sharma', settings), 'Sharma colours')
+  assert.equal(systemLabel('french', settings), 'French')
+  // A blue at Sharma and a red at Arkose are never compared with each other
+  const sh = { system: 'colour:sharma', grade: 'Red', rank: 2, result: 'send' }
+  const ar = { system: 'colour:arkose', grade: 'Blue', rank: 2, result: 'send' }
+  const h = hardest([sh, ar])
+  assert.equal(h['colour:sharma'].grade, 'Red')
+  assert.equal(h['colour:arkose'].grade, 'Blue')
+  // A removed or unknown gym id falls back to the first gym you can pick
+  assert.equal(currentGymId({ climbing: { gymId: 'old', gyms: settings.climbing.gyms } }), 'sharma')
+  // Before gyms: one unnamed gym from the old settings, and old climbs were there
+  assert.deepEqual(climbGyms({ climbing: { boulder: 'v' } }).map(g => [g.id, g.boulder, g.route]), [['gym1', 'v', 'french']])
+  assert.equal(climbGymId({ grade: '6A' }), 'gym1')
 })
 
 test('hardest send and flash, totals', () => {

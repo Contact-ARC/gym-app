@@ -3,7 +3,7 @@
 //
 // A climb is logged as a set with a `climb` object instead of weight and reps:
 //   { kind: 'boulder'|'route', system, grade, rank, wall, result: 'flash'|'send'|'project',
-//     attempts, seconds, note, style: 'toprope'|'lead' (routes) }
+//     attempts, seconds, note, style: 'toprope'|'lead' (routes), gym: <gym id> (0.8.1) }
 // `rank` is the grade's position in its system when it was logged, so comparing grades still works if
 // you later reorder your gym's colours. Grades are only compared within the same system.
 import { t, tn } from '../i18n/index.js'
@@ -21,6 +21,7 @@ export const SYSTEMS = {
 /** Colour circuits, easiest first, when you haven't set your own. */
 export const DEFAULT_COLOURS = ['White', 'Yellow', 'Orange', 'Green', 'Blue', 'Red', 'Purple', 'Black']
 const SWATCH = {
+  // English and Spanish names, so a circuit typed in either language gets its colour
   white: '#F4F5F7', blanco: '#F4F5F7', yellow: '#F2C230', amarillo: '#F2C230', orange: '#EE8A2E', naranja: '#EE8A2E',
   green: '#2E9E5B', verde: '#2E9E5B', blue: '#2F6FD6', azul: '#2F6FD6', red: '#D23B33', rojo: '#D23B33',
   purple: '#8A4FC2', morado: '#8A4FC2', lila: '#8A4FC2', black: '#1B1F26', negro: '#1B1F26', pink: '#E86AA6', rosa: '#E86AA6',
@@ -31,22 +32,67 @@ export function swatch (grade) {
   return SWATCH[String(grade || '').trim().toLowerCase()] || null
 }
 
-/** Default grade systems: Font for boulders and French for routes (what most gyms in Spain use). */
-export function climbSettings (settings) {
+/** The colours you can pick from when setting up a gym's circuit (names shown in your language). */
+export const PALETTE = ['White', 'Yellow', 'Orange', 'Green', 'Blue', 'Red', 'Purple', 'Pink', 'Black', 'Grey', 'Brown', 'Turquoise']
+
+// ── Gyms ──
+// Each place you climb keeps its own grade systems and colour circuit:
+//   settings.climbing = { gyms: [{ id, name, boulder, route, colours, hidden }], gymId: last used }
+// Font, V, French and YDS mean the same everywhere, so they're compared across gyms. A colour circuit only
+// means something in its own gym, so its system key is 'colour:<gymId>'.
+export const FIRST_GYM_ID = 'gym1'
+/** Every gym you've set up, removed ones included (old climbs still need their colours). Never empty. */
+export function climbGyms (settings) {
   const c = settings?.climbing || {}
-  return {
-    boulder: c.boulder || 'font',
-    route: c.route || 'french',
-    colours: Array.isArray(c.colours) && c.colours.length ? c.colours : DEFAULT_COLOURS.map(x => t('colour|' + x))
-  }
+  if (Array.isArray(c.gyms) && c.gyms.length) return c.gyms
+  return [{ id: FIRST_GYM_ID, name: '', boulder: c.boulder || 'font', route: c.route || 'french', colours: c.colours || null }]
 }
+/** The gyms you can pick (not removed). Never empty. */
+export function activeGyms (settings) {
+  const all = climbGyms(settings)
+  const on = all.filter(g => !g.hidden)
+  return on.length ? on : [all[0]]
+}
+export function gymById (settings, id) {
+  return climbGyms(settings).find(g => g.id === id) || activeGyms(settings)[0]
+}
+/** Where you climbed last (or your first gym). */
+export function currentGymId (settings) {
+  const id = settings?.climbing?.gymId
+  return (activeGyms(settings).find(g => g.id === id) || activeGyms(settings)[0]).id
+}
+export const gymName = (gym) => String(gym?.name || '').trim() || t('My gym')
+/** A gym's circuit, easiest first (the default colours if you haven't set it). */
+export function gymColours (gym) {
+  return Array.isArray(gym?.colours) && gym.colours.length ? gym.colours : DEFAULT_COLOURS.map(x => t('colour|' + x))
+}
+/** The gym a logged climb was at (climbs from before gyms existed were at your first one). */
+export const climbGymId = (c) => c?.gym || FIRST_GYM_ID
+
 /** Bouldering or roped climbing, from the exercise. */
 export const climbKind = (exercise) => (exercise?.climbType === 'route' ? 'route' : 'boulder')
-export function systemFor (kind, settings) { return climbSettings(settings)[kind === 'route' ? 'route' : 'boulder'] }
+export const isColour = (system) => String(system || '').startsWith('colour')
+/** The grade system for this kind of climbing at a gym: 'font' | 'v' | 'french' | 'yds' | 'colour:<gymId>' */
+export function systemFor (kind, settings, gymId = null) {
+  const gym = gymById(settings, gymId ?? currentGymId(settings))
+  const sys = kind === 'route' ? (gym.route || 'french') : (gym.boulder || 'font')
+  return sys === 'colour' ? 'colour:' + gym.id : sys
+}
 export function gradeList (system, settings) {
-  return system === 'colour' ? climbSettings(settings).colours : (GRADES[system] || GRADES.font)
+  if (isColour(system)) return gymColours(gymById(settings, system.slice(7) || FIRST_GYM_ID))
+  return GRADES[system] || GRADES.font
 }
 export function rankOf (grade, system, settings) { return gradeList(system, settings).indexOf(grade) }
+const SYSTEM_NAME = { font: 'Font', v: 'V scale', french: 'French', yds: 'YDS' }
+/** "Font", "French", "Sharma colours" */
+export function systemLabel (system, settings) {
+  if (isColour(system)) return t('{gym} colours', { gym: gymName(gymById(settings, system.slice(7) || FIRST_GYM_ID)) })
+  return t(SYSTEM_NAME[system] || system)
+}
+/** One-line summary of a gym's grades for a kind: the label from SYSTEMS. */
+export function systemOptionLabel (kind, value) {
+  return t(SYSTEMS[kind].find(o => o.value === value)?.label || '')
+}
 
 export const isClimb = (s) => !!s?.climb
 export const isSent = (c) => c?.result === 'flash' || c?.result === 'send'

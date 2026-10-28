@@ -10,6 +10,7 @@ import {
 } from './lib/routines.js'
 import { weeklyTarget, goalProgress } from './lib/goals.js'
 import { t } from './i18n/index.js'
+import { currentGymId, gymById } from './lib/climbing.js'
 import { reportError } from './lib/errors.js'
 
 export const state = reactive({
@@ -391,17 +392,38 @@ export function startSession (keyOrIndex) {
 }
 
 /**
- * A climbing session: a free session that starts with bouldering or roped climbing.
+ * A climbing session: a free session that starts with bouldering or roped climbing, at one of your gyms.
  *   kind: 'boulder' | 'route'
  */
-export function startClimbSession (kind = 'boulder') {
+export function startClimbSession (kind = 'boulder', gymId = null) {
   if (activeSession.value) return activeSession.value.id
   const id = startFreeSession('Climbing', 'Escalada')
   const ex = Object.values(exercisesById.value).find(e => e.logType === 'climb' && (kind === 'route' ? e.climbType === 'route' : e.climbType !== 'route'))
   if (ex) addItemToSession(id, ex.id)
   const s = getSession(id)
-  if (s) { s.kind = 'climb'; persist() }
+  if (s) {
+    s.kind = 'climb'
+    setClimbGym(id, gymId ?? currentGymId(state.data.settings))
+  }
   return id
+}
+
+/** Where you're climbing in this session. Also remembered as your gym for next time. */
+export function setClimbGym (sessionId, gymId) {
+  const s = getSession(sessionId)
+  if (!s) return
+  const gym = gymById(state.data.settings, gymId)
+  s.climbGym = gym.id
+  state.data.settings.climbing = { ...(state.data.settings.climbing || {}), gymId: gym.id }
+  if (s.kind === 'climb') {
+    // "Climbing · Sharma" in history, the summary and crew posts ("Climbing · Arkose + Sharma" if you moved
+    // on after climbing somewhere; just "Climbing" for an unnamed gym)
+    const ids = [...new Set([...s.sets.filter(x => x.climb?.gym).map(x => x.climb.gym), gym.id])]
+    const names = [...new Set(ids.map(id => String(gymById(state.data.settings, id).name || '').trim()).filter(Boolean))]
+    s.dayName = names.length ? `Climbing · ${names.join(' + ')}` : 'Climbing'
+    s.dayNameEs = names.length ? `Escalada · ${names.join(' + ')}` : 'Escalada'
+  }
+  persist()
 }
 
 /** Ad-hoc session (e.g. a PT session) — starts empty, you add exercises yourself. */

@@ -1,5 +1,13 @@
 <template>
   <div class="cp">
+    <!-- Where (only when you've set up more than one gym) -->
+    <div v-if="gyms.length > 1" class="gyms" role="radiogroup" :aria-label="t('Gym')">
+      <button
+        v-for="g in gyms" :key="g.id" class="gym-chip" :class="{ on: g.id === gymId }" role="radio" :aria-checked="g.id === gymId"
+        @click="pickGym(g.id)"
+      ><Icon name="place" :size="16" />{{ gymName(g) }}</button>
+    </div>
+
     <!-- This session so far -->
     <div v-if="mine.length" class="totals t-small">
       <span><b class="t-num">{{ tot.climbs }}</b> {{ tn(tot.climbs, 'climb', 'climbs') }}</span>
@@ -22,10 +30,10 @@
     <p v-else class="t-small t-muted empty">{{ t('Log each problem or route as you finish it: the grade, the wall, whether you flashed it, and how long it took.') }}</p>
 
     <h2 class="section-h">{{ mine.length ? t('Next climb') : t('First climb') }}</h2>
-    <ClimbFields :climb="draft" :kind="kind" :grades="grades" :walls="walls" timer :timing="!!timerStart" id-prefix="cp" @timer="toggleTimer" />
+    <ClimbFields :key="gymId" :climb="draft" :kind="kind" :grades="grades" :walls="walls" timer :timing="!!timerStart" id-prefix="cp" @timer="toggleTimer" />
 
     <Sheet v-model="editOpen" :title="t('Edit climb')">
-      <ClimbFields v-if="editOpen" :climb="editDraft" :kind="kind" :grades="grades" :walls="walls" class="in-sheet" id-prefix="ce" />
+      <ClimbFields v-if="editOpen" :climb="editDraft" :kind="kind" :grades="editGrades" :walls="walls" class="in-sheet" id-prefix="ce" />
       <template #actions>
         <button class="btn btn-danger btn-lg" @click="removeEdit"><Icon name="trash" />{{ t('Delete') }}</button>
         <button class="btn btn-primary btn-lg" :disabled="!editDraft.grade" @click="saveEdit">{{ t('Save') }}</button>
@@ -42,9 +50,10 @@ import Icon from './Icon.vue'
 import Sheet from './Sheet.vue'
 import ClimbFields from './ClimbFields.vue'
 import { toast } from './toast.js'
-import { state, getSession, exercisesById, finishedSessions, logSet, updateSet, deleteSet, persist } from '../store.js'
+import { state, getSession, exercisesById, finishedSessions, logSet, updateSet, deleteSet, persist, setClimbGym } from '../store.js'
 import {
-  climbKind, systemFor, gradeList, rankOf, swatch, hardest, climbTotals, climbsIn, isSent, mmss, RESULT_ICON, RESULT_LABEL
+  climbKind, systemFor, gradeList, rankOf, swatch, hardest, climbTotals, climbsIn, isSent, mmss, RESULT_ICON, RESULT_LABEL,
+  activeGyms, currentGymId, gymName, climbGymId
 } from '../lib/climbing.js'
 import { buzz } from '../lib/native.js'
 import { t, tn } from '../i18n/index.js'
@@ -59,7 +68,15 @@ const emit = defineEmits(['logged'])
 const session = computed(() => getSession(props.sessionId))
 const ex = computed(() => exercisesById.value[props.exerciseId])
 const kind = computed(() => climbKind(ex.value))
-const system = computed(() => systemFor(kind.value, state.data.settings))
+// The gym: this session's, or where you climbed last
+const gyms = computed(() => activeGyms(state.data.settings))
+const gymId = computed(() => session.value?.climbGym || currentGymId(state.data.settings))
+function pickGym (id) {
+  if (id === gymId.value) return
+  setClimbGym(props.sessionId, id)
+  resetDraft(false)
+}
+const system = computed(() => systemFor(kind.value, state.data.settings, gymId.value))
 const grades = computed(() => gradeList(system.value, state.data.settings))
 const mine = computed(() => (session.value?.sets || []).filter(s => s.itemIndex === props.itemIndex && s.exerciseId === props.exerciseId && s.climb))
 const tot = computed(() => climbTotals(climbsIn(mine.value)))
@@ -70,13 +87,16 @@ const past = computed(() => {
   const out = []
   for (const s of finishedSessions.value) {
     for (const x of s.sets) {
-      if (x.climb && climbKind(exercisesById.value[x.exerciseId]) === kind.value) out.push({ ...x.climb, ts: x.ts || s.startedAt })
+      if (x.climb && climbKind(exercisesById.value[x.exerciseId]) === kind.value) out.push({ ...x.climb, ts: x.ts || s.startedAt, at: climbGymId(x.climb) })
     }
   }
   return out.sort((a, b) => String(b.ts).localeCompare(String(a.ts)))
 })
-// Walls: this session's first, then the ones you've used most recently
-const walls = computed(() => [...new Set([...mine.value.map(s => s.climb.wall).reverse(), ...past.value.map(c => c.wall)].filter(Boolean))].slice(0, 10))
+// Walls at this gym: this session's first, then the ones you've used most recently
+const walls = computed(() => [...new Set([
+  ...mine.value.filter(s => climbGymId(s.climb) === gymId.value).map(s => s.climb.wall).reverse(),
+  ...past.value.filter(c => c.at === gymId.value).map(c => c.wall)
+].filter(Boolean))].slice(0, 10))
 // Records against everything before this workout, so the trophy shows the moment you send it
 const recordIds = computed(() => {
   const before = past.value.filter(c => c.system === system.value)
@@ -92,14 +112,14 @@ const recordIds = computed(() => {
 
 // ── Next climb ──
 function startGrade () {
-  const last = mine.value[mine.value.length - 1]?.climb || past.value.find(c => c.system === system.value)
+  const last = [...mine.value].reverse().map(s => s.climb).find(c => c.system === system.value) || past.value.find(c => c.system === system.value)
   if (last && grades.value.includes(last.grade)) return last.grade
   return grades.value[Math.min(grades.value.length - 1, Math.floor(grades.value.length / 3))]
 }
 const draft = reactive({ grade: '', wall: '', result: 'send', attempts: 1, seconds: 0, note: '', style: 'toprope' })
 function resetDraft (keep = true) {
   if (!keep || !grades.value.includes(draft.grade)) draft.grade = startGrade()
-  if (!keep) draft.wall = mine.value[mine.value.length - 1]?.climb.wall || ''
+  if (!keep) draft.wall = [...mine.value].reverse().find(s => climbGymId(s.climb) === gymId.value)?.climb.wall || ''
   Object.assign(draft, { result: 'send', attempts: 1, seconds: 0, note: '' })
 }
 resetDraft(false)
@@ -143,7 +163,8 @@ function log () {
     result: draft.result,
     attempts: draft.result === 'flash' ? 1 : Math.max(1, draft.attempts || 1),
     seconds: Math.round(draft.seconds || 0),
-    note: draft.note.trim()
+    note: draft.note.trim(),
+    gym: gymId.value
   }
   if (kind.value === 'route') climb.style = draft.style
   const row = logSet(session.value.id, {
@@ -172,6 +193,9 @@ function log () {
 // ── Change a logged climb ──
 const editOpen = ref(false)
 const editId = ref(null)
+// A climb keeps its own gym's grades, even if you've moved gyms since
+const editSystem = computed(() => mine.value.find(x => x.id === editId.value)?.climb.system || system.value)
+const editGrades = computed(() => gradeList(editSystem.value, state.data.settings))
 const editDraft = reactive({ grade: '', wall: '', result: 'send', attempts: 1, seconds: 0, note: '', style: 'toprope' })
 function openEdit (s) {
   editId.value = s.id
@@ -215,6 +239,10 @@ defineExpose({ canLog, log })
 
 <style scoped>
 .cp { margin-top: 14px; }
+.gyms { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; margin: 0 -16px 10px; padding: 2px 16px 4px; }
+.gyms::-webkit-scrollbar { display: none; }
+.gym-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 20px; background: var(--card); color: var(--ink-2); font-weight: 600; font-size: 15px; }
+.gym-chip.on { background: var(--ink); color: var(--paper); }
 .totals { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 10px 14px; background: var(--card); border-radius: var(--r-card); }
 .list { display: grid; gap: 6px; margin-top: 10px; }
 .climb { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--card); border-radius: 14px; text-align: left; min-height: 60px; }

@@ -117,6 +117,7 @@ watch(() => props.grades, () => nextTick(showGrade))
 }
 .g-chip.sw { font-size: 16px; font-family: var(--font); }
 .g-chip.on { background: var(--ink); color: var(--paper); }
+.g-chip.on .dot { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.55); }
 .dot { width: 14px; height: 14px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.18); flex: 0 0 auto; }
 .w-chip {
   display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 20px;
