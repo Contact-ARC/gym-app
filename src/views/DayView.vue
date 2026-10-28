@@ -44,6 +44,11 @@
       </div>
     </template>
 
+    <div v-if="gaps.length" class="note note-warn t-small plan-note row gym-note">
+      <Icon name="alert" :size="20" />
+      <span class="grow">{{ tn(gaps.length, '{n} exercise here needs equipment your gym doesn\'t have. Swap it below.', '{n} exercises here need equipment your gym doesn\'t have. Swap them below.') }}</span>
+    </div>
+
     <ol class="group list">
       <li v-for="(it, i) in items" :key="it.ref || i">
         <RouterLink :to="`/exercise/${it.exerciseId}`" class="group-row">
@@ -64,6 +69,16 @@
           </div>
           <Icon name="chevronRight" class="chev" />
         </RouterLink>
+        <div v-if="once[it.ref]?.from === it.exerciseId" class="gym-row once">
+          <Icon name="swap" :size="16" />
+          <span class="grow t-small">{{ t('Next time only: {name}', { name: exName(once[it.ref].to) }) }}</span>
+          <button class="btn btn-sm btn-ghost" @click="clearOneTimeSwap(day.key, it.ref)">{{ t('Undo') }}</button>
+        </div>
+        <div v-else-if="gapRefs.has(it.ref)" class="gym-row lack">
+          <Icon name="alert" :size="16" />
+          <span class="grow t-small">{{ t('Not in your gym') }}</span>
+          <button class="btn btn-sm btn-soft" @click="openGymSwap(it)"><Icon name="swap" :size="18" />{{ t('Swap') }}</button>
+        </div>
       </li>
       <li v-if="!items.length" class="group-row t-muted">{{ t('No exercises yet.') }}</li>
     </ol>
@@ -131,6 +146,8 @@
       </template>
     </Sheet>
 
+    <GymSwapSheet v-model="gymSwap.open" :day-key="day.key" :item-ref="gymSwap.ref" :exercise-id="gymSwap.exerciseId" />
+
     <Sheet v-model="resetOpen" :title="t('Back to the original?')">
       <p class="t-body">{{ tn(edit?.ops?.length || 0, 'Your {n} change to this day will be removed. Your workouts stay as they are.', 'Your {n} changes to this day will be removed. Your workouts stay as they are.') }}</p>
       <template #actions>
@@ -147,16 +164,17 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import Sheet from '../ui/Sheet.vue'
 import PlateBadge from '../ui/PlateBadge.vue'
+import GymSwapSheet from '../ui/GymSwapSheet.vue'
 import { plateStyle } from '../ui/plates.js'
 import { toast } from '../ui/toast.js'
 import {
   state, days, findDay, dayIndexOf, exercisesById, activeSession, startSession, suggestionFor, todayPlan, routine,
-  routineEdit, undoRoutineEdit, resetRoutineDay, saveDayAsMine, planById
+  routineEdit, undoRoutineEdit, resetRoutineDay, saveDayAsMine, planById, gymGaps, clearOneTimeSwap
 } from '../store.js'
 import { t, tn, tx } from '../i18n/index.js'
 import { plannedSetsFor } from '../lib/training.js'
@@ -181,6 +199,17 @@ const beginnerSwaps = computed(() => items.value.some(i => i.track))
 const hasGroups = computed(() => items.value.some((_, i) => inSuperset(items.value, i)))
 const edit = computed(() => (day.value?.source === 'routine' ? routineEdit(day.value.id) : null))
 const plan_ = computed(() => (day.value?.planId ? planById(day.value.planId) : null))
+
+// Exercises that need equipment your gym doesn't have, and swaps waiting for the next workout
+const gaps = computed(() => gymGaps.value[key.value] || [])
+const gapRefs = computed(() => new Set(gaps.value.map(g => g.ref)))
+const once = computed(() => state.data.oneTimeSwaps?.[key.value] || {})
+const gymSwap = reactive({ open: false, ref: '', exerciseId: '' })
+function openGymSwap (it) {
+  gymSwap.ref = it.ref
+  gymSwap.exerciseId = it.exerciseId
+  gymSwap.open = true
+}
 
 function start () {
   const id = startSession(key.value)
@@ -232,6 +261,11 @@ function saveMine () {
 .ss { display: flex; gap: 4px; align-items: center; }
 .item-note { margin-top: 4px; }
 .track-note { background: var(--card); }
+.gym-note { align-items: flex-start; }
+.gym-row { display: flex; align-items: center; gap: 8px; margin: -6px 16px 0 60px; padding: 0 0 12px; }
+.gym-row.lack { color: var(--warn); }
+.gym-row.lack .t-small { font-weight: 600; }
+.gym-row.once { color: var(--ink-2); }
 .suggest { margin-top: 6px; color: var(--ink-2); }
 .ss-help { margin: 10px 4px 0; }
 .change { min-height: 52px; padding-top: 6px; padding-bottom: 6px; }

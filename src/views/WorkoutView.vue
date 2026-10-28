@@ -104,7 +104,10 @@
             <button class="icon-btn" :aria-label="t('Exercise options')" @click="exMenuOpen = true"><Icon name="more" /></button>
           </div>
 
-          <div v-if="targetLine || session.easy || machine.length" class="tags">
+          <div v-if="targetLine || session.easy || machine.length || notInGym" class="tags">
+            <button v-if="notInGym && !logged(current).length" class="pill pill-warn" @click="swapOpen = true">
+              <Icon name="alert" :size="16" />{{ t('Not in your gym') }} · <b>{{ t('Swap') }}</b>
+            </button>
             <span v-if="targetLine" class="pill" :class="{ 'pill-warn': session.plan?.deload }">{{ targetLine }}</span>
             <span v-if="session.easy" class="pill pill-warn"><Icon name="deload" :size="16" />{{ t('Lighter day') }}</span>
             <button v-for="r in machine" :key="r.label" class="pill ms" @click="msOpen = true">
@@ -401,7 +404,7 @@ import {
 import { t, tn, tx } from '../i18n/index.js'
 import {
   unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, platesFor, nextSetAdjust,
-  warmupKind, warmupSize, isWorkSet, bestE1RM, heaviest
+  warmupKind, warmupSize, isWorkSet, bestE1RM, heaviest, canDoAtGym, gymAlternatives
 } from '../lib/training.js'
 import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle } from '../lib/format.js'
 import { effectiveRest, supersetNext } from '../lib/supersets.js'
@@ -963,9 +966,12 @@ function swipeEnd (e) {
 const swapOpen = ref(false)
 const addOpen = ref(false)
 const msOpen = ref(false)
+const notInGym = computed(() => !!ex.value && !canDoAtGym(ex.value, state.data.settings.equipment))
 const swapSuggestions = computed(() => {
   const orig = exercisesById.value[item.value?.originalExerciseId]
-  return [...new Set([...(orig?.alternatives || []), item.value?.originalExerciseId])].filter(id => id && id !== item.value?.exerciseId)
+  // The picker hides what your gym doesn't have; fill up with same-muscle exercises it does
+  const more = gymAlternatives(orig || ex.value, exercisesById.value, state.data.settings.equipment)
+  return [...new Set([...(orig?.alternatives || []), item.value?.originalExerciseId, ...more])].filter(id => id && id !== item.value?.exerciseId)
 })
 function resetSuggestions () {
   Object.keys(suggCache).forEach(k => delete suggCache[k])

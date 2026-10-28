@@ -2,11 +2,11 @@
 import { reactive, computed, toRaw } from 'vue'
 import { loadData, saveData, emptyData, parseBackup, onSaveError } from './lib/storage.js'
 import { DEFAULT_ROUTINES_URL, SUPPORTED_ROUTINE_SCHEMA, APP_VERSION } from './config.js'
-import { pickActiveRoutine, compareVersions, dateKey, suggestNext, detectPRs, sessionVolume, resolvePlan, plannedSetsFor, applyTrack } from './lib/training.js'
+import { pickActiveRoutine, compareVersions, dateKey, suggestNext, detectPRs, sessionVolume, resolvePlan, plannedSetsFor, applyTrack, canDoAtGym } from './lib/training.js'
 import { challengeProgress, weekStreak, weekKey, STREAK_MIN } from './lib/stats.js'
 import {
   buildDays, planDayView, parseKey, planActive, planExpired, makeUse, snapshotDay, reconcileEdit, applyEdits, withRefs,
-  editedOldDay, planFromDays, sessionChanges, changesToOps, applyChangesToPlanDay, dayFromSession, uid as rid
+  editedOldDay, planFromDays, sessionChanges, changesToOps, applyChangesToPlanDay, dayFromSession, opSwap, uid as rid
 } from './lib/routines.js'
 import { weeklyTarget, goalProgress } from './lib/goals.js'
 import { t } from './i18n/index.js'
@@ -373,6 +373,16 @@ export function startSession (keyOrIndex) {
     sets: [],
     notes: ''
   }
+  // "Next workout only" swaps picked on the day's screen. They show up as normal workout changes,
+  // so the finish screen still asks whether to keep them.
+  const once = state.data.oneTimeSwaps?.[key]
+  if (once) {
+    for (const it of session.items) {
+      const sw = it.ref && once[it.ref]
+      if (sw && sw.from === it.exerciseId && exercisesById.value[sw.to]) it.exerciseId = sw.to
+    }
+    delete state.data.oneTimeSwaps[key]
+  }
   state.data.sessions.push(session)
   state.data.activeSessionId = session.id
   persist()
@@ -705,6 +715,64 @@ export function resolveDayChange (dayId, choice, planName = '') {
 
 export function dismissEditNotice () {
   state.data.editNotices.shift()
+  persist()
+}
+
+// ── Exercises your gym can't do ──────────────────────────
+
+/** Days with exercises that need equipment switched off in Settings, Your gym: { [dayKey]: [{ ref, index, exerciseId }] } */
+export const gymGaps = computed(() => {
+  const eq = state.data.settings.equipment || {}
+  if (!Object.values(eq).some(v => v === false)) return {}
+  const out = {}
+  for (const d of days.value) {
+    const once = state.data.oneTimeSwaps?.[d.key] || {}
+    const list = d.items
+      .map((it, index) => ({ ref: it.ref, index, exerciseId: it.exerciseId }))
+      .filter(x => !canDoAtGym(exercisesById.value[x.exerciseId], eq) && once[x.ref]?.from !== x.exerciseId)
+    if (list.length) out[d.key] = list
+  }
+  return out
+})
+
+/** How many workouts each exercise was in, for ordering suggestions. */
+export const exerciseUsage = computed(() => {
+  const out = {}
+  for (const s of finishedSessions.value) for (const id of new Set(s.sets.map(x => x.exerciseId))) out[id] = (out[id] || 0) + 1
+  return out
+})
+
+/**
+ * Swap an exercise in one of this month's days.
+ *   how: 'once' (only the next workout of this day) or 'always' (a change to the day, shown as Edited)
+ */
+export function swapInDay (dayKey, ref, toId, how) {
+  const d = findDay(dayKey)
+  const it = d?.items.find(x => x.ref === ref)
+  if (!it || !toId) return false
+  if (how === 'once') {
+    if (!state.data.oneTimeSwaps) state.data.oneTimeSwaps = {}
+    state.data.oneTimeSwaps[dayKey] = { ...(state.data.oneTimeSwaps[dayKey] || {}), [ref]: { from: it.exerciseId, to: toId } }
+    persist()
+    return true
+  }
+  clearOneTimeSwap(dayKey, ref)
+  if (d.source === 'routine') {
+    changeRoutineDay(d.id, ops => opSwap(ops, ref, toId))
+  } else if (d.source === 'mine') {
+    const pd = planById(d.planId)?.days.find(x => x.id === d.planDayId)
+    if (!pd) return false
+    applyChangesToPlanDay(pd, [{ kind: 'swap', ref, to: toId }])
+    persist()
+  } else return false
+  return true
+}
+
+export function clearOneTimeSwap (dayKey, ref) {
+  const m = state.data.oneTimeSwaps?.[dayKey]
+  if (!m?.[ref]) return
+  delete m[ref]
+  if (!Object.keys(m).length) delete state.data.oneTimeSwaps[dayKey]
   persist()
 }
 

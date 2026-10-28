@@ -78,7 +78,8 @@ export function emptyData () {
     editNotices: [], // [{ dayId, month, skipped }] changes that no longer applied after a new month
     goals: [], // [{ id, type, target, unit, exerciseId, reps, basis, start, createdAt, by, pinned, doneAt }]
     // 0.7
-    badgesSeen: null // { [badgeId]: date } badges already shown on the finish screen; null until the first finish
+    badgesSeen: null, // { [badgeId]: date } badges already shown on the finish screen; null until the first finish
+    oneTimeSwaps: {} // 0.7.3: { [dayKey]: { [itemRef]: { from, to } } } swaps for the next workout of a day only
   }
 }
 
@@ -103,7 +104,8 @@ export function migrate (data) {
     plans: [...(data.plans || [])],
     planNotices: [...(data.planNotices || [])],
     editNotices: [...(data.editNotices || [])],
-    goals: [...(data.goals || [])]
+    goals: [...(data.goals || [])],
+    oneTimeSwaps: { ...(data.oneTimeSwaps || {}) }
   }
   out.settings.lifts = { ...base.settings.lifts, ...(data.settings?.lifts || {}) }
   if (!Array.isArray(out.settings.volumeTarget) || out.settings.volumeTarget.length !== 2) out.settings.volumeTarget = base.settings.volumeTarget

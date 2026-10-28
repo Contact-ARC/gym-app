@@ -651,6 +651,64 @@ export function canDoAtGym (exercise, available) {
   return equipmentTags(exercise).every(t => available[t] !== false)
 }
 
+/** Equipment the exercise needs that is switched off in Settings, Your gym (labels, untranslated). */
+export function missingEquipment (exercise, available) {
+  if (!available) return []
+  return equipmentTags(exercise).filter(t => available[t] === false).map(t => EQUIPMENT[t])
+}
+
+/**
+ * How well exercise b can stand in for a, from the muscles they work: a weighted overlap where a
+ * main muscle counts 1 and a secondary one 0.4 (shared ÷ combined, so muscles only one of them
+ * trains pull the score down). Same log type (weighted, bodyweight, timed) adds a little.
+ * level: 'close' | 'partial' | 'loose'. null when they share no main muscle.
+ */
+export function exerciseMatch (a, b) {
+  const w = (e) => {
+    const m = {}
+    for (const x of e?.secondary || []) m[x] = 0.4
+    for (const x of e?.primary || []) m[x] = 1
+    return m
+  }
+  const wa = w(a); const wb = w(b)
+  if (!(a?.primary || []).some(x => (b?.primary || []).includes(x))) return null
+  let shared = 0; let all = 0
+  for (const m of new Set([...Object.keys(wa), ...Object.keys(wb)])) {
+    shared += Math.min(wa[m] || 0, wb[m] || 0)
+    all += Math.max(wa[m] || 0, wb[m] || 0)
+  }
+  const overlap = all ? shared / all : 0
+  return {
+    score: overlap + (a.logType && a.logType === b.logType ? 0.05 : 0),
+    level: overlap >= 0.6 ? 'close' : overlap >= 0.4 ? 'partial' : 'loose'
+  }
+}
+
+/**
+ * Exercises your gym can do instead of one it can't: the exercise's own (hand-picked) alternatives
+ * first, then the best muscle matches, each group closest first. How often you've done one only breaks ties.
+ *   usage: { [exerciseId]: workouts it was in }
+ */
+export function gymAlternatives (exercise, byId, available, usage = {}, max = 6) {
+  if (!exercise) return []
+  const ok = (e) => e && e.id !== exercise.id && !e.hidden && canDoAtGym(e, available)
+  const score = (e) => exerciseMatch(exercise, e)?.score ?? -1
+  // Hand-picked ones first, closest match first (the library's order breaks ties)
+  const out = [...new Set(exercise.alternatives || [])].filter(id => ok(byId[id]))
+    .map((id, i) => ({ id, i, s: score(byId[id]) }))
+    .sort((x, y) => y.s - x.s || x.i - y.i)
+    .map(x => x.id)
+  if (out.length < max) {
+    const ranked = Object.values(byId)
+      .filter(e => ok(e) && !out.includes(e.id))
+      .map(e => ({ e, m: exerciseMatch(exercise, e) }))
+      .filter(x => x.m)
+      .sort((x, y) => y.m.score - x.m.score || (usage[y.e.id] || 0) - (usage[x.e.id] || 0) || x.e.name.localeCompare(y.e.name))
+    for (const x of ranked) { if (out.length >= max) break; out.push(x.e.id) }
+  }
+  return out.slice(0, max)
+}
+
 /** Is this loaded on a straight barbell, so a plate breakdown makes sense? */
 export function isBarbellLift (exercise) {
   if (!exercise || exercise.loadUnit === 'pin') return false

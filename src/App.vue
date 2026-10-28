@@ -18,6 +18,13 @@
       <ul class="news">
         <li v-for="(w, i) in tx(announce, 'whatsNew')" :key="i">{{ w }}</li>
       </ul>
+      <div v-if="gapDays.length" class="note note-warn gap-card">
+        <div class="t-h3">{{ t('Some exercises need equipment your gym doesn\'t have') }}</div>
+        <ul class="gap-list t-small">
+          <li v-for="g in gapDays" :key="g.key"><b>{{ t('Day {id}', { id: g.id }) }}:</b> {{ g.names }}</li>
+        </ul>
+        <button class="btn btn-soft btn-block" @click="reviewGaps">{{ t('Review and swap') }}</button>
+      </div>
       <div v-if="announce.challenge" class="ch card-pad">
         <div class="t-tiny t-muted up">{{ t('This month\'s challenge') }}</div>
         <div class="t-h3">{{ tx(announce.challenge, 'title') }}</div>
@@ -122,7 +129,7 @@ import Sheet from './ui/Sheet.vue'
 import WelcomeSheet from './views/WelcomeSheet.vue'
 import {
   state, newRoutineToAnnounce, markRoutineSeen, nextDay, persist, updateAvailable, pendingDayChanges, resolveDayChange,
-  planById, usePlan, dismissPlanNotices
+  planById, usePlan, dismissPlanNotices, gymGaps, findDay, exercisesById
 } from './store.js'
 import { toast } from './ui/toast.js'
 import Icon from './ui/Icon.vue'
@@ -135,6 +142,17 @@ import { monthKey, shiftMonth, sessionsInMonth } from './lib/stats.js'
 
 const route = useRoute()
 const router = useRouter()
+// New month: exercises in it that need equipment switched off in Settings, Your gym
+const gapDays = computed(() => Object.entries(gymGaps.value).map(([key, list]) => ({
+  key,
+  id: findDay(key)?.id || '',
+  names: list.map(g => tx(exercisesById.value[g.exerciseId], 'name') || g.exerciseId).join(', ')
+})))
+function reviewGaps () {
+  const first = gapDays.value[0]
+  markRoutineSeen()
+  if (first) router.push(`/day/${first.key}`)
+}
 
 // Language: the setting, or the phone's language
 watchEffect(() => setLang(state.data.settings.lang || deviceLang()))
@@ -262,6 +280,9 @@ watch(
 }
 .upd-note { margin-top: 12px; }
 .ch { margin-top: 14px; background: var(--card-2); border-radius: var(--r-card); }
+.gap-card { margin-top: 14px; display: grid; gap: 8px; }
+.gap-list { margin: 0 0 4px 18px; }
+.gap-list li + li { margin-top: 4px; }
 .ch .t-small { margin-top: 4px; }
 .up { letter-spacing: 0.02em; font-weight: 700; }
 .choices { margin-top: 16px; background: var(--card-2); }

@@ -184,7 +184,7 @@ test('routine week', () => {
 })
 
 // ── v0.3: plans, set types, equipment ──────────────────
-import { resolvePlan, plannedSetsFor, equipmentTags, canDoAtGym, isBarbellLift, bestE1RM } from '../src/lib/training.js'
+import { resolvePlan, plannedSetsFor, equipmentTags, canDoAtGym, isBarbellLift, bestE1RM, gymAlternatives, missingEquipment, exerciseMatch } from '../src/lib/training.js'
 
 test('plan: month default rir, week overrides, deload drops a set', () => {
   const r = {
@@ -393,4 +393,42 @@ test('warm-up sets: light ramp, feeler, dumbbell floor, barbell fallback', () =>
   // A light barbell lift: the bar itself
   assert.deepEqual(warmupSets(30, 2.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'feeler').map(s => s.load), [20])
   assert.deepEqual(warmupSets(100, 2.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'light').map(s => s.load), [50, 75])
+})
+
+test('alternatives your gym can do: hand-picked first, then the closest muscle match', () => {
+  const byId = {
+    'pec-deck': { id: 'pec-deck', name: 'Pec Deck', logType: 'weight', equipment: ['pec deck machine'], primary: ['chest'], secondary: ['front_delts'], alternatives: ['cable-fly', 'machine-fly', 'db-fly'] },
+    'cable-fly': { id: 'cable-fly', name: 'Cable Fly', logType: 'weight', equipment: ['cable stack'], primary: ['chest'], secondary: ['front_delts'] },
+    'machine-fly': { id: 'machine-fly', name: 'Machine Fly', logType: 'weight', equipment: ['pec deck machine'], primary: ['chest'] },
+    'db-fly': { id: 'db-fly', name: 'Dumbbell Fly', logType: 'weight', equipment: ['dumbbells', 'flat bench'], primary: ['chest'], secondary: ['front_delts'] },
+    'push-up': { id: 'push-up', name: 'Push-Up', logType: 'bodyweight', equipment: ['bodyweight'], primary: ['chest'], secondary: ['triceps', 'front_delts'] },
+    'bench': { id: 'bench', name: 'Bench Press', logType: 'weight', equipment: ['barbell', 'flat bench'], primary: ['chest'], secondary: ['front_delts', 'triceps'] },
+    'dip': { id: 'dip', name: 'Dip', logType: 'bodyweight', equipment: ['dip bars'], primary: ['chest', 'triceps'], secondary: ['front_delts'] },
+    'hidden': { id: 'hidden', name: 'Old', equipment: [], primary: ['chest'], hidden: true },
+    'curl': { id: 'curl', name: 'Curl', equipment: ['dumbbells'], primary: ['biceps'] }
+  }
+  const gym = { pecdeck: false }
+  // Hand-picked ones the gym can do, then bench (same log type) before push-up and dip (bodyweight; dip also trains triceps)
+  assert.deepEqual(gymAlternatives(byId['pec-deck'], byId, gym), ['cable-fly', 'db-fly', 'bench', 'push-up', 'dip'])
+  // Usage only breaks ties: a much-used push-up doesn't jump the closer bench press
+  assert.deepEqual(gymAlternatives(byId['pec-deck'], byId, gym, { 'push-up': 40 }), ['cable-fly', 'db-fly', 'bench', 'push-up', 'dip'])
+  assert.deepEqual(gymAlternatives(byId['pec-deck'], byId, gym, {}, 2), ['cable-fly', 'db-fly'])
+  assert.deepEqual(missingEquipment(byId['pec-deck'], gym), ['Pec deck (chest fly and rear delt machine)'])
+  assert.deepEqual(missingEquipment(byId['db-fly'], gym), [])
+})
+
+test('muscle match: two main muscles and the secondaries count', () => {
+  const sumo = { logType: 'weight', primary: ['glutes', 'quads', 'adductors'], secondary: ['hamstrings', 'lower_back', 'traps', 'forearms'] }
+  const deadlift = { logType: 'weight', primary: ['glutes', 'hamstrings', 'lower_back'], secondary: ['quads', 'traps', 'forearms'] }
+  const goblet = { logType: 'weight', primary: ['quads', 'glutes'], secondary: ['adductors', 'abs', 'upper_back'] }
+  const hipThrust = { logType: 'weight', primary: ['glutes'], secondary: ['hamstrings'] }
+  const kickback = { logType: 'weight', primary: ['glutes'], secondary: ['hamstrings'] }
+  const curl = { logType: 'weight', primary: ['biceps'] }
+  assert.ok(exerciseMatch(sumo, goblet).score > exerciseMatch(sumo, hipThrust).score)
+  assert.ok(exerciseMatch(sumo, deadlift).score > exerciseMatch(sumo, kickback).score)
+  assert.equal(exerciseMatch(sumo, curl), null)
+  assert.equal(exerciseMatch(sumo, sumo).level, 'close')
+  assert.equal(exerciseMatch(sumo, kickback).level, 'loose')
+  // A row isn't a good stand-in for a curl even though both use the biceps (biceps is only secondary there)
+  assert.equal(exerciseMatch(curl, { primary: ['upper_back', 'lats'], secondary: ['biceps'] }), null)
 })

@@ -103,11 +103,16 @@
         </div>
       </div>
       <ul class="ex-list">
-        <li v-for="(it, i) in nextItems" :key="i" class="row">
-          <span class="grow truncate">{{ exName(it.exerciseId) }}</span>
+        <li v-for="(it, i) in nextItems" :key="i" class="row" :class="{ lack: nextGaps.has(it.ref) }">
+          <Icon v-if="nextGaps.has(it.ref)" name="alert" :size="18" class="lack-ic" :aria-label="t('Not in your gym')" />
+          <span class="grow truncate">{{ exName(nextOnce[it.ref]?.from === it.exerciseId ? nextOnce[it.ref].to : it.exerciseId) }}</span>
           <span class="t-num t-muted">{{ prescription({ ...it, sets: plannedSetsFor(it, i, todayPlan) }, exercisesById[it.exerciseId]) }}</span>
         </li>
       </ul>
+      <RouterLink v-if="nextGaps.size" :to="`/day/${nextDay.key}`" class="note note-warn t-small gap-link row">
+        <span class="grow">{{ tn(nextGaps.size, '{n} exercise needs equipment your gym doesn\'t have. Tap to swap it.', '{n} exercises need equipment your gym doesn\'t have. Tap to swap them.') }}</span>
+        <Icon name="chevronRight" :size="20" />
+      </RouterLink>
       <div class="row hero-actions">
         <RouterLink :to="`/day/${nextDay.key}`" class="btn btn-lg btn-soft">{{ t('Details') }}</RouterLink>
         <button class="btn btn-lg btn-plate grow" @click="start(nextDay.key)"><Icon name="play" />{{ startLabel(nextDay) }}</button>
@@ -160,6 +165,7 @@
               <span v-else class="tag">{{ t('tag|Routine') }}</span>
               <span v-if="d.edited" class="tag tag-edit">{{ t('Edited') }}</span>
               <span v-if="d.pendingChange" class="tag tag-edit">{{ t('Changed') }}</span>
+              <span v-if="gymGaps[d.key]" class="tag tag-lack">{{ t('Needs a swap') }}</span>
               <span class="t-small t-muted">{{ lastDone[d.key] ? t('Done {when}', { when: lastDone[d.key] }) : tn(d.items.length, '{n} exercise', '{n} exercises') }}</span>
             </div>
           </div>
@@ -210,7 +216,7 @@ import { plateStyle } from '../ui/plates.js'
 import {
   state, routine, days, currentWeek, isDeloadWeek, todayPlan, updateAvailable, refreshRoutines,
   activeSession, exercisesById, startSession, startFreeSession, finishedSessions, daysSinceBackup,
-  trackItem, streak, routineWarning, nextDay, nextDayIndex, routineReplaced, restoreRoutine, isPlanActive, dismissEditNotice
+  trackItem, streak, routineWarning, nextDay, nextDayIndex, routineReplaced, restoreRoutine, isPlanActive, dismissEditNotice, gymGaps
 } from '../store.js'
 import { openUrl } from '../lib/native.js'
 import { prescription, relativeDay, dayTitle, weekdayDate, monthName, sessionTitle, planStatus } from '../lib/format.js'
@@ -237,6 +243,8 @@ const challengeStarted = computed(() => !!routine.value && sessionsInMonth(state
 const nextIndex = nextDayIndex
 const nextItems = computed(() => (nextDay.value?.items || []).map(trackItem))
 const exName = (id) => tx(exercisesById.value[id], 'name') || id
+const nextGaps = computed(() => new Set((gymGaps.value[nextDay.value?.key] || []).map(g => g.ref)))
+const nextOnce = computed(() => state.data.oneTimeSwaps?.[nextDay.value?.key] || {})
 
 // When each of this month's days was last done (repo days: this month's routine; yours: this month)
 const lastDone = computed(() => {
@@ -332,6 +340,10 @@ function startFree () {
 .hero-actions .btn-soft { flex: 0 0 auto; padding-left: 18px; padding-right: 18px; }
 .hero-actions .btn-plate { white-space: nowrap; min-width: 0; }
 .ex-list .t-num { white-space: nowrap; }
+.ex-list li.lack { color: var(--warn); gap: 8px; }
+.lack-ic { flex: 0 0 auto; }
+.gap-link { margin-top: 10px; gap: 8px; align-items: center; color: var(--ink); }
+.tag-lack { background: var(--warn-soft); color: var(--warn); }
 .hero-btn { margin-top: 16px; }
 .live { border: 2px solid var(--plate-bg); }
 
