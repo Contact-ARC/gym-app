@@ -30,6 +30,13 @@ export function convertLoad (value, from, to) {
 }
 
 /** Round to the nearest multiple of `inc` (or down, if mode === 'down'). */
+/**
+ * Round `value` to `from` ± whole increments: a stack that goes 12.5, 17.5, 22.5 stays on its own steps.
+ */
+export function roundFrom (value, from, inc, mode = 'nearest') {
+  if (from == null || !isFinite(from)) return roundToIncrement(value, inc, mode)
+  return round2(from + roundToIncrement(value - from, inc, mode))
+}
 export function roundToIncrement (value, inc, mode = 'nearest') {
   if (value == null || !isFinite(value)) return null
   if (!inc || inc <= 0) return round2(value)
@@ -231,7 +238,7 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
     }
     if (lastBelow && prevBelow && lastLoad) {
       result = {
-        load: lighter(roundToIncrement(lastLoad * 0.9, inc, 'down'), lastLoad), reps: lo, kind: 'down',
+        load: lighter(roundFrom(lastLoad * 0.9, lastLoad, inc, 'down'), lastLoad), reps: lo, kind: 'down',
         text: t('Last: {last}. Below {lo} reps two sessions running → drop ~10% and build back up.', { last: lastStr, lo })
       }
     } else {
@@ -244,7 +251,7 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
   }
 
   if (factor < 1 && result.load) {
-    result.load = lighter(roundToIncrement(result.load * factor, inc, 'down'), result.load)
+    result.load = lighter(roundFrom(result.load * factor, result.load, inc, 'down'), result.load)
     result.text = t('{why}: {load}, about {pct}% of normal. Stop each set with 3 or more reps left. Last time: {last}.', { why, load: fmtLoad(result.load, unit), pct: Math.round(factor * 100), last: lastStr })
     result.kind = 'deload'
   }
@@ -293,7 +300,7 @@ export function nextSetAdjust ({ load, reps, rir = null, repRange, targetRir = 2
       next = v
     }
   } else {
-    next = roundToIncrement(next, inc, next < load ? 'nearest' : 'down')
+    next = roundFrom(next, load, inc, next < load ? 'nearest' : 'down')
     if (Math.abs(next - load) < inc - 1e-9) return null
   }
   const kind = next > load ? 'up' : 'down'
@@ -538,7 +545,9 @@ export function plateWarmups (working, bar, plates, kind = 'full', { stepRef = 3
   const fewest = top.perSide.length
   const totalOf = (u) => round2(bar + 2 * toKg(u))
 
-  const want = kind === 'feeler' ? 1 : Math.max(1, Math.min(kind === 'light' ? 2 : 3, Math.round((W - bar) / stepRef)))
+  // Barely heavier than the bar (or, on an EZ bar, a couple of small plates): the bar is the warm-up
+  const want = (W - bar) < stepRef / 2 ? 0
+    : kind === 'feeler' ? 1 : Math.max(1, Math.min(kind === 'light' ? 2 : 3, Math.round((W - bar) / stepRef)))
   let best = null
   for (const combo of plateCombos(goal, units, Math.min(fewest + 3, 8))) {
     // Every part of this stack that a warm-up could be, by its weight a side

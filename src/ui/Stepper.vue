@@ -4,7 +4,7 @@
     <div class="st-row">
       <button
         class="st-btn" type="button" :aria-label="t('Decrease {what}', { what: label || '' })"
-        :disabled="modelValue != null && modelValue <= min"
+        :disabled="modelValue != null && modelValue <= (floor ?? min)"
         @pointerdown.prevent="hold(-1)" @pointerup="release" @pointerleave="release" @pointercancel="release"
         @keydown.enter.prevent="bump(-1)" @keydown.space.prevent="bump(-1)"
       >
@@ -51,6 +51,8 @@ const props = defineProps({
   modelValue: { type: Number, default: null },
   step: { type: Number, default: 1 },
   min: { type: Number, default: 0 },
+  // Lowest the − and + buttons go (e.g. the bar's weight); typing can still go down to min
+  floor: { type: Number, default: null },
   max: { type: Number, default: null },
   decimals: { type: Boolean, default: false },
   label: String,
@@ -88,6 +90,14 @@ function set (v) {
 
 function bump (dir) {
   const cur = props.modelValue
+  const floor = props.floor
+  if (floor != null) {
+    // Start at the floor (the bar) and step from it: 20, 22.5, 25…
+    if (cur == null || cur < floor) return dir > 0 || cur == null ? set(floor) : undefined
+    const k = (cur - floor) / props.step
+    const next = dir > 0 ? Math.floor(k + 1e-9) + 1 : Math.ceil(k - 1e-9) - 1
+    return set(Math.max(floor, floor + next * props.step))
+  }
   if (cur == null) return set(dir > 0 ? Math.max(props.min, props.step) : props.min)
   // Snap to the step grid first so 61 + 2.5 goes to 62.5, not 63.5
   const snapped = dir > 0

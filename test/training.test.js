@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  estimate1RM, loadForReps, roundToIncrement, suggestNext, platesPerSide, warmupSets, plateWarmups,
+  estimate1RM, loadForReps, roundToIncrement, roundFrom, suggestNext, platesPerSide, warmupSets, plateWarmups,
   loadableAround, isLoadable, snapToPlates, platesFor, warmupKind, warmupSize,
   detectPRs, compareVersions, pickActiveRoutine, convertLoad, routineWeek, unitFor, incrementFor, heaviest
 } from '../src/lib/training.js'
@@ -445,7 +445,7 @@ test('warm-up sets: light ramp, feeler, dumbbell floor, barbell fallback', () =>
   assert.deepEqual(warmupSets(30, 2, 0, null, 'full').map(s => [s.load, s.reps]), [[12, 8], [18, 5], [24, 3]])
   assert.deepEqual(warmupSets(3, 2, 0, null, 'feeler'), []) // under the lightest dumbbell
   // A light barbell lift: the bar itself
-  assert.deepEqual(warmupSets(30, 2.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'feeler').map(s => s.load), [25])
+  assert.deepEqual(warmupSets(30, 2.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'feeler').map(s => s.load), [20])
   assert.deepEqual(warmupSets(100, 2.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'light').map(s => s.load), [50, 70])
 })
 
@@ -520,4 +520,24 @@ test('same movement pattern ranks first and is needed for a close match', () => 
   assert.equal(exerciseMatch(pullUp, invRow).level, 'partial')
   // Your own exercises have no pattern: muscles alone decide
   assert.equal(exerciseMatch(pullUp, { ...pulldown, pattern: undefined }).level, 'close')
+})
+
+test('machines with an odd stack stay on their own steps', () => {
+  assert.equal(roundFrom(15.75, 17.5, 5), 17.5)
+  assert.equal(roundFrom(21, 17.5, 5, 'down'), 17.5)
+  assert.equal(roundFrom(23, 17.5, 5), 22.5)
+  // 12.5, 17.5, 22.5… a stack whose first plate isn't a multiple of the step
+  const down = nextSetAdjust({ load: 47.5, reps: 4, rir: 0, repRange: [8, 12], inc: 5, unit: 'kg' })
+  assert.equal(down.load, 42.5)
+  const up = nextSetAdjust({ load: 52.5, reps: 15, rir: 5, repRange: [8, 12], inc: 2.5, unit: 'kg' })
+  assert.equal((up.load - 52.5) % 2.5, 0)
+})
+
+test('plate warm-ups: nothing between the bar and a working weight just above it', () => {
+  const p = plateWarmups(25, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'full')
+  assert.deepEqual(p.sets.map(s => s.load), [20])
+  assert.deepEqual(p.final.perSide, [2.5])
+  const ez = plateWarmups(10, 0, [25, 20, 15, 10, 5, 2.5, 1.25], 'light', { hasBar: true })
+  assert.deepEqual(ez.sets.map(s => s.load), [0])
+  assert.deepEqual(ez.final.perSide, [5])
 })

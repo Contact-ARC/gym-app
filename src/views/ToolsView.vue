@@ -60,7 +60,7 @@
     <!-- Plates -->
     <section v-else-if="tab === 'plates'" class="tool">
       <div class="card card-pad stack-lg">
-        <Stepper v-model="plateTarget" :label="t('Total weight')" :unit="unit" :step="unit === 'kg' ? 2.5 : 5" :min="0" :max="unit === 'kg' ? 1000 : 2200" :decimals="true" size="md" />
+        <Stepper v-model="plateTarget" :label="t('Total weight')" :unit="unit" :step="unit === 'kg' ? 2.5 : 5" :min="0" :floor="bar || null" :max="unit === 'kg' ? 1000 : 2200" :decimals="true" size="md" />
         <div>
           <div class="label">{{ t('Bar') }}</div>
           <Segmented v-model="bar" :options="barOptions" :label="t('Bar weight')" />
@@ -104,32 +104,23 @@
     <!-- Warm-up -->
     <section v-else class="tool">
       <div class="card card-pad stack-lg">
-        <Stepper v-model="working" :label="t('Working weight')" :unit="unit" :step="incs.upper" :min="0" :decimals="true" size="md" />
+        <Stepper v-model="working" :label="t('Working weight')" :unit="unit" :step="incs.upper" :min="0" :floor="warmBar && bar ? bar : null" :decimals="true" size="md" />
         <div>
           <div class="label">{{ t('Using') }}</div>
           <Segmented v-model="warmBar" :options="[{ label: t('Barbell'), value: true }, { label: t('Dumbbells or machine'), value: false }]" :label="t('Equipment')" />
         </div>
       </div>
       <div v-if="warmups.length" class="group warm">
+        <p v-if="warmPlan" class="t-small t-muted warm-hint">{{ t('Plates per side') }}</p>
         <div v-for="(s, i) in warmups" :key="i" class="group-row">
           <span class="num t-num">{{ i + 1 }}</span>
-          <span class="grow wtxt">
-            <span class="t-num wv">{{ fmtLoad(s.load, unit) }} × {{ s.reps }}</span>
-            <span v-if="s.perSide" class="t-small t-muted t-num">
-              {{ s.perSide.length ? t('{p} a side', { p: plateText(s.perSide) }) : t('Empty bar') }}<template v-if="plateChangeText(s)"> · <b class="chg">{{ plateChangeText(s) }}</b></template>
-            </span>
-          </span>
-          <span class="t-small t-muted">{{ s.perSide && !s.perSide.length ? '' : s.label }}</span>
+          <span class="grow t-num wv">{{ fmtLoad(s.load, unit) }} × {{ s.reps }}</span>
+          <span v-if="s.perSide" class="chg t-num" :class="{ quiet: !plateChangeText(s) }">{{ plateChangeText(s) || t('Empty bar') }}</span>
         </div>
         <div class="group-row work">
           <span class="num t-num"><Icon name="checkBold" :size="16" /></span>
-          <span class="grow wtxt">
-            <span class="t-num wv">{{ fmtLoad(warmPlan ? warmPlan.final.load : working, unit) }}</span>
-            <span v-if="warmPlan" class="t-small t-muted t-num">
-              {{ t('{p} a side', { p: plateText(warmPlan.final.perSide) }) }}<template v-if="plateChangeText(warmPlan.final)"> · <b class="chg">{{ plateChangeText(warmPlan.final) }}</b></template>
-            </span>
-          </span>
-          <span class="t-small">{{ t('working sets') }}</span>
+          <span class="grow"><span class="t-num wv">{{ fmtLoad(warmPlan ? warmPlan.final.load : working, unit) }}</span> <span class="t-small t-muted">{{ t('working sets') }}</span></span>
+          <span v-if="warmPlan && plateChangeText(warmPlan.final)" class="chg t-num">{{ plateChangeText(warmPlan.final) }}</span>
         </div>
       </div>
       <p v-else-if="working" class="t-small t-muted foot">{{ t("That's light enough to go straight to your working sets.") }}</p>
@@ -146,7 +137,7 @@ import Segmented from '../ui/Segmented.vue'
 import { weightPlateColors } from '../ui/plates.js'
 import { state, persist } from '../store.js'
 import { t } from '../i18n/index.js'
-import { plateText, plateChangeText } from '../lib/format.js'
+import { plateChangeText } from '../lib/format.js'
 import {
   estimate1RM, loadForReps, roundToIncrement, fmtLoad, platesPerSide, warmupSets, platesFor, DEFAULT_PLATES, DEFAULT_BAR,
   plateWarmups, warmStepFor
@@ -281,7 +272,8 @@ const warmups = computed(() => warmPlan.value?.sets ||
   background: var(--card-2); font-size: 16px; font-weight: 700; color: var(--ink-2);
 }
 .wv { font-size: 22px; font-weight: 600; }
-.wtxt { display: grid; }
-.chg { color: var(--ink-2); font-weight: 600; }
+.chg { font-size: 15px; font-weight: 600; white-space: nowrap; }
+.chg.quiet { font-weight: 500; color: var(--ink-3); }
+.warm-hint { padding: 10px 16px 0; margin: 0; }
 .work .num { background: var(--ink); color: var(--paper); }
 </style>

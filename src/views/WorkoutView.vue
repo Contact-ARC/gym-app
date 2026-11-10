@@ -138,8 +138,9 @@
             <button class="warm-head" :aria-expanded="warmOpen" @click="warmOpen = !warmOpen">
               <span class="grow">
                 <b>{{ warmKind === 'feeler' ? t('Feeler set') : t('Warm-up') }}</b>
-                <span class="t-small t-muted">{{ t('{a} of {b} done', { a: warmDoneCount, b: warmups.length }) }}</span>
+                <span v-if="warmPlan" class="t-small t-muted">{{ t('plates per side') }}</span>
               </span>
+              <span class="t-small t-muted t-num">{{ warmDoneCount }}/{{ warmups.length }}</span>
               <Icon :name="warmOpen ? 'minus' : 'plus'" :size="20" />
             </button>
             <div v-if="warmOpen" class="warm-list">
@@ -148,26 +149,14 @@
                 :aria-pressed="warmDone(k)" @click="toggleWarm(k)"
               >
                 <span class="tick"><Icon v-if="warmDone(k)" name="checkBold" :size="16" /></span>
-                <span class="grow wtxt">
-                  <span class="t-num wv">{{ w.text || fmtLoad(w.load, unit) }} × {{ w.reps }}</span>
-                  <span v-if="w.plates || w.change" class="t-small t-muted wplates t-num">
-                    {{ w.plates }}<template v-if="w.plates && w.change"> · </template><b v-if="w.change">{{ w.change }}</b>
-                  </span>
-                </span>
-                <span class="t-tiny t-muted">{{ w.label }}</span>
+                <span class="grow t-num wv">{{ w.text || fmtLoad(w.load, unit) }} × {{ w.reps }}</span>
+                <span v-if="w.todo" class="wdo t-num" :class="{ quiet: !w.change }">{{ w.todo }}</span>
               </button>
               <div v-if="warmFinal" class="warm-row final">
                 <span class="tick"><Icon name="up" :size="16" /></span>
-                <span class="grow wtxt">
-                  <span class="t-num wv">{{ fmtLoad(warmFinal.load, unit) }}</span>
-                  <span class="t-small t-muted wplates t-num">{{ warmFinal.plates }}<template v-if="warmFinal.change"> · <b>{{ warmFinal.change }}</b></template></span>
-                </span>
-                <span class="t-tiny t-muted">{{ t('working sets') }}</span>
+                <span class="grow"><span class="t-num wv">{{ fmtLoad(warmFinal.load, unit) }}</span> <span class="t-small t-muted">{{ t('working sets') }}</span></span>
+                <span v-if="warmFinal.change" class="wdo t-num">{{ warmFinal.change }}</span>
               </div>
-              <p class="t-tiny t-muted warm-foot">
-                <template v-if="warmKind === 'feeler'">{{ t('Your muscles are warm, but this is their first time with weight today.') + ' ' }}</template>
-                {{ unit === 'pin' ? t("Warm-ups aren't counted in your records.") : t("Based on {load}. Warm-ups aren't counted in your records.", { load: fmtLoad(warmBase, unit) }) }}
-              </p>
             </div>
           </div>
 
@@ -196,7 +185,7 @@
           <!-- Inputs -->
           <div class="inputs">
             <div v-if="showLoad">
-              <Stepper v-model="draft.load" :label="loadLabel" :unit="unitText" :step="inc" :min="0" :decimals="unit !== 'pin'" />
+              <Stepper v-model="draft.load" :label="loadLabel" :unit="unitText" :step="inc" :min="0" :floor="barFloor" :decimals="unit !== 'pin'" />
               <p v-if="plateLine" class="t-small t-muted plate-line t-num">{{ plateLine }}</p>
               <button v-if="oldPins" class="link-btn t-small pins-note" @click="msOpen = true">
                 <Icon name="info" :size="16" />{{ t('Your earlier sets here are pin numbers. Turn them into {unit}', { unit }) }}
@@ -345,7 +334,7 @@
     <!-- Edit a logged set -->
     <Sheet v-model="editOpen" :title="editing ? setName(editing) : ''">
       <div v-if="editing" class="inputs">
-        <Stepper v-if="showLoad" v-model="editDraft.load" :label="loadLabel" :unit="unitText" :step="inc" :min="0" :decimals="unit !== 'pin'" size="md" />
+        <Stepper v-if="showLoad" v-model="editDraft.load" :label="loadLabel" :unit="unitText" :step="inc" :min="0" :floor="barFloor" :decimals="unit !== 'pin'" size="md" />
         <CardioFields v-if="isCardio" :c="editDraft" :unit="profile.unit" size="md" />
         <Stepper v-else-if="isTimed" v-model="editDraft.seconds" :label="t('Seconds')" :step="5" :min="0" size="md" />
         <div v-else-if="editDraft.repsL != null" class="split">
@@ -662,7 +651,8 @@ const draft = computed(() => {
     const last = done[done.length - 1]
     const s = sugg.value
     drafts[key] = {
-      load: last ? last.load : (s.load ?? (isBodyweight.value ? 0 : null)),
+      // Nothing to go on: a bar lift starts at the bar
+      load: last ? last.load : (s.load ?? (isBodyweight.value ? 0 : barFloor.value)),
       reps: last ? last.reps : (s.reps ?? null),
       repsL: last?.repsL ?? null,
       repsR: last?.repsR ?? null,
@@ -690,6 +680,8 @@ function toggleSplit () {
 
 // Barbell and EZ bar lifts: how they're loaded (null for dumbbells, machines…)
 const barSetup = computed(() => (ex.value?.logType === 'weight' && unit.value !== 'pin' ? barSetupFor(ex.value, profile.value) : null))
+// The + and − buttons don't go below the bar (typing still can)
+const barFloor = computed(() => (barSetup.value?.bar > 0 ? barSetup.value.bar : null))
 // Plate breakdown for the weight you're about to lift
 const plateLine = computed(() => {
   const b = barSetup.value
@@ -745,13 +737,17 @@ const warmups = computed(() => {
   const kind = warmKind.value
   if (!kind) return []
   if (warmPlan.value) {
-    return warmPlan.value.sets.map(w => ({
-      ...w,
-      // The EZ bar's own weight isn't counted, so its bar-only warm-up is "0 kg": say what it is
-      text: barSetup.value.ez && !w.load ? t('Bar only') : '',
-      plates: w.perSide.length ? t('{p} a side', { p: plateText(w.perSide) }) : '',
-      change: plateChangeText(w)
-    }))
+    return warmPlan.value.sets.map(w => {
+      const change = plateChangeText(w)
+      return {
+        ...w,
+        // The EZ bar's own weight isn't counted, so its bar-only warm-up is "0 kg": say what it is
+        text: barSetup.value.ez && !w.load ? t('Bar only') : '',
+        change,
+        // What to do for this step: the plates to put on (or "Empty bar" for the first one)
+        todo: change || (!w.perSide.length ? t('Empty bar') : '')
+      }
+    })
   }
   // Pin-stack machines have no real weight: describe it
   if (unit.value === 'pin') {
@@ -768,7 +764,7 @@ const warmups = computed(() => {
 const warmFinal = computed(() => {
   const f = warmPlan.value?.final
   if (!f) return null
-  return { load: f.load, plates: t('{p} a side', { p: plateText(f.perSide) }), change: plateChangeText(f) }
+  return { load: f.load, change: plateChangeText(f) }
 })
 const showWarmup = computed(() => !!warmKind.value && warmups.value.length > 0)
 function toggleWarmup () {
@@ -1270,13 +1266,13 @@ function discard () {
 .warm-row.on .tick { background: var(--ok); border-color: var(--ok); }
 .warm-row.on .wv { color: var(--ink-3); text-decoration: line-through; }
 .wv { font-size: 18px; font-weight: 600; }
-.wtxt { display: grid; padding: 6px 0; }
-.wplates b { color: var(--ink-2); font-weight: 600; }
+.wdo { font-size: 15px; font-weight: 600; color: var(--ink); white-space: nowrap; }
+.wdo.quiet { font-weight: 500; color: var(--ink-3); }
+.warm-row.on .wdo { color: var(--ink-3); font-weight: 500; }
+.warm-row { min-height: 46px; }
 .warm-row.final { cursor: default; }
 .warm-row.final:active { background: none; }
 .warm-row.final .tick { border-style: dashed; color: var(--ink-3); }
-.warm-row.on .wplates { opacity: 0.6; }
-.warm-foot { padding: 4px 8px 0; }
 
 .sets { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
 .set {

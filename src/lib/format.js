@@ -186,10 +186,10 @@ export function plateText (list = []) {
   return groups.map(g => (g.n > 1 ? `${g.n} × ${g.p}` : String(g.p))).join(' + ')
 }
 
-/** What to do to the bar between two warm-ups, per side: "add 10", "take off 10", "swap 10 for 15". */
+/** What to do to the bar between two warm-ups, per side: "Add 10", "Take off 10", "Swap 10 for 15". */
 export function plateChangeText ({ add = [], remove = [] } = {}) {
-  if (add.length && remove.length) return t('swap {a} for {b}', { a: plateText(remove), b: plateText(add) })
-  if (add.length) return t('add {p}', { p: plateText(add) })
-  if (remove.length) return t('take off {p}', { p: plateText(remove) })
+  if (add.length && remove.length) return t('Swap {a} for {b}', { a: plateText(remove), b: plateText(add) })
+  if (add.length) return t('Add {p}', { p: plateText(add) })
+  if (remove.length) return t('Take off {p}', { p: plateText(remove) })
   return ''
 }
