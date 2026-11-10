@@ -350,6 +350,7 @@ export default {
   Pin: 'Posición',
   'Added weight': 'Lastre',
   'Each dumbbell': 'Cada mancuerna',
+  'Kettlebell': 'Pesa rusa',
   Weight: 'Peso',
   'position on the stack': 'posición en la columna',
   'Deload: easy sets, 3+ reps left': 'Descarga: series fáciles, 3 o más en reserva',

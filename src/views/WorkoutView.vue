@@ -592,7 +592,11 @@ const loadLabel = computed(() => {
   if (isBodyweight.value) return t('Added weight')
   if (barSetup.value?.ez) return t('Plates, not the bar')
   if (isCardio.value) return t('Weight you carry')
-  if (ex.value?.incrementGroup === 'dumbbell') return t('Each dumbbell')
+  if (ex.value?.incrementGroup === 'dumbbell') {
+    // One kettlebell (a swing) is just its weight; anything with dumbbells is per hand
+    const eq = (ex.value.equipment || []).join(' ')
+    return /kettlebell/i.test(eq) && !/dumbbell/i.test(eq) ? t('Kettlebell') : t('Each dumbbell')
+  }
   return t('Weight')
 })
 const unitText = computed(() => (unit.value === 'pin' ? t('position on the stack') : unit.value))
@@ -756,11 +760,6 @@ const draft = computed(() => {
   }
   return drafts[key]
 })
-// Training together: tell the others what you're about to lift here (and your machine settings), for the plan above
-watch(() => [tgItem.value, draft.value?.load, machine.value.length], () => {
-  if (tgItem.value == null || !(draft.value?.load > 0) || ex.value?.logType !== 'weight') return
-  noteLoad(tgItem.value, draft.value.load, unit.value, machine.value.length ? machine.value : null)
-}, { immediate: true })
 // Bikes and other minute-long timed sets: entered in minutes, kept in seconds
 const timedInMin = computed(() => ex.value?.timeUnit === 'min')
 const minutesOf = (obj) => computed({
@@ -1250,6 +1249,13 @@ function discard () {
   router.replace(wasFinished ? '/history' : '/')
   toast(wasFinished ? t('Workout deleted') : t('Workout discarded'))
 }
+// Training together: tell the others what you're about to lift here (and your machine settings), for the plan
+// above. Kept last: it runs straight away, and the draft it reads depends on values declared all through this
+// file. Only reads the draft when you're actually training together.
+watch(() => (tgItem.value == null ? null : [tgItem.value, draft.value?.load, machine.value.length]), (v) => {
+  if (!v || !(draft.value?.load > 0) || ex.value?.logType !== 'weight') return
+  noteLoad(tgItem.value, draft.value.load, unit.value, machine.value.length ? machine.value : null)
+}, { immediate: true })
 </script>
 
 <style scoped>
