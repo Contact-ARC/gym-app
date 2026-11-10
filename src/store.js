@@ -52,12 +52,15 @@ export function persist () {
 }
 
 // Other modules (crew feed, automatic backups) react to workouts starting, finishing or being deleted
-const hooks = { finished: [], deleted: [], started: [], discarded: [] }
+const hooks = { finished: [], deleted: [], started: [], discarded: [], sets: [], items: [] }
 export function onSessionFinished (fn) { hooks.finished.push(fn) }
 export function onSessionDeleted (fn) { hooks.deleted.push(fn) }
 /** A workout started, or one in progress was thrown away (crew: "training now"). */
 export function onSessionStarted (fn) { hooks.started.push(fn) }
 export function onSessionDiscarded (fn) { hooks.discarded.push(fn) }
+/** 0.11 (training together): a set logged, changed or deleted ({ op: 'log' | 'update' | 'delete', session, set }), and the exercises changing */
+export function onSetChange (fn) { hooks.sets.push(fn) }
+export function onItemsChange (fn) { hooks.items.push(fn) }
 function emit (kind, payload) {
   for (const fn of hooks[kind]) { try { fn(payload) } catch (e) { console.warn(kind, 'hook failed', e) } }
 }
@@ -498,6 +501,7 @@ export function addItemToSession (sessionId, exerciseId) {
       : { exerciseId, originalExerciseId: exerciseId, sets: 3, repRange: [8, 12], restSec: 90, added: true }
   s.items.push(item)
   persist()
+  emit('items', { session: s })
 }
 
 export function logSet (sessionId, set) {
@@ -506,6 +510,7 @@ export function logSet (sessionId, set) {
   const row = { id: uid(), ts: new Date().toISOString(), ...set }
   s.sets.push(row)
   persist()
+  emit('sets', { op: 'log', session: s, set: row })
   return row
 }
 
@@ -515,13 +520,16 @@ export function updateSet (sessionId, setId, patch) {
   if (!row) return
   Object.assign(row, patch)
   persist()
+  emit('sets', { op: 'update', session: s, set: row })
 }
 
 export function deleteSet (sessionId, setId) {
   const s = getSession(sessionId)
   if (!s) return
+  const gone = s.sets.find(x => x.id === setId)
   s.sets = toRaw(s.sets).filter(x => x.id !== setId)
   persist()
+  if (gone) emit('sets', { op: 'delete', session: s, set: gone })
 }
 
 export function swapExercise (sessionId, itemIndex, newExerciseId) {
@@ -532,6 +540,7 @@ export function swapExercise (sessionId, itemIndex, newExerciseId) {
   s.sets = toRaw(s.sets).filter(x => !(x.itemIndex === itemIndex && x.exerciseId === oldId))
   s.items[itemIndex].exerciseId = newExerciseId
   persist()
+  emit('items', { session: s })
 }
 
 /** "Rough day": ~10% lighter suggestions and one set fewer on exercises you haven't started. */

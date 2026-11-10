@@ -89,3 +89,12 @@ test('badges: changes, wall, packing for the crew', () => {
   assert.equal(un.workouts.level, 0)
   assert.ok(announceFeat(1) && announceFeat(10) && !announceFeat(3))
 })
+
+test('badges: trained together and weeks in a row of it', () => {
+  const s = (d, together) => ({ id: 't' + d.getTime(), startedAt: d.toISOString(), finishedAt: new Date(d.getTime() + 3600000).toISOString(), sets: [], items: [], together })
+  const sessions = [s(new Date(2026, 2, 2, 18), 'a'), s(new Date(2026, 2, 4, 18), 'b'), s(new Date(2026, 2, 10, 18), 'c'), s(new Date(2026, 2, 17, 18), null), s(new Date(2026, 2, 31, 18), 'd')]
+  const st = evaluateBadges({ sessions, unit: 'kg' })
+  assert.equal(st.together.count, 4)
+  assert.equal(st.togetherStreak.value, 2) // two weeks in a row, then a gap
+  assert.equal(st.togetherStreak.level, 1)
+})

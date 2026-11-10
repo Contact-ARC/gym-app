@@ -68,6 +68,33 @@
         </button>
       </div>
 
+      <!-- Training together: yours, open ones to join, or a code -->
+      <div class="card tg-card mt">
+        <button v-if="myTogether" class="row tg-row" @click="router.push(`/workout/${myTogether.sessionId}`)">
+          <Icon name="team" />
+          <span class="grow t-small"><b>{{ t('Training together') }}</b> · {{ myTogether.members.map(m => m.id === me ? t('you') : m.name).join(', ') }}</span>
+          <Icon name="chevronRight" :size="20" />
+        </button>
+        <button v-for="o in openTogether" :key="o.id" class="row tg-row" @click="router.push(`/crew/together/${o.id}`)">
+          <Icon name="team" />
+          <span class="grow t-small"><b>{{ memberName(o.host) }}</b> {{ t('is training together') }}<span class="t-muted"> · {{ tn(o.members.length, '{n} in', '{n} in') }}<template v-if="o.plan?.name"> · {{ (i18n.lang === 'es' && o.plan.nameEs) || o.plan.name }}</template></span></span>
+          <span class="btn btn-sm btn-primary">{{ t('Join') }}</span>
+        </button>
+        <button v-if="!myTogether" class="row tg-row code-row" @click="codeOpen = true">
+          <Icon name="team" class="t-muted" />
+          <span class="grow t-small">{{ t('Train together: start from a workout (⋯), or join with a code') }}</span>
+          <span class="btn btn-sm btn-soft">{{ t('Join with a code') }}</span>
+        </button>
+      </div>
+      <Sheet v-model="codeOpen" :title="t('Join with a code')">
+        <p class="t-small t-muted">{{ t("The 4 digits on the screen of whoever's hosting (⋯, Training together).") }}</p>
+        <input v-model="joinCode" class="field code-in t-num" type="text" inputmode="numeric" maxlength="4" pattern="[0-9]*" autocomplete="one-time-code" :placeholder="'0000'" @keydown.enter.prevent="joinByCode">
+        <p v-if="codeError" class="t-small t-err">{{ codeError }}</p>
+        <template #actions>
+          <button class="btn btn-primary btn-lg" :disabled="joinCode.length !== 4 || codeBusy" @click="joinByCode">{{ codeBusy ? t('Joining…') : t('Join') }}</button>
+        </template>
+      </Sheet>
+
       <Segmented v-model="tab" class="mt" :options="[{ label: t('Board'), value: 'board' }, { label: t('Feed'), value: 'feed' }]" :label="t('View')" />
 
       <!-- ── Board ── -->
@@ -341,6 +368,7 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import BadgeSeal from '../ui/BadgeSeal.vue'
+import { together, openTogether, refreshOpenTogether, joinTogether } from '../lib/together.js'
 import { memberBadges } from '../ui/crewUi.js'
 import { myBadges, showcase } from '../lib/myBadges.js'
 import { useRouter } from 'vue-router'
@@ -365,7 +393,7 @@ import { bodyweight } from '../lib/goals.js'
 import { fmtLoad } from '../lib/training.js'
 import { relativeDay, fmtNum, monthName } from '../lib/format.js'
 import { shareText, isNative, openNotificationSettings } from '../lib/native.js'
-import { t, tn, tx } from '../i18n/index.js'
+import { t, tn, tx, i18n } from '../i18n/index.js'
 
 const router = useRouter()
 const tab = ref(sessionGet('crew-tab') || 'board')
@@ -383,12 +411,34 @@ const unit = computed(() => state.data.profile.unit)
 onMounted(() => {
   if (inCrew.value) syncNow({ withBoard: true })
   checkPush()
+  refreshOpenTogether()
 })
 // (joining loads the board itself, once your own numbers are up)
 
 async function refresh () {
   await syncNow()
   await refreshBoard()
+  refreshOpenTogether()
+}
+
+// ── Training together ──
+const myTogether = computed(() => (together.value && together.value.status !== 'done' ? together.value : null))
+const codeOpen = ref(false)
+const joinCode = ref('')
+const codeError = ref('')
+const codeBusy = ref(false)
+async function joinByCode () {
+  if (joinCode.value.length !== 4) return
+  codeBusy.value = true
+  codeError.value = ''
+  try {
+    const sid = await joinTogether({ code: joinCode.value })
+    codeOpen.value = false
+    joinCode.value = ''
+    router.push(`/workout/${sid}`)
+  } catch (e) {
+    codeError.value = e.code === 'not_found' ? t('No one in your crew is using that code right now.') : e.code === 'together_full' ? t("It's full: 4 people at most.") : e.message
+  } finally { codeBusy.value = false }
 }
 
 async function doJoin () {
@@ -647,6 +697,10 @@ function pinnedOf (id) {
 </script>
 
 <style scoped>
+.tg-card { padding: 4px 14px; }
+.tg-row { width: 100%; gap: 10px; min-height: 52px; text-align: left; }
+.tg-row + .tg-row { border-top: 1px solid var(--line); }
+.code-in { font-size: 34px; letter-spacing: 0.3em; text-align: center; margin-top: 10px; }
 .pins { display: inline-flex; gap: 1px; margin-left: 6px; vertical-align: -4px; }
 .head { margin-top: 8px; gap: 4px; }
 .intro { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }

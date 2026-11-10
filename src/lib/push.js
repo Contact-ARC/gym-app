@@ -26,9 +26,10 @@ export const PUSH_KINDS = [
   { key: 'reactions', channel: 'crew_reactions', importance: 2, label: 'Reactions', hint: 'High fives and emojis on your posts' },
   { key: 'nudges', channel: 'crew_nudges', importance: 4, label: 'Nudges', hint: 'When someone nudges you to train' },
   { key: 'challenges', channel: 'crew_challenges', importance: 3, label: 'Challenges and badges', hint: 'New crew challenges, results, badges, the monthly challenge' },
-  { key: 'recap', channel: 'crew_recap', importance: 3, label: 'Weekly recap', hint: 'Sunday evening: how the week went' }
+  { key: 'recap', channel: 'crew_recap', importance: 3, label: 'Weekly recap', hint: 'Sunday evening: how the week went' },
+  { key: 'together', channel: 'crew_together', importance: 4, label: 'Training together', hint: "Invites, your turn and \"spot me\" while you train with someone" }
 ]
-export const PUSH_DEFAULTS = { workouts: true, records: true, live: false, comments: true, reactions: true, nudges: true, challenges: true, recap: true }
+export const PUSH_DEFAULTS = { workouts: true, records: true, live: false, comments: true, reactions: true, nudges: true, challenges: true, recap: true, together: true }
 
 export const push = reactive({
   available: null, // false: this APK was built without Firebase
@@ -74,6 +75,8 @@ async function listen () {
   })
   // While the app is open: a quiet toast instead of a notification, and fresh numbers
   await PushNotifications.addListener('pushNotificationReceived', (n) => {
+    // Training together: the screen already shows whose turn it is, so just check now
+    if (String(n?.data?.route || '').startsWith('/crew/together')) { import('./together.js').then(m => m.pokeTogether()); return }
     if (n?.title) toast(n.title)
     refreshBoard()
   })

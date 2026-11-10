@@ -84,6 +84,7 @@ export function emptyData () {
     badgesSeen: null, // { [badgeId]: date } badges already shown on the finish screen; null until the first finish (before 0.10)
     badgeSeen: null, // 0.10: { [badgeId]: [level, count] } already shown on the finish screen; null until the first finish
     badgeShowcase: [], // 0.10: up to 3 badge ids pinned on your profile and the crew board
+    together: null, // 0.11: the shared workout you're in: { id, sessionId, rev, code, host, status, plan, state, members, log, outbox }
     oneTimeSwaps: {} // 0.7.3: { [dayKey]: { [itemRef]: { from, to } } } swaps for the next workout of a day only
   }
 }

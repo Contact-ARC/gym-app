@@ -15,6 +15,7 @@
 
     <template v-if="event.kind === 'workout'">
       <div class="t-h3 post-title">{{ sessionTitle({ dayName: p.dayName, dayNameEs: p.dayNameEs, dayId: p.day }) }}</div>
+      <div v-if="p.with?.length" class="t-small with"><Icon name="team" :size="16" />{{ t('Trained together with {names}', { names: p.with.join(', ') }) }}</div>
       <div class="t-small t-muted t-num">
         {{ t('{n} min', { n: fmtMins(p.minutes) }) }}<template v-if="p.sets || !p.climbs"> · {{ tn(p.sets, '{n} set', '{n} sets') }}</template><template v-if="p.climbs"> · {{ tn(p.climbs, '{n} climb', '{n} climbs') }}</template><template v-if="p.volume"> · {{ fmtNum(volume, 0) }} {{ unit }}</template>
       </div>
@@ -100,6 +101,7 @@ function open () {
 </script>
 
 <style scoped>
+.with { display: flex; align-items: center; gap: 6px; color: var(--ink-2); font-weight: 600; margin: 2px 0 2px; }
 .post { padding: 14px 16px; }
 .post.tappable:active { background: var(--press); }
 .post-head { gap: 10px; }

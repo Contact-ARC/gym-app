@@ -22,6 +22,8 @@
     <div class="wk-progress" role="progressbar" :aria-valuenow="doneSets" :aria-valuemax="plannedSets">
       <div :style="{ width: progressPct + '%' }" />
     </div>
+    <!-- Training together: who's in and whose turn it is -->
+    <TogetherBar v-if="isTogether" :bar-change="myBarChange" @open="togetherOpen = true" />
 
     <!-- Exercise strip -->
     <div v-if="items.length" class="strip" role="tablist" :aria-label="t('Exercises')">
@@ -142,8 +144,14 @@
           </p>
           <p v-if="tx(item, 'notes')" class="t-small t-muted mini-note">{{ tx(item, 'notes') }}</p>
 
+          <!-- Training together on one bar: a shared warm-up and the order of weights -->
+          <SharedBarCard v-if="sharedPlan" :shared="sharedPlan" :members="together.members" :me-id="me" :unit="unit" />
+          <div v-if="othersHere.length" class="others t-small">
+            <div v-for="o in othersHere" :key="o.id" class="row other"><b>{{ o.name }}</b><span class="t-muted t-num">{{ o.text }}</span></div>
+          </div>
+
           <!-- Warm-up: first exercise for a muscle (see warmupKind), when the routine asks, or picked from ⋯ -->
-          <div v-if="showWarmup" class="warm card">
+          <div v-if="showWarmup && !sharedPlan" class="warm card">
             <button class="warm-head" :aria-expanded="warmOpen" @click="warmOpen = !warmOpen">
               <span class="grow">
                 <b>{{ warmKind === 'feeler' ? t('Feeler set') : t('Warm-up') }}</b>
@@ -263,6 +271,12 @@
           </div>
         </div>
       </Transition>
+      <!-- Training together: always in sight, whoever's turn it is (and your plates when it's yours) -->
+      <button v-if="isTogether && together.state?.turn" class="turn-line t-small" :class="{ mine: together.state.turn === me }" @click="togetherOpen = true">
+        <Icon name="team" :size="16" />
+        <template v-if="together.state.turn === me"><b>{{ t("You're up") }}</b><template v-if="myBarChangeText"> · {{ myBarChangeText }}</template></template>
+        <template v-else>{{ t("{name}'s up", { name: together.members.find(m => m.id === together.state.turn)?.name || '' }) }}</template>
+      </button>
       <div v-if="editingFinished || !allDone || !isComplete(current)" class="row log-row">
         <button
           v-if="!rest.endsAt && !editingFinished && manualRest" class="btn btn-lg rest-now"
@@ -286,6 +300,13 @@
     <Sheet v-model="menuOpen" :title="t('Workout')">
       <div class="group">
         <button class="group-row" @click="menuOpen = false; addOpen = true"><Icon name="plus" /><span class="grow">{{ t('Add an exercise') }}</span></button>
+        <button v-if="inCrew && !editingFinished" class="group-row" @click="menuOpen = false; togetherOpen = true">
+          <Icon name="team" />
+          <div class="grow">
+            <div>{{ isTogether ? t('Training together') : t('Train together') }}</div>
+            <div class="t-tiny t-muted">{{ isTogether ? t('Code {code} · {n} in', { code: together.code, n: together.members.length }) : t('Share this workout with up to 3 people from your crew') }}</div>
+          </div>
+        </button>
         <button v-if="!editingFinished" class="group-row" @click="toggleEasy">
           <Icon name="deload" />
           <div class="grow">
@@ -322,6 +343,7 @@
     <ExercisePicker v-model="addOpen" :title="t('Add an exercise')" allow-create @pick="doAdd" />
     <MachineSettingsSheet v-if="item" v-model="msOpen" :exercise-id="item.exerciseId" :prefill="msPrefill" />
     <GymPickSheet v-model="gymPickOpen" :session-id="session.id" />
+    <TogetherSheet v-model="togetherOpen" />
 
     <!-- Quick look at how to do the current exercise -->
     <Sheet v-model="infoOpen" :title="name(item?.exerciseId)">
@@ -423,6 +445,12 @@ import ClimbPanel from '../ui/ClimbPanel.vue'
 import SwapSheet from '../ui/SwapSheet.vue'
 import MachineSettingsSheet from '../ui/MachineSettingsSheet.vue'
 import GymPickSheet from '../ui/GymPickSheet.vue'
+import TogetherBar from '../ui/TogetherBar.vue'
+import TogetherSheet from '../ui/TogetherSheet.vue'
+import SharedBarCard from '../ui/SharedBarCard.vue'
+import { together, noteLoad } from '../lib/together.js'
+import { loadsOn, sharedBar, barChange, currentSets } from '../lib/togetherPlan.js'
+import { inCrew, me } from '../lib/crew.js'
 import { activeGyms, gymName, gymById, sessionGymId } from '../lib/climbing.js'
 import CardioFields from '../ui/CardioFields.vue'
 import { cardioOf, cardioText, cardioStart } from '../lib/cardio.js'
@@ -572,6 +600,40 @@ const groupMates = computed(() => items.value
   .filter(({ it, i }) => it.group && it.group === item.value?.group && i !== current.value)
   .map(({ it }) => it.exerciseId))
 const machine = computed(() => state.data.machineSettings[item.value?.exerciseId] || [])
+// ── Training together ──
+const togetherOpen = ref(false)
+const isTogether = computed(() => !!together.value && !editingFinished.value && session.value?.together === together.value.id && together.value.status !== 'done')
+// This exercise's place in the shared day (null: one of your own, or not together)
+const tgItem = computed(() => (isTogether.value ? item.value?.tg ?? null : null))
+const othersLoads = computed(() => (tgItem.value == null ? {} : loadsOn(together.value.log, tgItem.value, unit.value === 'pin' ? profile.value.unit : unit.value)))
+// One bar for everyone on it: built from your weight now and what the others logged or are about to lift
+const sharedPlan = computed(() => {
+  const b = barSetup.value
+  if (tgItem.value == null || !b) return null
+  const lifters = together.value.members.map(m => ({ id: m.id, load: m.id === me.value ? draft.value.load : othersLoads.value[m.id]?.load }))
+  return sharedBar(lifters, b.bar, platesFor(profile.value), { stepRef: warmStepFor(unit.value) })
+})
+// Your turn on a shared bar: what to change from whoever went before you
+const myBarChange = computed(() => {
+  const sp = sharedPlan.value
+  if (!sp || together.value.state?.turn !== me.value) return null
+  const prev = currentSets(together.value.log).filter(x => x.item === tgItem.value && x.member !== me.value).sort((a, b) => (b.rev ?? 1e15) - (a.rev ?? 1e15))[0]
+  return prev ? barChange(sp, prev.member, me.value) : null
+})
+const myBarChangeText = computed(() => {
+  const c = myBarChange.value ? plateChangeText(myBarChange.value) : ''
+  return c ? t('{change} a side', { change: c }) : ''
+})
+// Machines: the others' settings and weight on it
+const othersHere = computed(() => {
+  if (tgItem.value == null || barSetup.value) return []
+  return together.value.members.filter(m => m.id !== me.value && othersLoads.value[m.id]).map(m => {
+    const o = othersLoads.value[m.id]
+    const bits = [...(o.ms || []).map(r => `${r.label} ${r.value}`), o.load ? fmtLoad(o.load, unit.value === 'pin' ? profile.value.unit : unit.value) : ''].filter(Boolean)
+    return { id: m.id, name: m.name, text: bits.join(' · ') }
+  }).filter(o => o.text)
+})
+
 // ── Gyms ──
 const manyGyms = computed(() => activeGyms(state.data.settings).length > 1)
 const gymHere = computed(() => gymName(gymById(state.data.settings, sessionGymId(session.value, state.data.settings))))
@@ -692,6 +754,11 @@ const draft = computed(() => {
   }
   return drafts[key]
 })
+// Training together: tell the others what you're about to lift here (and your machine settings), for the plan above
+watch(() => [tgItem.value, draft.value?.load, machine.value.length], () => {
+  if (tgItem.value == null || !(draft.value?.load > 0) || ex.value?.logType !== 'weight') return
+  noteLoad(tgItem.value, draft.value.load, unit.value, machine.value.length ? machine.value : null)
+}, { immediate: true })
 function cardioDraft (last) {
   let prev = last?.cardio ? last : null
   if (!prev) for (const h of historyFor(item.value.exerciseId, session.value.id)) { prev = h.sets.find(x => x.cardio); if (prev) break }
@@ -1185,6 +1252,10 @@ function discard () {
   background: var(--paper);
 }
 .gym-at { display: inline-flex; align-items: center; gap: 3px; color: var(--ink-2); font-weight: 600; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.turn-line { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 32px; margin-bottom: 8px; border-radius: 12px; background: var(--card); color: var(--ink-2); }
+.turn-line.mine { background: var(--ok-soft); color: var(--ok); }
+.others { margin-top: 10px; display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); }
+.other { gap: 8px; }
 .from-gym { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); }
 .wk-title { padding: 0 4px; }
 .sep { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--ink-3); margin: 0 8px; vertical-align: middle; }

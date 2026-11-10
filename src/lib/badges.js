@@ -14,7 +14,7 @@ import { sessionVolume, isWorkSet, convertLoad } from './training.js'
 import { recordsBySession, PLATE_STEPS, TOTAL_CLUBS_KG } from './crewStats.js'
 
 export const TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond']
-export const GROUPS = ['milestones', 'strength', 'habits', 'cardio', 'climbing', 'secret']
+export const GROUPS = ['milestones', 'strength', 'habits', 'crew', 'cardio', 'climbing', 'secret']
 /** Lifts that count for the plates, total and bodyweight badges */
 const LIFTS = ['squat', 'bench', 'deadlift']
 const PULL_UPS = ['pull-up', 'chin-up']
@@ -52,6 +52,8 @@ export const BADGES = [
   feat('deloadWeek', 'habits', 'deload'),
   feat('challenge', 'habits', 'challenge'),
   feat('goal', 'habits', 'goal'),
+  feat('together', 'crew', 'team'), // 0.11: a workout trained together
+  lvl('togetherStreak', 'crew', 'crew', [2, 4, 8, 16, 26]), // weeks in a row with one
   lvl('distance', 'cardio', 'run', [10, 50, 100, 250, 500]),
   feat('fiveK', 'cardio', 'shoe'),
   lvl('climbs', 'climbing', 'climb', [10, 50, 100, 250, 500], { needs: 'climb' }),
@@ -128,6 +130,8 @@ export function evaluateBadges ({ sessions, unit = 'kg', lifts = {}, bodyweights
   const weekCount = {}
   const perfect = new Set()
   const deloads = new Set()
+  let tgRun = 0
+  let tgLast = null // the last week with a workout together
   const weekendDays = {} // weekend key → { sat, sun }
   let prev = null
   // Streak: weeks with enough workouts, back to back
@@ -195,6 +199,17 @@ export function evaluateBadges ({ sessions, unit = 'kg', lifts = {}, bodyweights
     const mins = minutesOf(s)
     if (mins >= FEAT_RULES.twoHoursMin && mins <= FEAT_RULES.twoHoursMax) featDates.twoHours.push(date)
     if (s.plan?.deload && !deloads.has(wk)) { deloads.add(wk); featDates.deloadWeek.push(date) }
+
+    // Trained together, and weeks in a row with it
+    if (s.together) {
+      featDates.together.push(date)
+      if (tgLast !== wk) {
+        const prevWeek = weekKey(new Date(new Date(wk + 'T12:00:00').getTime() - 7 * 86400000))
+        tgRun = tgLast === prevWeek ? tgRun + 1 : 1
+        tgLast = wk
+        bump('togetherStreak', tgRun, date)
+      }
+    }
 
     // Strength: heaviest actually lifted on each lift, bodyweight multiples, pull-ups
     for (const k of LIFTS) {

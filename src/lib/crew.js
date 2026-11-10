@@ -56,7 +56,11 @@ const ERRORS = {
   bad_comment: 'Comments are 1 to 500 characters.',
   bad_challenge: 'Check the challenge: it needs a name, and a target for a team challenge.',
   not_found: 'That isn\'t on the board any more.',
-  bad_target: "You can't do that to yourself."
+  bad_target: "You can't do that to yourself.",
+  // 0.11: training together
+  together_full: "It's full: 4 people at most.",
+  bad_plan: 'Only the host can change the day.',
+  bad_state: "That person isn't training with you any more."
 }
 
 class CrewError extends Error {
@@ -263,6 +267,7 @@ function workoutPayload (s) {
     volume: Math.round(sum.volume),
     unit: sum.unit,
     startedAt: s.startedAt,
+    with: s.togetherWith?.length ? s.togetherWith.slice(0, 3) : undefined, // 0.11: trained together with
     prs: Object.values(best).slice(0, 6).map(p => ({
       exerciseId: p.exerciseId,
       name: ex[p.exerciseId]?.name || p.exerciseId,

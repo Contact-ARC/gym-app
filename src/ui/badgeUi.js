@@ -10,6 +10,7 @@ export const GROUP_TONE = {
   milestones: { light: '#4F8CF0', dark: '#2453B0', edge: '#1B3F87' },
   strength: { light: '#EE6157', dark: '#B5271F', edge: '#861A14' },
   habits: { light: '#3DBB75', dark: '#1D7D47', edge: '#145B33' },
+  crew: { light: '#2FB4BE', dark: '#13757D', edge: '#0D555B' },
   cardio: { light: '#F07BB4', dark: '#C23C7E', edge: '#8F2A5C' },
   climbing: { light: '#B07A55', dark: '#7A4E31', edge: '#5A3822' },
   secret: { light: '#A779E0', dark: '#6B3BB0', edge: '#4D2885' }
@@ -22,7 +23,7 @@ const tonnes = (kg, unit) => (unit === 'lb' ? `${num(convertLoad(kg, 'kg', 'lb')
 const list = (items, tr) => (items.length > 1 ? tr('{a} and {b}', { a: items.slice(0, -1).join(', '), b: items.at(-1) }) : items.join(''))
 
 export function groupName (g, tr = t) {
-  return ({ milestones: tr('Milestones'), strength: tr('Strength'), habits: tr('Habits'), cardio: tr('Cardio'), climbing: tr('Climbing'), secret: tr('Secret') })[g] || g
+  return ({ milestones: tr('Milestones'), strength: tr('Strength'), habits: tr('Habits'), crew: tr('Crew'), cardio: tr('Cardio'), climbing: tr('Climbing'), secret: tr('Secret') })[g] || g
 }
 export function tierName (level, tr = t) {
   return [tr('Bronze'), tr('Silver'), tr('Gold'), tr('Platinum'), tr('Diamond')][level - 1] || ''
@@ -37,7 +38,8 @@ export function badgeName (id, tr = t, secretHidden = false) {
     benchBw: tr('Bench vs bodyweight'), squatBw: tr('Squat vs bodyweight'), deadliftBw: tr('Deadlift vs bodyweight'), pullups: tr('Pull-ups'),
     recordDay: tr('Record day'), perfectWeek: tr('Perfect week'), fullHouse: tr('Full house'), comeback: tr('Comeback'),
     earlyBird: tr('Early bird'), nightOwl: tr('Night owl'), weekend: tr('Weekend warrior'), heavyDay: tr('Heavy day'),
-    deloadWeek: tr('Smart recovery'), challenge: tr('Challenge done'), goal: tr('Goal getter'), distance: tr('Distance'), fiveK: tr('5K'),
+    deloadWeek: tr('Smart recovery'), challenge: tr('Challenge done'), goal: tr('Goal getter'),
+    together: tr('Trained together'), togetherStreak: tr('Partner streak'), distance: tr('Distance'), fiveK: tr('5K'),
     climbs: tr('Climber'), flashDay: tr('Flash'), newYear: tr('New Year, same me'), christmas: tr('Christmas gains'),
     witching: tr('Witching hour'), twoHours: tr('Long haul')
   }
@@ -105,6 +107,8 @@ export function badgeHow (id, tr = t, unit = 'kg', { weekTarget = 3, secretHidde
     case 'deloadWeek': return tr('Train through a deload week, lighter as planned.')
     case 'challenge': return tr("Complete the month's challenge.")
     case 'goal': return tr('Reach one of your goals.')
+    case 'together': return tr('Do a workout together with someone from your crew (⋯, Train together).')
+    case 'togetherStreak': return tr('Train together at least once a week, week after week. Levels at {steps} weeks in a row.', { steps })
     case 'distance': return tr('Distance on the treadmill and other cardio, added up. Levels at {steps}.', { steps })
     case 'fiveK': return tr('Cover {d} in one workout.', { d: fmtDistance(FEAT_RULES.fiveKm, unit) })
     case 'climbs': return tr('Climbs logged. Levels at {steps} climbs.', { steps })
