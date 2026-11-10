@@ -89,5 +89,21 @@ export {
   mdiLightningBolt as flash,
   mdiCarabiner as climb,
   mdiImageFilterHdr as wall,
-  mdiMapMarkerOutline as place
+  mdiMapMarkerOutline as place,
+  mdiWeight as weight,
+  mdiViewGridOutline as grid,
+  mdiArmFlex as arm,
+  mdiTrophyAward as trophyAward,
+  mdiStarFourPoints as star,
+  mdiCheckAll as checkAll,
+  mdiWeatherSunsetUp as sunrise,
+  mdiWeatherNight as night,
+  mdiCalendarWeekend as weekend,
+  mdiRun as run,
+  mdiShoePrint as shoe,
+  mdiPartyPopper as party,
+  mdiPineTree as tree,
+  mdiMoonWaningCrescent as moon,
+  mdiTimerSand as timerSand,
+  mdiHelp as help
 } from '@mdi/js'

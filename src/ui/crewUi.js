@@ -2,6 +2,7 @@
 import { board, memberById, me } from '../lib/crew.js'
 import { days, state } from '../store.js'
 import { badgeTitle } from '../lib/crewStats.js'
+import { unpackBadges } from '../lib/badges.js'
 import { tn, i18n } from '../i18n/index.js'
 
 const AVATAR = ['var(--plate-red)', 'var(--plate-blue)', 'var(--plate-yellow)', 'var(--plate-green)', 'var(--ink-2)']
@@ -56,4 +57,31 @@ export function metricText (metric, value, unit, fmtNum) {
     case 'bestStreak': return tn(value, '{n} week', '{n} weeks')
     default: return tn(value, '{n} workout', '{n} workouts')
   }
+}
+
+/** A crew member's badges (0.10 and later), or null if their app is older. */
+export function memberBadges (memberId) {
+  const m = memberById.value[memberId]
+  const packed = m?.stats?.badgeState
+  if (!packed) return null
+  return unpackBadges(packed, m.stats?.pl?.unit || m.stats?.month?.unit || 'kg')
+}
+/** Who in the crew has this badge: [{ id, name, level, count, first }], highest first; and how many could show it. */
+export function crewHolders (badgeId) {
+  const out = []
+  let counted = 0
+  for (const m of board.members) {
+    const b = memberBadges(m.id)
+    if (!b) continue
+    counted++
+    const st = b[badgeId]
+    if (st && (st.level || st.count)) out.push({ id: m.id, name: m.name, level: st.level, count: st.count, first: st.first })
+  }
+  out.sort((a, b) => b.level - a.level || b.count - a.count || String(a.first).localeCompare(String(b.first)))
+  return { holders: out, counted }
+}
+/** First in the crew to earn it (by date) */
+export function crewFirst (badgeId) {
+  const { holders } = crewHolders(badgeId)
+  return holders.filter(h => h.first).sort((a, b) => a.first.localeCompare(b.first))[0] || null
 }

@@ -7,6 +7,7 @@
         <div class="t-tiny t-muted">{{ relativeDay(p.startedAt || event.created_at) }}</div>
       </div>
       <PlateBadge v-if="event.kind === 'workout' && p.day" :index="plateIndex(p.day)" :label="p.day === 'free' ? '+' : p.day" size="sm" />
+      <BadgeSeal v-else-if="event.kind === 'badge' && p.v === 2 && BADGE_BY_ID[p.id]" :id="p.id" :level="p.level || 0" :count="p.count || 0" :size="40" />
       <span v-else-if="event.kind === 'badge'" class="kind-ic badge-ic"><Icon name="medal" :size="20" /></span>
       <span v-else-if="event.kind === 'crewChallenge'" class="kind-ic" :class="p.done || p.kind === 'versus' ? 'ok-ic' : 'muted-ic'"><Icon :name="p.kind === 'versus' ? 'versus' : 'finish'" :size="20" /></span>
       <span v-else class="kind-ic ok-ic"><Icon name="trophy" :size="20" /></span>
@@ -47,6 +48,8 @@
 
 <script setup>
 import { computed } from 'vue'
+import BadgeSeal from './BadgeSeal.vue'
+import { BADGE_BY_ID } from '../lib/badges.js'
 import { useRouter } from 'vue-router'
 import Icon from './Icon.vue'
 import PlateBadge from './PlateBadge.vue'

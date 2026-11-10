@@ -165,3 +165,33 @@ export async function initPush (r) {
   watch(inCrew, (v) => { if (v) sendSettings() })
   watch(() => i18n.lang, () => { createChannels(); sendSettings() })
 }
+
+/**
+ * "Send me a test": makes sure the board has this phone, asks for a test notification through the whole
+ * chain (database → crew-push function → Firebase → phone), then reads back what the function answered.
+ * Returns { ok, text } where text says which link broke, if one did.
+ */
+export async function testPush () {
+  const pressed = Date.now()
+  await sendSettings()
+  try {
+    await crewRpc('crew_push_test')
+  } catch (e) {
+    if (/crew_push_test|PGRST202|404/.test(String(e.code || '') + e.message)) return { ok: false, text: t('The crew database needs the latest setup: run supabase/crew.sql again in Supabase, SQL Editor.') }
+    return { ok: false, text: e.message }
+  }
+  await new Promise(r => setTimeout(r, 6000)) // Firebase is quick, but give the chain a moment
+  let st
+  try { st = await crewRpc('crew_push_status') } catch (e) { return { ok: false, text: e.message } }
+  if (!st.token) return { ok: false, text: t("This phone isn't registered with the board. Turn crew notifications off and on again.") }
+  if (!st.url) return { ok: false, text: t("The database doesn't know where the notification function is: README, Crew notifications, Supabase step 5.") }
+  if (!st.pgnet) return { ok: false, text: t('The pg_net extension is off in Supabase: Database, Extensions, pg_net.') }
+  const mine = (st.answers || []).find(a => new Date(a.at).getTime() >= pressed - 5000)
+  if (!mine) return { ok: false, text: t("The function didn't answer yet. Check Edge Functions, crew-push, Logs in Supabase.") }
+  if (mine.status === 401) return { ok: false, text: t('The crew-push function turned the database away (401): turn off "Verify JWT" in its settings.') }
+  if (mine.status === 404) return { ok: false, text: t('The notification address is wrong (404): check push_url and that the function is called crew-push.') }
+  if (/not configured/.test(mine.answer)) return { ok: false, text: t('The FCM_SERVICE_ACCOUNT secret is missing in Supabase, Edge Functions, Secrets.') }
+  if (mine.status >= 400 || mine.status == null) return { ok: false, text: t('The function failed ({s}): {a}', { s: mine.status ?? '–', a: mine.answer }) }
+  if (/"sent":\s*0/.test(mine.answer)) return { ok: false, text: t("The function ran but nothing reached Firebase. Edge Functions, crew-push, Logs shows Firebase's answer.") }
+  return { ok: true, text: t("Sent. If it didn't show, check Android's notification settings and battery saving for Gym Crew.") }
+}

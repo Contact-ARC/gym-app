@@ -170,12 +170,16 @@ export function bumpChallenge (delta) {
 
 /** Workouts a week that keep the streak going: your "workouts per week" goal from the week you set it, otherwise 2. */
 export const weeklyMin = computed(() => weeklyTarget(state.data.goals) || STREAK_MIN)
-export const streak = computed(() => {
-  const [y, m, d] = state.today.split('-').map(Number)
+/** The streak rule as a number or a function of the week (also used by the streak badge). */
+export const streakRule = computed(() => {
   const g = state.data.goals.find(x => x.type === 'weekly' && !x.archived)
   const from = g?.createdAt ? weekKey(g.createdAt) : null
-  const min = g ? (wk) => (!from || wk >= from ? weeklyMin.value : STREAK_MIN) : STREAK_MIN
-  return weekStreak(state.data.sessions, new Date(y, m - 1, d, 12), min)
+  const min = weeklyMin.value
+  return g ? (wk) => (!from || wk >= from ? min : STREAK_MIN) : STREAK_MIN
+})
+export const streak = computed(() => {
+  const [y, m, d] = state.today.split('-').map(Number)
+  return weekStreak(state.data.sessions, new Date(y, m - 1, d, 12), streakRule.value)
 })
 
 /** Today's targets from the routine: week number, reps in reserve, deload, set changes. */

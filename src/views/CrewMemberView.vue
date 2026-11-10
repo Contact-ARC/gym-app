@@ -80,8 +80,18 @@
         </template>
       </template>
 
-      <!-- Badges -->
-      <template v-if="badges.length">
+      <!-- Badges: pinned ones, the tally, the whole wall one tap away -->
+      <template v-if="mb">
+        <h2 class="section-h">{{ t('Badges') }} <span class="t-faint">{{ t('{a} of {b}', { a: mbTally.earned, b: mbTally.of }) }}</span></h2>
+        <RouterLink :to="isMe ? '/badges' : `/badges/${id}`" class="card card-pad mb-card">
+          <span class="mb-seals">
+            <BadgeSeal v-for="b in mbShow" :key="b.id" :id="b.id" :level="b.level" :count="b.count" :size="52" />
+          </span>
+          <span class="grow t-small t-muted">{{ mbShowPinned ? t('Pinned') : t('Latest') }}</span>
+          <span class="t-small link">{{ t('See all') }}</span><Icon name="chevronRight" :size="20" />
+        </RouterLink>
+      </template>
+      <template v-else-if="badges.length">
         <h2 class="section-h">{{ t('Badges') }} <span class="t-faint">{{ badges.length }}</span></h2>
         <div class="badges">
           <div v-for="b in badges" :key="b" class="badge" :class="'k-' + badgeKind(b)">
@@ -135,7 +145,10 @@ import Sheet from '../ui/Sheet.vue'
 import Segmented from '../ui/Segmented.vue'
 import CrewPost from '../ui/CrewPost.vue'
 import { toast } from '../ui/toast.js'
-import { avatarStyle, initial, badgeName } from '../ui/crewUi.js'
+import { avatarStyle, initial, badgeName, memberBadges } from '../ui/crewUi.js'
+import BadgeSeal from '../ui/BadgeSeal.vue'
+import { myBadges, showcase } from '../lib/myBadges.js'
+import { badgeTally } from '../lib/badges.js'
 import { state } from '../store.js'
 import {
   board, inCrew, me, isOwner, memberById, memberTotals, memberLifts, memberLine, liveOf, nudge, removeMember,
@@ -245,7 +258,18 @@ const chartOptions = computed(() => ({
 }))
 
 // ── Badges, plans, posts ──
-const badges = computed(() => sortBadges(member.value?.stats?.badges || []))
+const badges = computed(() => sortBadges(member.value?.stats?.badges || [])) // before 0.10
+// 0.10: the full set, with levels (yours straight from your phone)
+const mb = computed(() => (isMe.value ? myBadges() : memberBadges(id.value)))
+const mbTally = computed(() => badgeTally(mb.value))
+const mbShowPinned = computed(() => !!(isMe.value ? showcase() : member.value?.stats?.showcase || []).length)
+const mbShow = computed(() => {
+  const st = mb.value
+  if (!st) return []
+  const pinned = (isMe.value ? showcase() : (member.value?.stats?.showcase || [])).filter(x => st[x] && (st[x].level || st[x].count))
+  const ids = pinned.length ? pinned : Object.keys(st).filter(x => st[x].last).sort((a, b) => st[b].last.localeCompare(st[a].last)).slice(0, 3)
+  return ids.map(x => ({ id: x, ...st[x] }))
+})
 const plans = computed(() => board.plans.filter(p => p.member_id === id.value))
 const posts = computed(() => board.events.filter(e => e.member_id === id.value).slice(0, 10))
 const copying = ref(null)
@@ -299,6 +323,9 @@ async function doRemove () {
 .chip.on { background: var(--ink); color: var(--paper, var(--card)); }
 .chart-card { margin-top: 10px; }
 .chart { height: 220px; margin-top: 10px; }
+.mb-card { display: flex; align-items: center; gap: 10px; }
+.mb-seals { display: flex; gap: 4px; }
+.mb-card .link { font-weight: 600; color: var(--ink-2); }
 .badges { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
 .badge { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: var(--card); }
 .b-ic { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; flex: 0 0 auto; background: var(--warn-soft); color: var(--warn); }

@@ -34,6 +34,18 @@ export function t (key, vars) {
   return s
 }
 
+/** A t() for a fixed language, for text that goes out in both (crew posts carry English and Spanish). */
+export function tFor (lang) {
+  return (key, vars) => {
+    if (key == null) return ''
+    key = String(key)
+    const dict = DICTS[lang]
+    let s = (dict && dict[key]) || (key.includes('|') ? key.slice(key.indexOf('|') + 1) : key)
+    if (vars) s = s.replace(/\{(\w+)\}/g, (m, k) => (vars[k] ?? m))
+    return s
+  }
+}
+
 /** Pick singular/plural: tn(n, '{n} set', '{n} sets') */
 export function tn (n, one, many, vars = {}) {
   return t(n === 1 ? one : many, { n, ...vars })

@@ -28,6 +28,17 @@
         </div>
         <Icon name="chevronRight" class="chev" />
       </RouterLink>
+      <RouterLink to="/badges" class="qcard wide badges-q">
+        <Icon name="medal" />
+        <div class="grow">
+          <div class="t-h3">{{ t('Badges') }}</div>
+          <div class="t-tiny t-muted truncate">{{ t('{a} of {b} earned', { a: badgeCount.earned, b: badgeCount.of }) }}</div>
+        </div>
+        <span class="mini-seals">
+          <BadgeSeal v-for="b in badgeShow" :key="b.id" :id="b.id" :level="b.level" :count="b.count" :size="30" :show-count="false" />
+        </span>
+        <Icon name="chevronRight" class="chev" />
+      </RouterLink>
     </div>
 
     <div v-if="!finishedSessions.length" class="card card-pad empty">
@@ -192,6 +203,9 @@ import ExercisePicker from '../ui/ExercisePicker.vue'
 import Sheet from '../ui/Sheet.vue'
 import { state, persist, finishedSessions, exercisesById, historyHere, days, streak, goalsWithProgress, goalCtx, prOptions } from '../store.js'
 import { plTotal, bodyweight } from '../lib/goals.js'
+import BadgeSeal from '../ui/BadgeSeal.vue'
+import { myBadges, showcase } from '../lib/myBadges.js'
+import { badgeTally } from '../lib/badges.js'
 import { dots } from '../lib/body.js'
 import { bestE1RM, heaviest, fmtLoad, unitFor, dateKey, convertLoad, detectPRs, isWorkSet, bestSeconds } from '../lib/training.js'
 import { cardioTotals, fmtDistance } from '../lib/cardio.js'
@@ -205,6 +219,15 @@ const router = useRouter()
 const pickerOpen = ref(false)
 const unit = computed(() => state.data.profile.unit)
 const exName = (id) => tx(exercisesById.value[id], 'name') || id
+
+// ── Badges: how many, and the pinned ones (or the latest earned) ──
+const badgeCount = computed(() => badgeTally(myBadges()))
+const badgeShow = computed(() => {
+  const st = myBadges()
+  const pinned = showcase()
+  const ids = pinned.length ? pinned : Object.keys(st).filter(id => st[id].last).sort((a, b) => st[b].last.localeCompare(st[a].last)).slice(0, 3)
+  return ids.map(id => ({ id, ...st[id] }))
+})
 
 // ── Goals summary ──
 const goalsLine = computed(() => {
@@ -416,6 +439,7 @@ const bodyLine = computed(() => {
 .qcard { display: flex; align-items: center; gap: 10px; padding: 14px; background: var(--card); border-radius: var(--r-card); min-width: 0; }
 .qcard:active { background: var(--press); }
 .qcard.wide { grid-column: 1 / -1; }
+.mini-seals { display: flex; gap: 2px; }
 .pl { margin-top: 10px; }
 .pl .right { text-align: right; }
 .pl-v { font-size: 20px; font-weight: 700; }

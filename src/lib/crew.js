@@ -16,10 +16,13 @@ import {
 import { weekKey, monthKey, addDays, workSets, sessionMinutes } from './stats.js'
 import { convertLoad } from './training.js'
 import { cleanItem } from './routines.js'
-import { periodStats, liftNumbers, liftLines, badgeIds, badgeTitle } from './crewStats.js'
+import { periodStats, liftNumbers, liftLines, badgeIds } from './crewStats.js'
 import { bodyweight, DEFAULT_LIFTS } from './goals.js'
 import { dots } from './body.js'
-import { t, tx } from '../i18n/index.js'
+import { t, tx, tFor } from '../i18n/index.js'
+import { myBadges, snapshot, fromSnapshot, showcase } from './myBadges.js'
+import { badgeChanges, announceFeat, packBadges, BADGE_BY_ID } from './badges.js'
+import { badgeTitle as badgeTitle2 } from '../ui/badgeUi.js'
 import { APP_VERSION } from '../config.js'
 
 export const crewConfig = computed(() => {
@@ -163,27 +166,6 @@ function heavyStats () {
   return value
 }
 
-/**
- * Badges this workout earned you, for the pop-up on the finish screen. Works without a crew.
- * `state.data.badgesSeen` remembers what was already shown; the first time it starts from what you
- * had before this workout, so old badges never pop up.
- */
-export function newBadgesFrom (sessionId) {
-  const unit = state.data.profile.unit
-  const lifts = state.data.settings.lifts || DEFAULT_LIFTS
-  const now = heavyStats().badges
-  if (!state.data.badgesSeen) {
-    const others = state.data.sessions.filter(x => x.id !== sessionId)
-    const ps = periodStats(others, unit, new Date(state.today + 'T12:00:00'))
-    const before = badgeIds({ sessions: others, unit, lifts, bestStreak: streak.value.best, records: ps.all.records })
-    state.data.badgesSeen = Object.fromEntries(before.map(id => [id, state.today]))
-  }
-  const fresh = now.filter(id => !state.data.badgesSeen[id])
-  for (const id of fresh) state.data.badgesSeen[id] = state.today
-  if (fresh.length) persist()
-  return fresh
-}
-
 /** Stats shown on the board. Week and month keys let others ignore stale numbers. */
 export function myStats () {
   const h = heavyStats()
@@ -213,7 +195,9 @@ export function myStats () {
     live: live ? { startedAt: live.startedAt, day: live.dayId, dayName: live.dayName || null, dayNameEs: live.dayNameEs || null } : null,
     pl,
     lines: h.lines,
-    badges: h.badges,
+    badges: h.badges, // before 0.10: ids, still read by older apps
+    badgeState: packBadges(myBadges()), // 0.10: { [id]: [level, count, value, first, last] }
+    showcase: showcase(),
     avatar: state.data.crew.avatar || null,
     lastWorkoutAt: finishedSessions.value[0]?.startedAt || null
   }
@@ -317,21 +301,32 @@ function queueChallengeDone () {
   state.data.crew.queue.push({ op: 'post', clientId: 'challenge-' + month, kind: 'challenge', payload: { month, title: c.title, es: c.es?.title ? { title: c.es.title } : undefined, target: challengeStatus.value.target, type: c.type } })
 }
 
-/** New badges go to the feed. The first time (upgrading to 0.6), what you already had is recorded quietly. */
+/**
+ * New badges and levels go to the feed; feats the first time and then at ×5, ×10, ×25… (not every early
+ * morning). The first time (upgrading to 0.10), everything you already had is recorded quietly.
+ */
 function checkBadges () {
   const c = state.data.crew
-  const ids = heavyStats().badges
+  const st = myBadges()
   const unit = state.data.profile.unit
-  if (!c.badges) {
-    c.badges = Object.fromEntries(ids.map(id => [id, state.today]))
+  if (!c.badges2) {
+    c.badges2 = snapshot(st)
     return
   }
-  for (const id of ids) {
-    if (c.badges[id]) continue
-    c.badges[id] = state.today
-    if (c.shareFeed) {
-      c.queue.push({ op: 'post', clientId: 'badge-' + id, kind: 'badge', payload: { id, unit, title: badgeTitle(id, 'en', unit), es: { title: badgeTitle(id, 'es', unit) } } })
-    }
+  for (const ch of badgeChanges(fromSnapshot(c.badges2), st)) {
+    c.badges2 = { ...c.badges2, [ch.id]: [ch.level, ch.count] }
+    const b = BADGE_BY_ID[ch.id]
+    if (!c.shareFeed || (b.kind === 'feat' && !announceFeat(ch.count))) continue
+    c.queue.push({
+      op: 'post',
+      clientId: `badge2-${ch.id}-${b.kind === 'feat' ? ch.count : ch.level}`,
+      kind: 'badge',
+      payload: {
+        v: 2, id: ch.id, level: ch.level, count: ch.count, unit,
+        title: badgeTitle2(ch.id, ch.level, ch.count, tFor('en'), unit),
+        es: { title: badgeTitle2(ch.id, ch.level, ch.count, tFor('es'), unit) }
+      }
+    })
   }
 }
 

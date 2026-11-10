@@ -111,11 +111,40 @@ create table if not exists public.crew_settings (
   value text
 );
 
+-- 0.11: training together. One row per shared workout (2 to 4 people, the host's day), and its log:
+-- every set, undo, "spot me" and change of turn, numbered by rev so phones only fetch what's new.
+create table if not exists public.crew_together (
+  id uuid primary key default gen_random_uuid(),
+  crew text not null,
+  host uuid not null references public.crew_members (id) on delete cascade,
+  code text not null, -- 4 digits to join from the next machine
+  members uuid[] not null,
+  status text not null default 'open', -- open | done
+  plan jsonb not null, -- the host's day: { name, nameEs, items: [...] }
+  state jsonb not null default '{}'::jsonb, -- { item, turn: memberId, round, next, nextEs } (the phones decide)
+  rev bigint not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists crew_together_crew on public.crew_together (crew, status);
+create table if not exists public.crew_together_log (
+  id bigint generated always as identity primary key,
+  together uuid not null references public.crew_together (id) on delete cascade,
+  member_id uuid not null references public.crew_members (id) on delete cascade,
+  client_id text not null,
+  kind text not null, -- set | unset | spot | note
+  payload jsonb not null default '{}'::jsonb,
+  rev bigint not null,
+  created_at timestamptz not null default now(),
+  unique (together, member_id, client_id)
+);
+create index if not exists crew_together_log_rev on public.crew_together_log (together, rev);
+
 do $$
 declare tbl text;
 begin
   foreach tbl in array array['crew_members', 'crew_events', 'crew_comments', 'crew_plans', 'crew_nudges',
-                             'crew_challenges', 'crew_push_log', 'crew_settings'] loop
+                             'crew_challenges', 'crew_push_log', 'crew_settings', 'crew_together', 'crew_together_log'] loop
     execute format('alter table public.%I enable row level security', tbl);
     execute format('revoke all on public.%I from anon, authenticated', tbl);
   end loop;
@@ -601,6 +630,7 @@ declare
   r public.crew_members;
   cm public.crew_comments;
   ch public.crew_challenges;
+  tg public.crew_together;
   v_es boolean;
   v_title text;
   v_body text;
@@ -796,8 +826,269 @@ begin
       v_out := v_out || jsonb_build_array(public._crew_msg(r,
         case when v_es then 'Tu semana en el grupo' else 'Your week in the crew' end, v_body, 'crew_recap', '/crew', 'recap'));
     end loop;
+
+  -- 0.10: "Send me a test notification" (ref: member|time). Only to yourself, once per press.
+  elsif p_kind = 'test' then
+    if array_length(v_parts, 1) <> 2 then return v_out; end if;
+    select * into r from public.crew_members where id::text = v_parts[1];
+    if not found or r.push_token is null then return v_out; end if;
+    begin v_at := v_parts[2]::timestamptz; exception when others then return v_out; end;
+    if v_at < now() - interval '10 minutes' then return v_out; end if;
+    if not public._crew_once('test:' || p_ref) then return v_out; end if;
+    v_es := r.lang = 'es';
+    v_out := jsonb_build_array(public._crew_msg(r,
+      case when v_es then 'Las notificaciones funcionan ✅' else 'Notifications work ✅' end,
+      case when v_es then 'Así te llegarán los avisos del grupo.' else 'This is how crew notifications will reach you.' end,
+      'crew_workouts', '/crew', 'test'));
+
+  -- 0.11: training together. invite: together|to; turn: together|member|rev; spot: together|from|log id
+  elsif p_kind in ('together_invite', 'together_turn', 'together_spot') then
+    if array_length(v_parts, 1) < 2 or v_parts[1] !~ '^[0-9a-f-]{36}$' then return v_out; end if;
+    select * into tg from public.crew_together where id = v_parts[1]::uuid and status = 'open';
+    if not found then return v_out; end if;
+    if not public._crew_once(p_kind || ':' || p_ref) then return v_out; end if;
+    v_route := '/crew/together/' || tg.id;
+    if p_kind = 'together_invite' then
+      select * into a from public.crew_members where id = tg.host;
+      select * into r from public.crew_members where id::text = v_parts[2] and crew = tg.crew;
+      if not found or r.push_token is null or not public._crew_pref(r.push_prefs, 'together') then return v_out; end if;
+      v_es := r.lang = 'es';
+      v_out := jsonb_build_array(public._crew_msg(r,
+        a.name || case when v_es then ' te invita a entrenar juntos 🤝' else ' wants to train together 🤝' end,
+        coalesce(case when v_es then nullif(tg.plan ->> 'nameEs', '') end, tg.plan ->> 'name', '')
+          || case when v_es then ' · código ' else ' · code ' end || tg.code,
+        'crew_together', v_route, 'together-' || tg.id));
+    elsif p_kind = 'together_turn' then
+      select * into r from public.crew_members where id::text = v_parts[2] and id = any (tg.members);
+      if not found or r.push_token is null or not public._crew_pref(r.push_prefs, 'together') then return v_out; end if;
+      if tg.state ->> 'turn' is distinct from r.id::text then return v_out; end if; -- not their turn any more
+      v_es := r.lang = 'es';
+      v_out := jsonb_build_array(public._crew_msg(r,
+        case when v_es then '¡Te toca! 💪' else 'You''re up! 💪' end,
+        coalesce(tg.state ->> case when v_es then 'nextEs' else 'next' end, tg.state ->> 'next', ''),
+        'crew_together', v_route, 'together-turn-' || tg.id));
+    else
+      select * into a from public.crew_members where id::text = v_parts[2] and id = any (tg.members);
+      if not found then return v_out; end if;
+      for r in select * from public.crew_members where id = any (tg.members) and id <> a.id and push_token is not null loop
+        if not public._crew_pref(r.push_prefs, 'together') then continue; end if;
+        v_es := r.lang = 'es';
+        v_out := v_out || jsonb_build_array(public._crew_msg(r,
+          a.name || case when v_es then ' necesita que le ayudes 🙌' else ' needs a spot 🙌' end,
+          case when v_es then 'Serie pesada: ve a echar una mano.' else 'Heavy set coming up: go give a hand.' end,
+          'crew_together', v_route, 'together-spot-' || tg.id));
+      end loop;
+    end if;
   end if;
   return v_out;
+end $$;
+
+-- ── Notification check (0.10) ───────────────────────────────
+-- Settings → Crew → Notifications → "Send me a test": goes through the whole chain to this phone.
+create or replace function public.crew_push_test(p_member uuid, p_key text)
+returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare m public.crew_members := public._crew_auth(p_member, p_key);
+begin
+  perform public._crew_push('test', m.id::text || '|' || now()::text);
+end $$;
+
+-- What the app can show when notifications don't arrive: each link of the chain
+create or replace function public.crew_push_status(p_member uuid, p_key text)
+returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  m public.crew_members := public._crew_auth(p_member, p_key);
+  v_answers jsonb := null;
+begin
+  if to_regclass('net._http_response') is not null then
+    execute $q$ select coalesce(jsonb_agg(jsonb_build_object('at', created, 'status', status_code,
+                                  'answer', left(coalesce(error_msg, content::text, ''), 160)) order by created desc), '[]'::jsonb)
+                  from (select * from net._http_response order by created desc limit 5) r $q$ into v_answers;
+  end if;
+  return jsonb_build_object(
+    'url', coalesce((select value from public.crew_settings where key = 'push_url'), '') <> '',
+    'pgnet', exists (select 1 from pg_extension where extname = 'pg_net'),
+    'token', m.push_token is not null,
+    'answers', v_answers);
+end $$;
+
+-- ── Training together (0.11) ────────────────────────────────
+-- A shared workout's full state for a member of it (log rows after p_since only)
+create or replace function public._crew_together_view(tg public.crew_together, p_since bigint)
+returns jsonb
+language sql stable security definer set search_path = public, extensions as $$
+  select jsonb_build_object(
+    'id', tg.id, 'code', tg.code, 'host', tg.host, 'status', tg.status, 'rev', tg.rev,
+    'plan', tg.plan, 'state', tg.state, 'createdAt', tg.created_at,
+    'members', (select coalesce(jsonb_agg(jsonb_build_object('id', m.id, 'name', m.name, 'avatar', m.stats -> 'avatar',
+                                                               'unit', coalesce(m.stats #>> '{pl,unit}', 'kg'))
+                                          order by array_position(tg.members, m.id)), '[]'::jsonb)
+                  from public.crew_members m where m.id = any (tg.members)),
+    'log', (select coalesce(jsonb_agg(jsonb_build_object('rev', l.rev, 'member', l.member_id, 'clientId', l.client_id,
+                                                           'kind', l.kind, 'payload', l.payload, 'at', l.created_at) order by l.rev), '[]'::jsonb)
+              from public.crew_together_log l where l.together = tg.id and l.rev > coalesce(p_since, 0)))
+$$;
+
+-- Start one with your day. Ends any you were still hosting, and tidies up old ones.
+create or replace function public.crew_together_start(p_member uuid, p_key text, p_plan jsonb)
+returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  m public.crew_members := public._crew_auth(p_member, p_key);
+  v_code text;
+  tg public.crew_together;
+begin
+  if jsonb_typeof(p_plan -> 'items') <> 'array' or pg_column_size(p_plan) > 60000 then raise exception 'bad_plan'; end if;
+  delete from public.crew_together where updated_at < now() - interval '2 days';
+  update public.crew_together set status = 'done', rev = rev + 1, updated_at = now() where host = m.id and status = 'open';
+  loop
+    v_code := lpad((floor(random() * 10000))::int::text, 4, '0');
+    exit when not exists (select 1 from public.crew_together where crew = m.crew and status = 'open' and code = v_code);
+  end loop;
+  insert into public.crew_together (crew, host, code, members, plan)
+  values (m.crew, m.id, v_code, array[m.id], p_plan) returning * into tg;
+  return public._crew_together_view(tg, 0);
+end $$;
+
+-- Ask someone in your crew to join (a notification)
+create or replace function public.crew_together_invite(p_member uuid, p_key text, p_id uuid, p_to uuid)
+returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  m public.crew_members := public._crew_auth(p_member, p_key);
+  tg public.crew_together;
+begin
+  select * into tg from public.crew_together where id = p_id and status = 'open' and m.id = any (members);
+  if not found then raise exception 'not_found'; end if;
+  if not exists (select 1 from public.crew_members where id = p_to and crew = tg.crew) then raise exception 'not_found'; end if;
+  perform public._crew_push('together_invite', tg.id::text || '|' || p_to::text);
+end $$;
+
+-- Join by invite (p_id) or by the 4-digit code
+create or replace function public.crew_together_join(p_member uuid, p_key text, p_id uuid default null, p_code text default null)
+returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  m public.crew_members := public._crew_auth(p_member, p_key);
+  tg public.crew_together;
+begin
+  select * into tg from public.crew_together
+   where crew = m.crew and status = 'open' and (id = p_id or (p_id is null and code = trim(coalesce(p_code, ''))))
+   order by created_at desc limit 1 for update;
+  if not found then raise exception 'not_found'; end if;
+  if not (m.id = any (tg.members)) then
+    if cardinality(tg.members) >= 4 then raise exception 'together_full'; end if;
+    update public.crew_together set members = members || m.id, rev = rev + 1, updated_at = now()
+     where id = tg.id returning * into tg;
+  end if;
+  return public._crew_together_view(tg, 0);
+end $$;
+
+-- Leave. The next person becomes the host; the last one out ends it.
+create or replace function public.crew_together_leave(p_member uuid, p_key text, p_id uuid)
+returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  m public.crew_members := public._crew_auth(p_member, p_key);
+  tg public.crew_together;
+  v_left uuid[];
+begin
+  select * into tg from public.crew_together where id = p_id and m.id = any (members) for update;
+  if not found then return; end if;
+  v_left := array_remove(tg.members, m.id);
+  update public.crew_together
+     set members = v_left,
+         host = case when host = m.id and cardinality(v_left) > 0 then v_left[1] else host end,
+         status = case when cardinality(v_left) = 0 then 'done' else status end,
+         state = case when state ->> 'turn' = m.id::text and cardinality(v_left) > 0
+                      then jsonb_set(state, '{turn}', to_jsonb(v_left[1]::text)) else state end,
+         rev = rev + 1, updated_at = now()
+   where id = tg.id;
+end $$;
+
+-- Everything a phone sends: a set (or its undo), "spot me", a change of turn or exercise (p_state),
+-- and the host's changes to the day (p_plan). Safe to send twice (client_id). Returns the new rev.
+create or replace function public.crew_together_send(p_member uuid, p_key text, p_id uuid, p_client_id text, p_kind text,
+                                                     p_payload jsonb default '{}'::jsonb, p_state jsonb default null, p_plan jsonb default null)
+returns bigint
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  m public.crew_members := public._crew_auth(p_member, p_key);
+  tg public.crew_together;
+  v_turn text;
+  v_log bigint;
+begin
+  if p_kind not in ('set', 'unset', 'spot', 'note', 'state') then raise exception 'bad_kind'; end if;
+  if pg_column_size(p_payload) > 8000 or pg_column_size(p_state) > 8000 then raise exception 'too_big'; end if;
+  select * into tg from public.crew_together where id = p_id and status = 'open' and m.id = any (members) for update;
+  if not found then raise exception 'not_found'; end if;
+  if p_plan is not null and (m.id <> tg.host or jsonb_typeof(p_plan -> 'items') <> 'array' or pg_column_size(p_plan) > 60000) then
+    raise exception 'bad_plan';
+  end if;
+  if p_state is not null and p_state ->> 'turn' is not null
+     and not exists (select 1 from unnest(tg.members) x where x::text = p_state ->> 'turn') then
+    raise exception 'bad_state';
+  end if;
+  v_turn := tg.state ->> 'turn';
+  if p_kind <> 'state' then
+    insert into public.crew_together_log (together, member_id, client_id, kind, payload, rev)
+    values (tg.id, m.id, left(p_client_id, 64), p_kind, coalesce(p_payload, '{}'::jsonb), tg.rev + 1)
+    on conflict (together, member_id, client_id) do nothing
+    returning id into v_log;
+    if v_log is null then return tg.rev; end if; -- already had it
+  end if;
+  update public.crew_together
+     set rev = rev + 1, updated_at = now(),
+         state = coalesce(p_state, state),
+         plan = coalesce(p_plan, plan)
+   where id = tg.id returning * into tg;
+  -- Whoever's turn it now is gets a buzz; "spot me" buzzes everyone else
+  if tg.state ->> 'turn' is distinct from v_turn and tg.state ->> 'turn' is distinct from m.id::text then
+    perform public._crew_push('together_turn', tg.id::text || '|' || (tg.state ->> 'turn') || '|' || tg.rev);
+  end if;
+  if p_kind = 'spot' then perform public._crew_push('together_spot', tg.id::text || '|' || m.id::text || '|' || v_log); end if;
+  return tg.rev;
+end $$;
+
+-- What's new since p_since: just { rev } when nothing changed (cheap to ask every few seconds)
+create or replace function public.crew_together_get(p_member uuid, p_key text, p_id uuid, p_since bigint default 0)
+returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  m public.crew_members := public._crew_auth(p_member, p_key);
+  tg public.crew_together;
+begin
+  select * into tg from public.crew_together where id = p_id and crew = m.crew;
+  if not found then raise exception 'not_found'; end if;
+  if not (m.id = any (tg.members)) and tg.status = 'open' then
+    return jsonb_build_object('id', tg.id, 'rev', tg.rev, 'status', tg.status, 'joined', false); -- invited, not in yet
+  end if;
+  if coalesce(p_since, 0) >= tg.rev then return jsonb_build_object('rev', tg.rev); end if;
+  return public._crew_together_view(tg, p_since);
+end $$;
+
+-- The host finishes it for everyone
+create or replace function public.crew_together_end(p_member uuid, p_key text, p_id uuid)
+returns void
+language plpgsql security definer set search_path = public, extensions as $$
+declare m public.crew_members := public._crew_auth(p_member, p_key);
+begin
+  update public.crew_together set status = 'done', rev = rev + 1, updated_at = now()
+   where id = p_id and host = m.id and status = 'open';
+end $$;
+
+-- Open ones in your crew (to show "Ana is training: join"), started in the last 4 hours
+create or replace function public.crew_together_open(p_member uuid, p_key text)
+returns jsonb
+language plpgsql security definer set search_path = public, extensions as $$
+declare m public.crew_members := public._crew_auth(p_member, p_key);
+begin
+  return (select coalesce(jsonb_agg(jsonb_build_object('id', t.id, 'host', t.host, 'members', to_jsonb(t.members),
+                                                       'code', t.code, 'plan', jsonb_build_object('name', t.plan ->> 'name', 'nameEs', t.plan ->> 'nameEs'),
+                                                       'createdAt', t.created_at) order by t.created_at desc), '[]'::jsonb)
+            from public.crew_together t
+           where t.crew = m.crew and t.status = 'open' and t.updated_at > now() - interval '4 hours');
 end $$;
 
 -- A token Firebase says is gone (app uninstalled): stop sending to it
@@ -848,6 +1139,7 @@ revoke all on function public._crew_settle(text) from public, anon, authenticate
 revoke all on function public._crew_recap_all() from public, anon, authenticated;
 revoke all on function public.crew_push_job(text, text) from public, anon, authenticated;
 revoke all on function public.crew_push_drop(text) from public, anon, authenticated;
+revoke all on function public._crew_together_view(public.crew_together, bigint) from public, anon, authenticated;
 
 -- The app's calls
 do $$
@@ -871,7 +1163,17 @@ begin
     'crew_challenge_create(uuid, text, text, text, text, numeric, text)',
     'crew_challenge_delete(uuid, text, bigint)',
     'crew_board(uuid, text)',
-    'crew_set_push(uuid, text, text, jsonb, text)'
+    'crew_set_push(uuid, text, text, jsonb, text)',
+    'crew_push_test(uuid, text)',
+    'crew_push_status(uuid, text)',
+    'crew_together_start(uuid, text, jsonb)',
+    'crew_together_invite(uuid, text, uuid, uuid)',
+    'crew_together_join(uuid, text, uuid, text)',
+    'crew_together_leave(uuid, text, uuid)',
+    'crew_together_send(uuid, text, uuid, text, text, jsonb, jsonb, jsonb)',
+    'crew_together_get(uuid, text, uuid, bigint)',
+    'crew_together_end(uuid, text, uuid)',
+    'crew_together_open(uuid, text)'
   ] loop
     execute format('revoke all on function public.%s from public', f);
     execute format('grant execute on function public.%s to anon, authenticated', f);

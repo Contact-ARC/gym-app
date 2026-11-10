@@ -124,6 +124,7 @@
                 <div class="grow">
                   <div class="t-h3 truncate">
                     <span v-if="m.live" class="live-dot sm" :aria-label="t('Training now')" />{{ m.name }}<span v-if="m.id === me" class="t-muted you"> · {{ t('you') }}</span>
+                    <span v-if="pinnedOf(m.id).length" class="pins" aria-hidden="true"><BadgeSeal v-for="b in pinnedOf(m.id)" :key="b.id" :id="b.id" :level="b.level" :count="b.count" :size="20" :show-count="false" /></span>
                   </div>
                   <div class="t-small t-muted t-num">{{ metricText(metric, m.value, unit, fmtNum) }}<template v-if="m.sub"> · {{ m.sub }}</template></div>
                   <div v-if="period === 'week' && m.challenge && challenge" class="cbar" :title="tx(challenge, 'title')">
@@ -269,6 +270,11 @@
           </label>
         </div>
         <p v-if="push.error" class="t-tiny t-err mt-s">{{ push.error }}</p>
+        <!-- Not getting them? Send one to yourself and see which link breaks -->
+        <button v-if="pushOn" class="btn btn-soft btn-block mt-s" :disabled="testing" @click="runTest">
+          <Icon name="bell" />{{ testing ? t('Sending…') : t('Send me a test') }}
+        </button>
+        <p v-if="testResult" class="t-small mt-s" :class="testResult.ok ? 't-ok' : 't-err'">{{ testResult.text }}</p>
       </template>
 
       <button class="btn btn-ghost btn-block t-err mt" @click="leaveOpen = true"><Icon name="leave" />{{ t('Leave the crew') }}</button>
@@ -334,6 +340,9 @@
 
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import BadgeSeal from '../ui/BadgeSeal.vue'
+import { memberBadges } from '../ui/crewUi.js'
+import { myBadges, showcase } from '../lib/myBadges.js'
 import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import Sheet from '../ui/Sheet.vue'
@@ -348,9 +357,9 @@ import { state, persist, challenge, goalCtx } from '../store.js'
 import {
   board, crewAvailable, inCrew, createCrew, joinCrew, leaveCrew, renameMe, syncNow, refreshBoard,
   normaliseCode, me, memberName, isOwner, memberTotals, liveOf, memberLifts, nudge, createChallenge, deleteChallenge,
-  challengeStandings, copySharedPlan
+  challengeStandings, copySharedPlan, memberById
 } from '../lib/crew.js'
-import { push, PUSH_KINDS, pushPrefs, enablePush, disablePush, setPushPref, checkPush } from '../lib/push.js'
+import { push, PUSH_KINDS, pushPrefs, enablePush, disablePush, setPushPref, checkPush, testPush } from '../lib/push.js'
 import { weekKey, monthKey, addDays } from '../lib/stats.js'
 import { bodyweight } from '../lib/goals.js'
 import { fmtLoad } from '../lib/training.js'
@@ -613,6 +622,13 @@ const pushStatus = computed(() => {
   if (push.permission === 'denied') return t('Notifications are blocked for Gym Crew in Android settings.')
   return pushOn.value ? t('Pick which ones below. Each also has its own switch in Android settings.') : t('Workouts, records, comments, nudges and more.')
 })
+const testing = ref(false)
+const testResult = ref(null)
+async function runTest () {
+  testing.value = true
+  testResult.value = null
+  try { testResult.value = await testPush() } finally { testing.value = false }
+}
 async function togglePush (v) {
   if (v) {
     const ok = await enablePush()
@@ -621,9 +637,17 @@ async function togglePush (v) {
     await disablePush()
   }
 }
+
+// Badges each member pinned (yours from this phone, so they show before the next sync)
+function pinnedOf (id) {
+  const st = id === me.value ? myBadges() : memberBadges(id)
+  const ids = id === me.value ? showcase() : (memberById.value[id]?.stats?.showcase || [])
+  return st ? ids.filter(x => st[x] && (st[x].level || st[x].count)).slice(0, 3).map(x => ({ id: x, ...st[x] })) : []
+}
 </script>
 
 <style scoped>
+.pins { display: inline-flex; gap: 1px; margin-left: 6px; vertical-align: -4px; }
 .head { margin-top: 8px; gap: 4px; }
 .intro { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
 .mt { margin-top: 16px; }

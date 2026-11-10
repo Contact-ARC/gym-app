@@ -17,6 +17,7 @@ export default createRouter({
     { path: '/history', name: 'history', component: () => import('./views/HistoryView.vue'), meta: { tab: 'progress' } },
     { path: '/progress', name: 'progress', component: () => import('./views/ProgressView.vue'), meta: { tab: 'progress' } },
     { path: '/body', name: 'body', component: () => import('./views/BodyView.vue'), meta: { tab: 'progress' } },
+    { path: '/badges/:member?', name: 'badges', component: () => import('./views/BadgesView.vue'), meta: { tab: 'progress' } },
     { path: '/report/:month?', name: 'report', component: () => import('./views/ReportView.vue'), meta: { tab: 'progress' } },
     { path: '/crew', name: 'crew', component: () => import('./views/CrewView.vue'), meta: { tab: 'crew' } },
     { path: '/crew/post/:id', name: 'crew-post', component: () => import('./views/CrewPostView.vue'), meta: { tab: 'crew' } },

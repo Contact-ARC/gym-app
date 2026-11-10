@@ -133,10 +133,14 @@
       <div v-if="badgePop.length" class="badge-scrim" role="dialog" aria-modal="true" :aria-label="t('New badge')" @click.self="badgePop = []">
         <div class="badge-card">
           <div class="burst" aria-hidden="true"><span v-for="i in 12" :key="i" :style="{ '--i': i }" /></div>
-          <span class="b-big"><Icon :name="BADGE_ICON[badgeKind(badgePop[0])]" :size="44" /></span>
-          <div class="t-tiny t-muted up">{{ tn(badgePop.length, 'New badge', 'New badges') }}</div>
-          <div v-for="b in badgePop.slice(0, 3)" :key="b" class="t-h2 b-name">{{ badgeName(b, state.data.profile.unit) }}</div>
+          <BadgeSeal :id="badgePop[0].id" :level="badgePop[0].level" :count="badgePop[0].count" :size="96" class="b-seal" />
+          <div class="t-tiny t-muted up">{{ badgePop.some(b => b.kind === 'new') ? tn(badgePop.length, 'New badge', 'New badges') : t('Badges') }}</div>
+          <div v-for="b in badgePop.slice(0, 3)" :key="b.id" class="b-line">
+            <div class="t-h2 b-name">{{ badgeTitle(b.id, b.level, b.count, t, state.data.profile.unit) }}</div>
+            <div class="t-tiny t-muted">{{ b.kind === 'level' ? t('Level up') : b.kind === 'again' ? t('Earned again') : t('badge|New') }}</div>
+          </div>
           <div v-if="badgePop.length > 3" class="t-small t-muted">{{ tn(badgePop.length - 3, 'and {n} more', 'and {n} more') }}</div>
+          <button class="btn btn-ghost btn-sm" @click="badgePop = []; router.push('/badges')">{{ t('See all your badges') }}</button>
           <p v-if="inCrew" class="t-small t-muted">{{ state.data.crew.shareFeed ? t('Your crew will see it on the board.') : t('Only you can see it.') }}</p>
           <button class="btn btn-primary btn-lg btn-block" @click="badgePop = []">{{ t('Nice') }}</button>
         </div>
@@ -191,9 +195,11 @@ import { cardioText } from '../lib/cardio.js'
 import { fmtDate, fmtNum, fmtMins, dayTitle, prText, PR_ORDER, sessionTitle } from '../lib/format.js'
 import { shareText } from '../lib/native.js'
 import { drawCard, shareCanvas } from '../lib/shareCard.js'
-import { inCrew, newBadgesFrom } from '../lib/crew.js'
-import { badgeKind } from '../lib/crewStats.js'
-import { badgeName } from '../ui/crewUi.js'
+import { inCrew } from '../lib/crew.js'
+import { newBadgesFor } from '../lib/myBadges.js'
+import { announceFeat } from '../lib/badges.js'
+import BadgeSeal from '../ui/BadgeSeal.vue'
+import { badgeTitle } from '../ui/badgeUi.js'
 import { reducedMotion } from '../ui/motion.js'
 import { t, tn, tx } from '../i18n/index.js'
 
@@ -317,12 +323,14 @@ function setText (s) {
 }
 
 // ── Badges earned by this workout ──
-const BADGE_ICON = { workouts: 'train', streak: 'fire', records: 'trophy', plates: 'lifter', total: 'medal' }
 const badgePop = ref([])
 onMounted(() => {
   if (!justFinished.value) return
   try {
-    const fresh = newBadgesFrom(session.value.id)
+    // Biggest news first: new badges, then level-ups, then feats earned again
+    const order = { new: 0, level: 1, again: 2 }
+    // Feats you keep earning (every full workout…) only pop up at ×5, ×10, ×25…
+    const fresh = newBadgesFor(session.value.id).filter(c => c.kind !== 'again' || announceFeat(c.count)).sort((a, b) => order[a.kind] - order[b.kind])
     if (fresh.length) setTimeout(() => { badgePop.value = fresh }, reducedMotion() ? 0 : 900)
   } catch (e) { /* badges are a bonus; never block the finish screen */ }
 })
@@ -435,7 +443,7 @@ function del () {
 .badge-scrim { position: fixed; inset: 0; z-index: 1200; background: rgba(10, 14, 20, 0.55); display: grid; place-items: center; padding: 24px; }
 .badge-card { position: relative; width: 100%; max-width: 340px; background: var(--card); border-radius: 24px; padding: 30px 22px 20px; display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; overflow: hidden; }
 .badge-card .btn { margin-top: 12px; }
-.b-big { width: 88px; height: 88px; border-radius: 50%; display: grid; place-items: center; background: var(--warn-soft); color: var(--warn); margin-bottom: 6px; animation: bIn 600ms cubic-bezier(.3,1.6,.5,1) both 120ms; }
+.b-seal { margin-bottom: 6px; animation: bIn 600ms cubic-bezier(.3,1.6,.5,1) both 120ms; }
 @keyframes bIn { from { transform: scale(0.3) rotate(-20deg); opacity: 0; } }
 .b-name { line-height: 1.2; }
 .burst { position: absolute; left: 50%; top: 74px; width: 0; height: 0; pointer-events: none; }
@@ -445,7 +453,7 @@ function del () {
 @keyframes burst { 0% { opacity: 1; transform: rotate(calc(var(--i) * 30deg)) translateY(0); } 100% { opacity: 0; transform: rotate(calc(var(--i) * 30deg)) translateY(-90px); } }
 .pop-enter-active, .pop-leave-active { transition: opacity 200ms ease; }
 .pop-enter-from, .pop-leave-to { opacity: 0; }
-@media (prefers-reduced-motion: reduce) { .ring-fg.anim, .b-big, .burst span { animation: none; } .burst { display: none; } }
+@media (prefers-reduced-motion: reduce) { .ring-fg.anim, .b-seal, .burst span { animation: none; } .burst { display: none; } }
 .done-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; margin: 4px 0 22px; }
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--card); border-radius: var(--r-card); }
 .stat { padding: 16px 8px; text-align: center; }
