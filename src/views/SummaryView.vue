@@ -13,7 +13,8 @@
         <PlateBadge :index="session.dayIndex ?? -1" :label="session.dayId === 'free' ? '+' : session.dayId" size="lg" />
       </div>
       <h1 class="t-title">{{ justFinished ? t('Workout done') : sessionTitle(session) }}</h1>
-      <p class="t-small t-muted">{{ justFinished ? sessionTitle(session) + ', ' : '' }}{{ fmtDate(session.startedAt) }}</p>
+      <p class="t-small t-muted">{{ justFinished ? sessionTitle(session) + ', ' : '' }}{{ fmtDate(session.startedAt) }}<template v-if="manyGyms"> · <button class="gym-at" :aria-label="t('Gym: {gym}. Change', { gym: gymHere })" @click="gymPickOpen = true"><Icon name="place" :size="14" />{{ gymHere }}</button></template></p>
+      <GymPickSheet v-model="gymPickOpen" :session-id="session.id" />
       <p v-if="ring" class="t-small ring-txt" :class="{ full: ring.pct >= 1 }">
         <Icon v-if="ring.pct >= 1" name="check" :size="18" />{{ ring.pct >= 1 ? t('Every planned set done') : t('{a} of {b} planned sets', { a: ring.done, b: ring.planned }) }}
       </p>
@@ -168,6 +169,8 @@
 </template>
 
 <script setup>
+import GymPickSheet from '../ui/GymPickSheet.vue'
+import { activeGyms, gymName, gymById, sessionGymId } from '../lib/climbing.js'
 import { computed, ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
@@ -178,7 +181,7 @@ import { plateStyle, plateHex } from '../ui/plates.js'
 import { toast } from '../ui/toast.js'
 import {
   state, getSession, sessionSummary, exercisesById, deleteSession, streak, workoutChanges, keepWorkoutChanges, routine,
-  planById, goalsWithProgress, historyFor
+  planById, goalsWithProgress, historyHere
 } from '../store.js'
 import { parseKey } from '../lib/routines.js'
 import { goalTitle } from '../lib/goalText.js'
@@ -198,6 +201,10 @@ const route = useRoute()
 const router = useRouter()
 const session = computed(() => getSession(route.params.id))
 const sum = computed(() => sessionSummary(session.value))
+// Where it was done (more than one gym): tap to change, machine records follow
+const manyGyms = computed(() => activeGyms(state.data.settings).length > 1)
+const gymHere = computed(() => gymName(gymById(state.data.settings, sessionGymId(session.value, state.data.settings))))
+const gymPickOpen = ref(false)
 // Climbing: count climbs and sends instead of sets and kilos when that's all the workout was
 const climbs = computed(() => climbTotals(climbsIn(session.value?.sets)))
 const climbOnly = computed(() => climbs.value.climbs > 0 && (session.value?.sets || []).every(s => s.climb || !isWorkSet(s)))
@@ -261,8 +268,8 @@ const ring = computed(() => {
 // ── Each set against the same set last time ──
 const prIds = computed(() => new Set(prGroups.value.map(g => g.id)))
 function previousSets (id) {
-  // historyFor is newest first: the first one before this workout
-  const h = historyFor(id, session.value.id).find(x => x.date < session.value.startedAt)
+  // newest first (machines: at this workout's gym): the first one before this workout
+  const h = historyHere(id, session.value.id).find(x => x.date < session.value.startedAt)
   return h ? h.sets.filter(isWorkSet) : null
 }
 const hasPrev = computed(() => sum.value.exercises.some(id => previousSets(id)?.some(s => !s.climb && !s.cardio)))
@@ -398,6 +405,7 @@ function del () {
 </script>
 
 <style scoped>
+.gym-at { display: inline-flex; align-items: center; gap: 3px; color: var(--ink-2); font-weight: 600; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; vertical-align: baseline; }
 .ring-wrap { position: relative; display: grid; place-items: center; }
 .ring-wrap.ringed { width: 120px; height: 120px; }
 .ring { position: absolute; inset: 0; width: 120px; height: 120px; transform: rotate(-90deg); }

@@ -2,7 +2,7 @@
 import { reactive, computed, toRaw } from 'vue'
 import { loadData, saveData, emptyData, parseBackup, onSaveError } from './lib/storage.js'
 import { DEFAULT_ROUTINES_URL, SUPPORTED_ROUTINE_SCHEMA, APP_VERSION } from './config.js'
-import { pickActiveRoutine, compareVersions, dateKey, suggestNext, detectPRs, sessionVolume, resolvePlan, plannedSetsFor, applyTrack, canDoAtGym } from './lib/training.js'
+import { pickActiveRoutine, compareVersions, dateKey, suggestNext, detectPRs, sessionVolume, resolvePlan, plannedSetsFor, applyTrack, canDoAtGym, gymBound, fmtLoad, DEFAULT_BAR, DEFAULT_INCREMENTS } from './lib/training.js'
 import { challengeProgress, weekStreak, weekKey, STREAK_MIN } from './lib/stats.js'
 import {
   buildDays, planDayView, parseKey, planActive, planExpired, makeUse, snapshotDay, reconcileEdit, applyEdits, withRefs,
@@ -10,7 +10,7 @@ import {
 } from './lib/routines.js'
 import { weeklyTarget, goalProgress } from './lib/goals.js'
 import { t } from './i18n/index.js'
-import { currentGymId, gymById } from './lib/climbing.js'
+import { currentGymId, gymById, climbGyms, activeGyms, gymName, sessionGymId } from './lib/climbing.js'
 import { reportError } from './lib/errors.js'
 
 export const state = reactive({
@@ -309,16 +309,29 @@ export function getSession (id) {
   return state.data.sessions.find(s => s.id === id) || null
 }
 
-/** Finished sessions that include this exercise, newest first, with only its sets. */
-export function historyFor (exerciseId, excludeSessionId = null) {
+/**
+ * Finished sessions that include this exercise, newest first, with only its sets.
+ * gymId: only workouts at that gym (pass it for machines, see gymBound).
+ */
+export function historyFor (exerciseId, excludeSessionId = null, gymId = null) {
   const out = []
   for (const s of finishedSessions.value) {
     if (s.id === excludeSessionId) continue
+    const g = sessionGymId(s, state.data.settings)
+    if (gymId && g !== gymId) continue
     const sets = s.sets.filter(x => x.exerciseId === exerciseId)
-    if (sets.length) out.push({ date: s.startedAt, sessionId: s.id, sets })
+    if (sets.length) out.push({ date: s.startedAt, sessionId: s.id, gymId: g, sets })
   }
   return out
 }
+/** The gym whose machine history counts for this exercise in this session: its gym for machines, else null (all). */
+export function historyGym (exerciseId, sessionId = null) {
+  if (!gymBound(exercisesById.value[exerciseId])) return null
+  const s = sessionId ? getSession(sessionId) : activeSession.value
+  return s ? sessionGymId(s, state.data.settings) : currentGymId(state.data.settings)
+}
+/** historyFor, only at this session's gym for machines. */
+export const historyHere = (exerciseId, sessionId = null) => historyFor(exerciseId, sessionId, historyGym(exerciseId, sessionId))
 
 export function suggestionFor (item, sessionId = null) {
   const session = sessionId ? getSession(sessionId) : null
@@ -326,14 +339,29 @@ export function suggestionFor (item, sessionId = null) {
   let factor = plan.loadFactor ?? 1
   let reason = plan.deload ? t('Deload week') : ''
   if (session?.easy) { factor *= 0.9; reason = reason ? t('{a}, lighter day', { a: reason }) : t('Lighter day') }
-  return suggestNext({
-    item,
-    exercise: exercisesById.value[item.exerciseId],
-    history: historyFor(item.exerciseId, sessionId),
-    profile: state.data.profile,
-    loadFactor: factor,
-    reason
-  })
+  const exercise = exercisesById.value[item.exerciseId]
+  const gym = historyGym(item.exerciseId, sessionId)
+  const history = historyFor(item.exerciseId, sessionId, gym)
+  const out = suggestNext({ item, exercise, history, profile: state.data.profile, loadFactor: factor, reason })
+  // A machine you've only used at another gym: start from what you did there, and say so
+  if (gym && !history.length) {
+    const there = historyFor(item.exerciseId, sessionId).find(h => h.sets.some(x => x.load > 0 && x.reps))
+    if (there) {
+      const sets = there.sets.filter(x => x.load > 0 && x.reps && x.type !== 'warmup')
+      const top = sets.reduce((a, b) => (b.load > a.load ? b : a), sets[0])
+      if (top && top.unit === (out.unit || state.data.profile.unit)) {
+        const name = gymName(gymById(state.data.settings, there.gymId))
+        return {
+          ...out,
+          load: top.load,
+          kind: 'same',
+          elsewhere: there.gymId,
+          text: t('First time on this one here. At {gym} you did {w} × {r}. Machines differ, so start there and adjust.', { gym: name, w: fmtLoad(top.load, top.unit), r: top.reps })
+        }
+      }
+    }
+  }
+  return out
 }
 
 // Your own days don't follow the repo's week plan (deload weeks, reps in reserve)
@@ -358,6 +386,7 @@ export function startSession (keyOrIndex) {
     planId: day.planId || null,
     dayId: day.id,
     dayName: day.name,
+    gymId: currentGymId(state.data.settings),
     dayNameEs: day.es?.name || null,
     items: day.items.map((raw, i) => {
       const it = trackItem(plain(raw))
@@ -408,13 +437,14 @@ export function startClimbSession (kind = 'boulder', gymId = null) {
   return id
 }
 
-/** Where you're climbing in this session. Also remembered as your gym for next time. */
+/** Where you're climbing in this session. Also where you are now (see switchGym). */
 export function setClimbGym (sessionId, gymId) {
   const s = getSession(sessionId)
   if (!s) return
   const gym = gymById(state.data.settings, gymId)
   s.climbGym = gym.id
-  state.data.settings.climbing = { ...(state.data.settings.climbing || {}), gymId: gym.id }
+  if (!s.finishedAt) switchGym(gym.id)
+  else s.gymId = gym.id
   if (s.kind === 'climb') {
     // "Climbing · Sharma" in history, the summary and crew posts ("Climbing · Arkose + Sharma" if you moved
     // on after climbing somewhere; just "Climbing" for an unnamed gym)
@@ -438,6 +468,7 @@ export function startFreeSession (name = t('Free session'), nameEs = null) {
     dayId: 'free',
     source: 'free',
     dayName: name,
+    gymId: currentGymId(state.data.settings),
     ...(nameEs ? { dayNameEs: nameEs } : {}),
     items: [],
     sets: [],
@@ -521,6 +552,142 @@ export function setMachineSettings (exerciseId, rows) {
   persist()
 }
 
+/** Options for detectPRs: machine records only count workouts at the same gym. */
+export function prOptions () {
+  const settings = state.data.settings
+  return { exercisesById: exercisesById.value, gymOf: (s) => sessionGymId(s, settings) }
+}
+
+// ── Gyms (0.9.2) ────────────────────────────────────────────
+// The gym you're at has its bar, plates, weight jumps, equipment and machine settings in the usual places
+// (profile, settings.equipment, machineSettings), so everything that reads them just works. Every other gym
+// keeps its own copy in gym.lift, swapped in when you switch.
+const clone = (x) => (x == null ? x : JSON.parse(JSON.stringify(toRaw(x))))
+function captureLift () {
+  const p = state.data.profile
+  return {
+    bar: p.bar, plates: clone(p.plates), increments: clone(p.increments), machineSteps: clone(p.machineSteps || {}),
+    equipment: clone(state.data.settings.equipment || {}), machineSettings: clone(state.data.machineSettings || {})
+  }
+}
+function applyLift (l = {}) {
+  const p = state.data.profile
+  const unit = p.unit || 'kg'
+  p.bar = l.bar ?? DEFAULT_BAR[unit]
+  p.plates = clone(l.plates) ?? null
+  p.increments = { ...DEFAULT_INCREMENTS[unit], ...(l.increments || {}) }
+  p.machineSteps = clone(l.machineSteps) || {}
+  state.data.settings.equipment = clone(l.equipment) || {}
+  state.data.machineSettings = clone(l.machineSettings) || {}
+}
+/** A new gym starts with your bar, plates and weight jumps; all equipment; no machine settings yet. */
+const freshLift = (from) => ({ bar: from.bar, plates: clone(from.plates), increments: clone(from.increments), machineSteps: {}, equipment: {}, machineSettings: {} })
+function writeGymList (list, extra = {}) {
+  const c = state.data.settings.climbing || {}
+  state.data.settings.climbing = { ...c, gyms: list, legacyGymId: c.legacyGymId || currentGymId(state.data.settings), ...extra }
+}
+/** A gym's lifting setup: what's in use now for the current gym, its saved copy otherwise. */
+export function gymLift (gymId) {
+  if (gymId === currentGymId(state.data.settings)) return captureLift()
+  return gymById(state.data.settings, gymId)?.lift || null
+}
+
+/** Train somewhere else: swaps in that gym's bar, plates, equipment and machine settings. The workout you're in moves too. */
+export function switchGym (gymId) {
+  const settings = state.data.settings
+  const from = currentGymId(settings)
+  const list = climbGyms(settings).map(g => ({ ...g }))
+  const to = list.find(g => g.id === gymId && !g.hidden)
+  if (!to) return
+  if (gymId !== from) {
+    const a = list.find(g => g.id === from)
+    if (a) a.lift = captureLift()
+    applyLift(to.lift || freshLift(captureLift()))
+    writeGymList(list, { gymId })
+  }
+  const s = activeSession.value
+  if (s && !s.finishedAt) s.gymId = gymId
+  persist()
+}
+/** Where a workout was done. The one you're in follows switchGym; a finished one just changes its label. */
+export function setSessionGym (sessionId, gymId) {
+  const s = getSession(sessionId)
+  if (!s) return
+  if (!s.finishedAt && s.id === state.data.activeSessionId) return switchGym(gymId)
+  s.gymId = gymId
+  persist()
+}
+/** Add a gym (fields: name and climbing grades). Returns its id. */
+export function addGym (fields) {
+  const id = 'gym' + Date.now().toString(36)
+  const list = climbGyms(state.data.settings).map(g => ({ ...g }))
+  list.push({ id, ...fields, lift: freshLift(captureLift()) })
+  writeGymList(list)
+  persist()
+  return id
+}
+export function updateGym (gymId, fields) {
+  writeGymList(climbGyms(state.data.settings).map(g => (g.id === gymId ? { ...g, ...fields } : { ...g })))
+  persist()
+}
+/** Remove a gym from the lists. It's kept (hidden) because workouts and climbs there still point at it. */
+export function removeGym (gymId) {
+  if (activeGyms(state.data.settings).length < 2) return
+  if (gymId === currentGymId(state.data.settings)) switchGym(activeGyms(state.data.settings).find(g => g.id !== gymId).id)
+  writeGymList(climbGyms(state.data.settings).map(g => (g.id === gymId ? { ...g, hidden: true } : { ...g })))
+  persist()
+}
+/** Workouts from before gyms existed: which gym they count as. */
+export function earlierGymId () {
+  const c = state.data.settings.climbing || {}
+  return c.legacyGymId || climbGyms(state.data.settings)[0].id
+}
+/** Any lifting workouts from before gyms (no gym of their own)? */
+export const hasEarlierWorkouts = computed(() => finishedSessions.value.some(s => !s.gymId && !s.climbGym && s.kind !== 'climb'))
+/**
+ * "My workouts from before were here": they (and the machine settings and steps you had then) move to this gym.
+ * This gym's own machine settings win where both have one.
+ */
+export function moveEarlierWorkouts (toId) {
+  const fromId = earlierGymId()
+  if (toId === fromId) return
+  const before = gymLift(fromId) || captureLift()
+  const own = gymLift(toId)
+  const merged = {
+    ...(own || before),
+    machineSteps: { ...(before.machineSteps || {}), ...(own?.machineSteps || {}) },
+    machineSettings: { ...(before.machineSettings || {}), ...(own?.machineSettings || {}) }
+  }
+  const emptied = freshLift(before)
+  const cur = currentGymId(state.data.settings)
+  const list = climbGyms(state.data.settings).map(g => ({ ...g }))
+  for (const g of list) {
+    if (g.id === toId) g.lift = merged
+    if (g.id === fromId) g.lift = emptied
+  }
+  writeGymList(list, { legacyGymId: toId })
+  if (cur === toId) applyLift(merged)
+  if (cur === fromId) applyLift(emptied)
+  persist()
+}
+/** You switched kg/lb: bars, plates and steps saved for your other gyms were in the old unit. */
+export function resetGymUnits () {
+  const cur = currentGymId(state.data.settings)
+  writeGymList(climbGyms(state.data.settings).map(g => {
+    if (g.id === cur || !g.lift) return { ...g }
+    const { bar, plates, increments, machineSteps, ...keep } = g.lift
+    return { ...g, lift: { ...keep, machineSteps: {} } }
+  }))
+  persist()
+}
+/** Machine settings you saved for this exercise at your other gyms: [{ gymId, name, rows }] */
+export function machineSettingsElsewhere (exerciseId) {
+  const cur = currentGymId(state.data.settings)
+  return activeGyms(state.data.settings)
+    .filter(g => g.id !== cur && g.lift?.machineSettings?.[exerciseId]?.length)
+    .map(g => ({ gymId: g.id, name: gymName(g), rows: g.lift.machineSettings[exerciseId] }))
+}
+
 // ── Weight-stack machines (0.9: logged in kg/lb) ──
 /** One plate on this machine's stack, in your unit (null: the usual step from Settings). */
 export function setMachineStep (exerciseId, step) {
@@ -533,8 +700,13 @@ export function setMachineStep (exerciseId, step) {
 /** How many of your sets of this exercise are logged as pin numbers. */
 export function pinSetCount (exerciseId) {
   let n = 0
-  for (const s of state.data.sessions) for (const x of s.sets || []) if (x.exerciseId === exerciseId && x.unit === 'pin') n++
+  for (const s of pinSessions()) for (const x of s.sets || []) if (x.exerciseId === exerciseId && x.unit === 'pin') n++
   return n
+}
+// Pins are this gym's machine: only workouts here
+const pinSessions = () => {
+  const here = currentGymId(state.data.settings)
+  return state.data.sessions.filter(s => sessionGymId(s, state.data.settings) === here)
 }
 /**
  * Turn this machine's pin sets into weights: pin 1 = `first`, each pin after it adds `step` (both in your unit).
@@ -543,7 +715,7 @@ export function pinSetCount (exerciseId) {
 export function convertPinSets (exerciseId, first, step) {
   const unit = state.data.profile.unit || 'kg'
   let n = 0
-  for (const s of state.data.sessions) {
+  for (const s of pinSessions()) {
     for (const x of s.sets || []) {
       if (x.exerciseId !== exerciseId || x.unit !== 'pin') continue
       x.load = x.load > 0 ? Math.round((first + (x.load - 1) * step) * 100) / 100 : x.load
@@ -603,7 +775,7 @@ export function sessionSummary (session) {
     sets: session.sets.length,
     volume: sessionVolume(session, unit),
     unit,
-    prs: detectPRs(session, previous, unit),
+    prs: detectPRs(session, previous, unit, prOptions()),
     exercises: [...new Set(session.sets.map(s => s.exerciseId))]
   }
 }

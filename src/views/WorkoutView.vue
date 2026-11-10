@@ -11,6 +11,8 @@
           <template v-if="editingFinished">{{ fmtDate(session.startedAt) }}</template>
           <template v-else-if="allOpen">{{ elapsed }}<span class="sep" />{{ tn(doneSets, '{n} climb', '{n} climbs') }}</template>
           <template v-else>{{ elapsed }}<span class="sep" />{{ t('{a} of {b} sets', { a: doneSets, b: plannedSets }) }}</template>
+          <!-- More than one gym: where this workout is, tap to change -->
+          <template v-if="manyGyms"><span class="sep" /><button class="gym-at" :aria-label="t('Gym: {gym}. Change', { gym: gymHere })" @click="gymPickOpen = true"><Icon name="place" :size="13" />{{ gymHere }}</button></template>
         </div>
       </div>
       <button class="icon-btn" :aria-label="t('Workout options')" @click="menuOpen = true"><Icon name="more" /></button>
@@ -118,6 +120,13 @@
             <button v-for="r in machine" :key="r.label" class="pill ms" @click="msOpen = true">
               {{ r.label }} <b class="t-num">{{ r.value }}</b>
             </button>
+          </div>
+
+          <!-- This machine has settings at another gym, none here yet -->
+          <div v-if="!machine.length && settingsElsewhere" class="from-gym">
+            <span class="grow t-small"><b>{{ t('At {gym}:', { gym: settingsElsewhere.name }) }}</b> <span class="t-num">{{ settingsElsewhere.rows.map(r => `${r.label} ${r.value}`).join(' · ') }}</span></span>
+            <button class="btn btn-sm btn-soft" @click="useSettingsElsewhere">{{ t('Use') }}</button>
+            <button class="btn btn-sm btn-ghost" @click="changeSettingsElsewhere">{{ t('Change') }}</button>
           </div>
 
           <div v-if="adjustNow" class="hint adj" :class="`k-${adjustNow.kind}`" role="status">
@@ -311,7 +320,8 @@
       :original-id="item?.originalExerciseId || ''" @swap="({ id }) => doSwap(id)"
     />
     <ExercisePicker v-model="addOpen" :title="t('Add an exercise')" allow-create @pick="doAdd" />
-    <MachineSettingsSheet v-if="item" v-model="msOpen" :exercise-id="item.exerciseId" />
+    <MachineSettingsSheet v-if="item" v-model="msOpen" :exercise-id="item.exerciseId" :prefill="msPrefill" />
+    <GymPickSheet v-model="gymPickOpen" :session-id="session.id" />
 
     <!-- Quick look at how to do the current exercise -->
     <Sheet v-model="infoOpen" :title="name(item?.exerciseId)">
@@ -412,13 +422,15 @@ import ExercisePicker from '../ui/ExercisePicker.vue'
 import ClimbPanel from '../ui/ClimbPanel.vue'
 import SwapSheet from '../ui/SwapSheet.vue'
 import MachineSettingsSheet from '../ui/MachineSettingsSheet.vue'
+import GymPickSheet from '../ui/GymPickSheet.vue'
+import { activeGyms, gymName, gymById, sessionGymId } from '../lib/climbing.js'
 import CardioFields from '../ui/CardioFields.vue'
 import { cardioOf, cardioText, cardioStart } from '../lib/cardio.js'
 import ExerciseDetails from '../ui/ExerciseDetails.vue'
 import { plateStyle } from '../ui/plates.js'
 import { toast, hideToast } from '../ui/toast.js'
 import {
-  state, persist, getSession, exercisesById, imageUrl, suggestionFor, historyFor, logSet, updateSet, deleteSet,
+  state, persist, getSession, exercisesById, imageUrl, suggestionFor, historyFor, historyHere, logSet, machineSettingsElsewhere, setMachineSettings, updateSet, deleteSet,
   swapExercise, addItemToSession, finishSession, discardSession, deleteSession, setExerciseNote, setEasyDay, markSessionEdited
 } from '../store.js'
 import { t, tn, tx } from '../i18n/index.js'
@@ -560,9 +572,24 @@ const groupMates = computed(() => items.value
   .filter(({ it, i }) => it.group && it.group === item.value?.group && i !== current.value)
   .map(({ it }) => it.exerciseId))
 const machine = computed(() => state.data.machineSettings[item.value?.exerciseId] || [])
+// ── Gyms ──
+const manyGyms = computed(() => activeGyms(state.data.settings).length > 1)
+const gymHere = computed(() => gymName(gymById(state.data.settings, sessionGymId(session.value, state.data.settings))))
+const gymPickOpen = ref(false)
+// Settings for this machine from another gym: use them as they are, or change them for this one
+const settingsElsewhere = computed(() => (editingFinished.value || !item.value ? null : machineSettingsElsewhere(item.value.exerciseId)[0] || null))
+const msPrefill = ref(null)
+function useSettingsElsewhere () {
+  setMachineSettings(item.value.exerciseId, settingsElsewhere.value.rows)
+  toast(t('Machine settings saved'))
+}
+function changeSettingsElsewhere () {
+  msPrefill.value = settingsElsewhere.value.rows
+  msOpen.value = true
+}
 // A machine you used to log by pin, now logged in kg: offer to convert the old sets
 const oldPins = computed(() => isStackMachine(ex.value) && unit.value !== 'pin' &&
-  historyFor(item.value.exerciseId, session.value.id).some(h => h.sets.some(s => s.unit === 'pin')))
+  historyHere(item.value.exerciseId, session.value.id).some(h => h.sets.some(s => s.unit === 'pin')))
 
 const targetLine = computed(() => {
   const p = session.value?.plan
@@ -636,7 +663,7 @@ const adjustText = computed(() => {
 // Same set number last time you did this exercise
 const lastSameSet = computed(() => {
   if (editingFinished.value || !item.value) return ''
-  const prev = historyFor(item.value.exerciseId, session.value.id)[0]
+  const prev = historyHere(item.value.exerciseId, session.value.id)[0]
   const s = prev?.sets.filter(fillsPlannedSet)[planLogged(current.value).length]
   if (!s) return ''
   return setText(s) + (s.rir != null ? t(', {n} left', { n: s.rir }) : '')
@@ -924,7 +951,7 @@ const prSets = computed(() => {
   if (!item.value) return out
   const pin = unit.value === 'pin'
   const toUnit = pin ? 'pin' : profile.value.unit // pins and weights are never compared
-  const hist = historyFor(item.value.exerciseId, session.value.id).flatMap(h => h.sets).filter(isWorkSet)
+  const hist = historyHere(item.value.exerciseId, session.value.id).flatMap(h => h.sets).filter(isWorkSet)
   let bestE = pin ? 0 : bestE1RM(hist, toUnit)
   let bestH = heaviest(hist, toUnit)
   if (!bestE && !bestH) return out // first time: that's the baseline, not a record
@@ -1050,10 +1077,13 @@ const msOpen = ref(false)
 // Converted this machine's old pin sets (or changed its plate): start the weight from the new numbers
 watch(msOpen, (open) => {
   if (open) return
+  msPrefill.value = null
   const key = `${current.value}:${item.value?.exerciseId}`
   if (drafts[key] && drafts[key].load == null && !planLogged(current.value).length) { delete suggCache[key]; delete drafts[key] }
 })
 const notInGym = computed(() => !!ex.value && !canDoAtGym(ex.value, state.data.settings.equipment))
+// Moved gym: machines start from what you did at this one
+watch(() => session.value && sessionGymId(session.value, state.data.settings), (now, was) => { if (was && now !== was) resetSuggestions() })
 function resetSuggestions () {
   Object.keys(suggCache).forEach(k => delete suggCache[k])
   // Forget drafts for slots you haven't logged yet so they pick up the new suggestion
@@ -1154,6 +1184,8 @@ function discard () {
   padding: calc(var(--safe-top) + 6px) 10px 6px 4px;
   background: var(--paper);
 }
+.gym-at { display: inline-flex; align-items: center; gap: 3px; color: var(--ink-2); font-weight: 600; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+.from-gym { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); }
 .wk-title { padding: 0 4px; }
 .sep { display: inline-block; width: 4px; height: 4px; border-radius: 50%; background: var(--ink-3); margin: 0 8px; vertical-align: middle; }
 .wk-progress { height: 3px; background: var(--line); }

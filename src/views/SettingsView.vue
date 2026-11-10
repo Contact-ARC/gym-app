@@ -49,7 +49,27 @@
       </div>
     </div>
 
-    <h2 class="section-h">{{ t('Your gym') }}</h2>
+    <h2 class="section-h">{{ t('Gyms') }}</h2>
+    <div class="group">
+      <div v-for="g in gymList" :key="g.id" class="group-row gym-row">
+        <button class="grow gym-main" @click="openGym(g.id)">
+          <Icon name="place" class="t-muted" />
+          <span class="grow">
+            <span class="t-h3 truncate gym-n">{{ gymName(g) }}</span>
+            <span v-if="usesColours(g)" class="dots">
+              <span v-for="c in gymColours(g)" :key="c" class="dot" :style="{ background: swatch(c) || 'var(--card-2)' }" :title="c" />
+            </span>
+          </span>
+        </button>
+        <span v-if="g.id === hereId" class="pill pill-ok here">{{ t('Here now') }}</span>
+        <button v-else class="btn btn-soft btn-sm" @click="goTo(g)">{{ t('Switch') }}</button>
+      </div>
+      <button class="group-row gym-row add" @click="openGym(null)"><Icon name="plus" />{{ t('Add a gym') }}</button>
+    </div>
+    <p class="t-tiny t-muted foot">{{ gymList.length > 1 ? t('The equipment, bar, plates and machine settings below are for the gym you\'re at. Machines keep their own history at each gym, since they differ; free weights count everywhere.') : t('Train somewhere else too? Add it, and each gym keeps its own equipment, plates and machine settings.') }}</p>
+    <GymSheet v-model="gymOpen" :gym-id="gymEditId" />
+
+    <h2 class="section-h">{{ gymList.length > 1 ? t('Equipment at {gym}', { gym: hereName }) : t('Your gym') }}</h2>
     <div class="group">
       <div v-for="(label, tag) in EQUIPMENT" :key="tag" class="group-row">
         <span class="grow">{{ t(label) }}</span>
@@ -58,41 +78,7 @@
     </div>
     <p class="t-tiny t-muted foot">{{ t('Exercise lists and swaps only show what your gym has. Routines still show everything.') }}</p>
 
-    <h2 class="section-h">{{ t('Climbing') }}</h2>
-    <div class="group">
-      <button v-for="g in climbGymList" :key="g.id" class="group-row gym-row" @click="openGym(g.id)">
-        <Icon name="place" class="t-muted" />
-        <div class="grow">
-          <div class="t-h3 truncate">{{ gymName(g) }}<span v-if="climbGymList.length > 1 && g.id === lastGym" class="t-tiny t-muted last"> · {{ t('last time') }}</span></div>
-          <div class="t-small t-muted">{{ gymLine(g) }}</div>
-          <div v-if="usesColours(g)" class="dots">
-            <span v-for="c in gymColours(g)" :key="c" class="dot" :style="{ background: swatch(c) || 'var(--card-2)' }" :title="c" />
-          </div>
-        </div>
-        <Icon name="chevronRight" class="chev" />
-      </button>
-      <button class="group-row gym-row add" @click="openGym(null)"><Icon name="plus" />{{ t('Add a gym') }}</button>
-    </div>
-    <p class="t-tiny t-muted foot">{{ t('Each gym has its own grades and walls. Font, V, French and YDS grades are compared across gyms; colours only within their own gym.') }}</p>
-    <ClimbGymSheet v-model="gymOpen" :gym-id="gymEditId" />
-
-    <h2 class="section-h">{{ t('Reminders') }}</h2>
-    <div class="card card-pad">
-      <div class="label">{{ t('Remind me on') }}</div>
-      <div class="days" role="group" :aria-label="t('Reminder days')">
-        <button
-          v-for="d in weekDays" :key="d.n" class="day" :class="{ on: s.reminders.days.includes(d.n) }"
-          :aria-pressed="s.reminders.days.includes(d.n)" :aria-label="d.long" @click="toggleDay(d.n)"
-        >{{ d.short }}</button>
-      </div>
-      <div class="row time-row">
-        <label class="grow" for="rem-time">{{ t('At') }}</label>
-        <input id="rem-time" v-model="s.reminders.time" class="field time" type="time" @change="persist">
-      </div>
-      <p class="t-tiny t-muted rem-note">{{ reminderNote }}</p>
-    </div>
-
-    <h2 class="section-h">{{ t('Smallest weight jumps at your gym, in {unit}', { unit: p.unit }) }}</h2>
+    <h2 class="section-h">{{ gymList.length > 1 ? t('Smallest weight jumps at {gym}, in {unit}', { gym: hereName, unit: p.unit }) : t('Smallest weight jumps at your gym, in {unit}', { unit: p.unit }) }}</h2>
     <div class="group">
       <div v-for="row in incRows" :key="row.key" class="group-row">
         <div class="grow">
@@ -119,6 +105,22 @@
         </div>
         <Toggle :model-value="p.machineUnit === 'pin'" @update:model-value="(v) => { p.machineUnit = v ? 'pin' : 'weight'; persist() }" />
       </div>
+    </div>
+
+    <h2 class="section-h">{{ t('Reminders') }}</h2>
+    <div class="card card-pad">
+      <div class="label">{{ t('Remind me on') }}</div>
+      <div class="days" role="group" :aria-label="t('Reminder days')">
+        <button
+          v-for="d in weekDays" :key="d.n" class="day" :class="{ on: s.reminders.days.includes(d.n) }"
+          :aria-pressed="s.reminders.days.includes(d.n)" :aria-label="d.long" @click="toggleDay(d.n)"
+        >{{ d.short }}</button>
+      </div>
+      <div class="row time-row">
+        <label class="grow" for="rem-time">{{ t('At') }}</label>
+        <input id="rem-time" v-model="s.reminders.time" class="field time" type="time" @change="persist">
+      </div>
+      <p class="t-tiny t-muted rem-note">{{ reminderNote }}</p>
     </div>
 
     <h2 class="section-h">{{ t('Rest timer') }}</h2>
@@ -326,12 +328,12 @@ import Toggle from '../ui/Toggle.vue'
 import { toast } from '../ui/toast.js'
 import {
   state, persist, routine, refreshRoutines, routinesUrl, updateAvailable, exportJSON, markBackedUp, importJSON,
-  finishedSessions, hasBeginnerTrack, manifest
+  finishedSessions, hasBeginnerTrack, manifest, switchGym, resetGymUnits
 } from '../store.js'
 import { APP_VERSION, DEFAULT_ROUTINES_URL } from '../config.js'
 import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT } from '../lib/training.js'
-import { activeGyms, currentGymId, gymName, gymColours, systemLabel, swatch } from '../lib/climbing.js'
-import ClimbGymSheet from '../ui/ClimbGymSheet.vue'
+import { activeGyms, currentGymId, gymName, gymColours, swatch } from '../lib/climbing.js'
+import GymSheet from '../ui/GymSheet.vue'
 import { previewRestSound } from '../lib/restTimer.js'
 import {
   isNative, shareBackupFile, openUrl, copyText, disarmRestCountdown, ensureNotifyPermission, notificationStatus, openNotificationSettings,
@@ -407,20 +409,20 @@ const incRows = computed(() => {
   ]
 })
 
-// ── Climbing gyms ──
-const climbGymList = computed(() => activeGyms(state.data.settings))
-const lastGym = computed(() => currentGymId(state.data.settings))
+// ── Gyms ──
+const gymList = computed(() => activeGyms(state.data.settings))
+const hereId = computed(() => currentGymId(state.data.settings))
+const hereName = computed(() => gymName(gymList.value.find(g => g.id === hereId.value)))
 const usesColours = (g) => g.boulder === 'colour' || g.route === 'colour'
-const gymLine = (g) => {
-  const b = g.boulder === 'colour' ? t('Colours') : systemLabel(g.boulder || 'font', state.data.settings)
-  const r = g.route === 'colour' ? t('Colours') : systemLabel(g.route || 'french', state.data.settings)
-  return t('Boulders: {b} · Routes: {r}', { b, r })
-}
 const gymOpen = ref(false)
 const gymEditId = ref(null)
 function openGym (id) {
   gymEditId.value = id
   gymOpen.value = true
+}
+function goTo (g) {
+  switchGym(g.id)
+  toast(t('At {gym}: its equipment, plates and machine settings are in use', { gym: gymName(g) }))
 }
 
 function setEquip (tag, on) {
@@ -451,6 +453,7 @@ function onUnit (u) {
   prof.bar = DEFAULT_BAR[u]
   prof.plates = null // plate sizes are per unit
   prof.machineSteps = {} // so are stack plates
+  resetGymUnits() // and the same at your other gyms
   if (prof.bodyweight) prof.bodyweight = Math.round(convertLoad(prof.bodyweight, u === 'kg' ? 'lb' : 'kg', u))
   persist()
 }
@@ -638,9 +641,13 @@ async function copyDebug () {
 .mt-card { margin-top: 10px; }
 .mt-card p { margin-top: 4px; }
 .csv { margin-top: 8px; }
-.gym-row { text-align: left; }
+.gym-row { text-align: left; gap: 10px; }
+.gym-main { display: flex; align-items: center; gap: 12px; min-width: 0; text-align: left; min-height: 48px; }
+.gym-n { display: block; }
+.here { flex: 0 0 auto; }
 .gym-row.add { color: var(--ink-2); font-weight: 600; gap: 10px; }
 .gym-row .last { font-weight: 500; }
 .gym-row .dots { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+.gym-main .grow { min-width: 0; }
 .gym-row .dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px rgba(0, 0, 0, 0.18); }
 </style>

@@ -42,7 +42,7 @@ export function emptyData () {
       volumeTarget: [10, 20], // hard sets per muscle per week
       lifts: { squat: 'barbell-back-squat', bench: 'barbell-bench-press', deadlift: 'barbell-deadlift' }, // powerlifting total
       plBasis: 'e1rm', // e1rm | actual
-      climbing: { gyms: [], gymId: null } // 0.8.1: [{ id, name, boulder: font|v|colour, route: french|yds|colour, colours: [easiest…hardest] | null, hidden }]
+      climbing: { gyms: [], gymId: null } // 0.8.1: [{ id, name, boulder: font|v|colour, route: french|yds|colour, colours: [easiest…hardest] | null, hidden }]; 0.9.2: every gym you train at (see lib/climbing.js)
     },
     sessions: [], // [{ id, startedAt, finishedAt, routineMonth, dayId, dayName, items:[], sets:[], notes }]
     activeSessionId: null,
@@ -138,6 +138,9 @@ function migrateClimbing (c = {}, sessions = []) {
     out.gymId = 'gym1'
   }
   delete out.boulder; delete out.route; delete out.colours
+  // 0.9.2: lifting shares the gym list. Workouts from before have no gym: they count as the gym you were at
+  // (whose bar, plates and machine settings are the ones in use). Settings → Gyms can move them.
+  if (!out.legacyGymId) out.legacyGymId = out.gymId || out.gyms[0].id
   for (const s of sessions || []) {
     for (const x of s.sets || []) {
       if (x.climb?.system === 'colour') x.climb.system = 'colour:gym1'

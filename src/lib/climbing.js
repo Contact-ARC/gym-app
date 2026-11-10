@@ -36,8 +36,12 @@ export function swatch (grade) {
 export const PALETTE = ['White', 'Yellow', 'Orange', 'Green', 'Blue', 'Red', 'Purple', 'Pink', 'Black', 'Grey', 'Brown', 'Turquoise']
 
 // ── Gyms ──
-// Each place you climb keeps its own grade systems and colour circuit:
-//   settings.climbing = { gyms: [{ id, name, boulder, route, colours, hidden }], gymId: last used }
+// One list of the places you train (0.9.2: lifting and climbing share it). It lives under settings.climbing
+// so older app versions can still read a backup:
+//   settings.climbing = { gyms: [{ id, name, boulder, route, colours, hidden, lift }], gymId: where you are now,
+//                         legacyGymId: where workouts from before 0.9.2 (which have no gym) were done }
+// Each gym keeps its own grade systems and colour circuit, and (lift) its bar, plates, weight jumps,
+// equipment and machine settings; see switchGym in the store.
 // Font, V, French and YDS mean the same everywhere, so they're compared across gyms. A colour circuit only
 // means something in its own gym, so its system key is 'colour:<gymId>'.
 export const FIRST_GYM_ID = 'gym1'
@@ -62,6 +66,10 @@ export function currentGymId (settings) {
   return (activeGyms(settings).find(g => g.id === id) || activeGyms(settings)[0]).id
 }
 export const gymName = (gym) => String(gym?.name || '').trim() || t('My gym')
+/** Where a workout was done: its own gym, or for workouts from before gyms, where those were done. */
+export function sessionGymId (session, settings) {
+  return session?.gymId || session?.climbGym || settings?.climbing?.legacyGymId || climbGyms(settings)[0].id
+}
 /** A gym's circuit, easiest first (the default colours if you haven't set it). */
 export function gymColours (gym) {
   return Array.isArray(gym?.colours) && gym.colours.length ? gym.colours : DEFAULT_COLOURS.map(x => t('colour|' + x))

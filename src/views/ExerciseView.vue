@@ -16,6 +16,13 @@
     <!-- ── Your progress ── -->
     <ClimbProgress v-if="tab === 'progress' && ex.logType === 'climb'" :ex="ex" />
     <template v-else-if="tab === 'progress'">
+      <!-- Machines: progress is per gym (machines differ) -->
+      <div v-if="gymChoices.length > 1" class="gym-chips" role="radiogroup" :aria-label="t('Gym')">
+        <button
+          v-for="g in gymChoices" :key="g.id" class="pill gym-chip" role="radio" :aria-checked="g.id === viewGym"
+          :class="{ on: g.id === viewGym }" @click="viewGym = g.id"
+        ><Icon name="place" :size="16" />{{ g.name }}</button>
+      </div>
       <div v-if="!history.length" class="card card-pad empty">
         <p class="t-h3">{{ t("You haven't logged this one yet") }}</p>
         <p class="t-small t-muted">{{ t('Your trend, records and every session will show here after the first time.') }}</p>
@@ -159,8 +166,9 @@ import { cardioTotals, cardioText, fmtDistance, fmtDuration } from '../lib/cardi
 import CustomExerciseSheet from '../ui/CustomExerciseSheet.vue'
 import Sheet from '../ui/Sheet.vue'
 import { state, exercisesById, historyFor, setExerciseNote, hideCustomExercise, days, suggestionFor } from '../store.js'
+import { currentGymId, gymById, gymName } from '../lib/climbing.js'
 import { relativeDay, fmtNum } from '../lib/format.js'
-import { bestE1RM, heaviest, fmtLoad, unitFor, repRecords, bestSeconds, setVolume, isWorkSet } from '../lib/training.js'
+import { bestE1RM, heaviest, fmtLoad, unitFor, repRecords, bestSeconds, setVolume, isWorkSet, gymBound } from '../lib/training.js'
 import { useChartTheme } from '../lib/chartTheme.js'
 import { t, tn, tx, locale } from '../i18n/index.js'
 
@@ -190,7 +198,17 @@ function del () {
   back()
 }
 const alternatives = computed(() => (ex.value?.alternatives || []).map(id => exercisesById.value[id]).filter(Boolean))
-const history = computed(() => (ex.value ? historyFor(ex.value.id) : []))
+// Machines: the gym you're at, or another one you've used it at
+const bound = computed(() => gymBound(ex.value))
+const viewGym = ref(currentGymId(state.data.settings))
+watch(() => route.params.id, () => { viewGym.value = currentGymId(state.data.settings) })
+const gymChoices = computed(() => {
+  if (!bound.value) return []
+  const here = currentGymId(state.data.settings)
+  const ids = [...new Set([here, ...historyFor(ex.value.id).map(h => h.gymId)])]
+  return ids.map(id => ({ id, name: gymName(gymById(state.data.settings, id)) }))
+})
+const history = computed(() => (ex.value ? historyFor(ex.value.id, null, bound.value ? viewGym.value : null) : []))
 const workSetsOf = (h) => h.sets.filter(isWorkSet)
 
 // How to do it first; Progress links straight to the progress tab with ?tab=progress
@@ -383,6 +401,9 @@ function setStr (s) {
 </script>
 
 <style scoped>
+.gym-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 12px; }
+.gym-chip { min-height: 36px; }
+.gym-chip.on { background: var(--ink); color: var(--paper); }
 .tabs { margin-top: 16px; }
 .settings-btn { width: 100%; }
 .own { margin-top: 8px; gap: 8px; }

@@ -75,6 +75,13 @@ export function loadForReps (oneRM, reps, rir = 0) {
 /** Weight-stack machines are logged by weight, unless you chose pin numbers (Settings). */
 export const logsPins = (profile) => profile?.machineUnit === 'pin'
 export const isStackMachine = (exercise) => exercise?.loadUnit === 'pin'
+// Machines differ from gym to gym (stacks, pulleys, sleds), so their history, records and suggestions are kept
+// per gym. A kilo of barbell or dumbbell is the same anywhere.
+const GYM_BOUND_TAGS = new Set(['cable', 'smith', 'legpress', 'legcurl', 'legext', 'hacksquat', 'hipmachine', 'calfmachine', 'pressmachine', 'pecdeck', 'assisted'])
+export function gymBound (exercise) {
+  if (!exercise || exercise.logType !== 'weight') return false
+  return isStackMachine(exercise) || equipmentTags(exercise).some(t => GYM_BOUND_TAGS.has(t))
+}
 
 /**
  * Smallest load jump for an exercise given the user's profile. Weight-stack machines: the plate on that
@@ -751,12 +758,14 @@ export function bestSeconds (sets) {
  * time (longest hold).
  * @returns {{ exerciseId:string, type:'e1rm'|'load'|'reps'|'time', value:number, prev:number, load?:number }[]}
  */
-export function detectPRs (session, previous, toUnit) {
+export function detectPRs (session, previous, toUnit, { exercisesById = null, gymOf = (s) => s.gymId || s.climbGym || null } = {}) {
   const prs = []
   const ids = [...new Set((session.sets || []).map(s => s.exerciseId))]
   for (const id of ids) {
     const mine = session.sets.filter(s => s.exerciseId === id && isWorkSet(s))
-    const before = previous.flatMap(p => (p.sets || []).filter(s => s.exerciseId === id && isWorkSet(s)))
+    // Machines: only against the same machine, so the same gym
+    const here = exercisesById && gymBound(exercisesById[id]) ? gymOf(session) : undefined
+    const before = previous.filter(p => here === undefined || gymOf(p) === here).flatMap(p => (p.sets || []).filter(s => s.exerciseId === id && isWorkSet(s)))
     if (!before.length || !mine.length) continue // first time isn't a PR, it's a baseline
     // Climbs: hardest send and hardest flash, per grade system
     if (mine.some(s => s.climb)) {

@@ -124,7 +124,7 @@ import { useRoute, useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
 import { dayPlate } from '../ui/plates.js'
 import { toast } from '../ui/toast.js'
-import { state, exercisesById, routine } from '../store.js'
+import { state, exercisesById, routine, prOptions } from '../store.js'
 import { fmtLoad, unitFor } from '../lib/training.js'
 import { monthName, fmtNum, muscleLabel, prText, PR_ORDER } from '../lib/format.js'
 import { monthReport, monthsWithWorkouts, calendarMonth, weekStart, addDays, challengeProgress, sessionsInMonth } from '../lib/stats.js'
@@ -143,7 +143,7 @@ const nextMonth = computed(() => (idx.value > 0 ? months.value[idx.value - 1] : 
 const go = (m) => m && router.replace(`/report/${m}`)
 
 const unit = computed(() => state.data.profile.unit)
-const r = computed(() => monthReport(state.data.sessions, month.value, { unit: unit.value, exercisesById: exercisesById.value }))
+const r = computed(() => monthReport(state.data.sessions, month.value, { unit: unit.value, exercisesById: exercisesById.value, gymOf: prOptions().gymOf }))
 const exName = (id) => tx(exercisesById.value[id], 'name') || id
 const unitOf = (id) => unitFor(exercisesById.value[id], state.data.profile)
 const hours = computed(() => fmtNum(r.value.minutes / 60, 1))

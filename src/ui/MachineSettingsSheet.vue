@@ -46,7 +46,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, nextTick } from 'vue'
 import Sheet from './Sheet.vue'
 import Icon from './Icon.vue'
 import Stepper from './Stepper.vue'
@@ -55,7 +55,8 @@ import { state, exercisesById, setMachineSettings, setMachineStep, pinSetCount, 
 import { isStackMachine, logsPins, incrementFor, DEFAULT_INCREMENTS } from '../lib/training.js'
 import { t, tn, tx } from '../i18n/index.js'
 
-const props = defineProps({ modelValue: Boolean, exerciseId: String })
+// prefill: rows to start from when this gym has none (from another gym, to adjust for this one)
+const props = defineProps({ modelValue: Boolean, exerciseId: String, prefill: { type: Array, default: null } })
 const emit = defineEmits(['update:modelValue'])
 const ex = computed(() => exercisesById.value[props.exerciseId])
 const name = computed(() => tx(ex.value, 'name') || '')
@@ -70,8 +71,10 @@ const first = ref(null)
 const per = ref(null)
 watch(() => props.modelValue, (open) => {
   if (!open) return
-  rows.value = (state.data.machineSettings[props.exerciseId] || []).map(r => ({ ...r }))
+  rows.value = (state.data.machineSettings[props.exerciseId] || props.prefill || []).map(r => ({ ...r }))
   if (!rows.value.length) rows.value.push({ label: t('Seat'), value: '' })
+  // Adjusting another gym's settings: straight to the first value
+  if (props.prefill && !state.data.machineSettings[props.exerciseId]) nextTick(() => { const el = document.querySelector('.ms-row .val'); el?.focus(); el?.select() })
   if (stack.value) {
     step.value = incrementFor(ex.value, state.data.profile)
     pinSets.value = pinSetCount(props.exerciseId)

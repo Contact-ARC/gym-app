@@ -4,6 +4,25 @@
       <label class="label" for="gym-name">{{ t('Name') }}</label>
       <input id="gym-name" v-model="draft.name" class="field" type="text" maxlength="30" :placeholder="t('e.g. the gym or the area')" enterkeyhint="done">
 
+      <!-- Workouts from before gyms: which gym they were at -->
+      <div v-if="earlierChoice" class="earlier card-2">
+        <template v-if="earlierChoice === 'here'">
+          <Icon name="checkBold" :size="18" /><span class="t-small">{{ t('Your workouts from before you added gyms count as this gym.') }}</span>
+        </template>
+        <template v-else>
+          <span class="t-small grow">{{ t('Your workouts from before you added gyms count as {gym}. Were they here?', { gym: earlierName }) }}</span>
+          <button class="btn btn-soft btn-sm" @click="moveEarlier">{{ t('They were here') }}</button>
+        </template>
+      </div>
+
+      <button class="group-row climb-toggle" :aria-expanded="climbOpen" @click="climbOpen = !climbOpen">
+        <span class="grow">
+          <span>{{ t('Climbing grades') }}</span>
+          <span class="t-small t-muted climb-sum">{{ climbSummary }}</span>
+        </span>
+        <Icon :name="climbOpen ? 'minus' : 'plus'" :size="20" />
+      </button>
+      <template v-if="climbOpen">
       <div class="label mt">{{ t('Bouldering grades') }}</div>
       <div class="group radios">
         <button v-for="o in SYSTEMS.boulder" :key="o.value" class="group-row radio-row" role="radio" :aria-checked="draft.boulder === o.value" @click="draft.boulder = o.value">
@@ -42,6 +61,7 @@
         </div>
         <p class="t-tiny t-muted">{{ t('Tap a colour above to take it out. Climbs you already logged keep their place, so changing the order later won\'t change your records.') }}</p>
       </template>
+      </template>
     </div>
     <template #actions>
       <button v-if="!isNew && canRemove" class="btn btn-danger btn-lg" @click="remove"><Icon name="trash" />{{ t('Remove') }}</button>
@@ -51,13 +71,14 @@
 </template>
 
 <script setup>
-// Add or change a climbing gym: its name, how it grades boulders and routes, and its colour circuit.
+// Add or change a gym: its name and, for climbing, how it grades boulders and routes and its colour circuit.
+// Its bar, plates, equipment and machine settings are set in Settings while you're at it (see switchGym).
 import { computed, ref, watch } from 'vue'
 import Sheet from './Sheet.vue'
 import Icon from './Icon.vue'
 import { toast } from './toast.js'
-import { state, persist } from '../store.js'
-import { SYSTEMS, PALETTE, DEFAULT_COLOURS, swatch, climbGyms, activeGyms, gymName } from '../lib/climbing.js'
+import { state, addGym, updateGym, removeGym, earlierGymId, hasEarlierWorkouts, moveEarlierWorkouts } from '../store.js'
+import { SYSTEMS, PALETTE, DEFAULT_COLOURS, swatch, climbGyms, activeGyms, gymName, gymById } from '../lib/climbing.js'
 import { t } from '../i18n/index.js'
 
 const props = defineProps({
@@ -69,13 +90,15 @@ const emit = defineEmits(['update:modelValue'])
 const isNew = computed(() => !props.gymId)
 const draft = ref(null)
 const custom = ref('')
+const climbOpen = ref(false)
 watch(() => props.modelValue, (open) => {
   if (!open) return
   const g = climbGyms(state.data.settings).find(x => x.id === props.gymId)
   draft.value = g
     ? { name: g.name || '', boulder: g.boulder || 'font', route: g.route || 'french', colours: [...(g.colours || DEFAULT_COLOURS.map(x => t('colour|' + x)))] }
-    : { name: '', boulder: 'colour', route: 'french', colours: [] }
+    : { name: '', boulder: 'font', route: 'french', colours: [] }
   custom.value = ''
+  climbOpen.value = false
 }, { immediate: true })
 
 const usesColours = computed(() => draft.value && (draft.value.boulder === 'colour' || draft.value.route === 'colour'))
@@ -86,42 +109,45 @@ function addCustom () {
   if (!draft.value.colours.some(d => d.toLowerCase() === c.toLowerCase())) draft.value.colours.push(c)
   custom.value = ''
 }
+const sysName = (kind, v) => (v === 'colour' ? t('Colours') : t(SYSTEMS[kind].find(o => o.value === v)?.label || '').replace(/ \(.*\)$/, ''))
+const climbSummary = computed(() => draft.value ? `${sysName('boulder', draft.value.boulder)} · ${sysName('route', draft.value.route)}` : '')
 // A circuit needs at least two levels to compare anything
 const valid = computed(() => !!draft.value && (!usesColours.value || draft.value.colours.length >= 2))
 const canRemove = computed(() => activeGyms(state.data.settings).length > 1)
 
-function writeGyms (list, gymId) {
-  state.data.settings.climbing = { ...(state.data.settings.climbing || {}), gyms: list, ...(gymId ? { gymId } : {}) }
-  persist()
+// Only worth asking once there's more than one gym
+const earlierChoice = computed(() => {
+  if (isNew.value || !hasEarlierWorkouts.value || activeGyms(state.data.settings).length < 2) return null
+  return earlierGymId() === props.gymId ? 'here' : 'elsewhere'
+})
+const earlierName = computed(() => gymName(gymById(state.data.settings, earlierGymId())))
+function moveEarlier () {
+  moveEarlierWorkouts(props.gymId)
+  toast(t('Your earlier workouts and machine settings are now at {gym}', { gym: draft.value.name.trim() || t('My gym') }))
 }
+
 function save () {
   if (!valid.value) return
   const d = draft.value
   const fields = { name: d.name.trim(), boulder: d.boulder, route: d.route, colours: d.colours.length ? [...d.colours] : null }
-  const list = climbGyms(state.data.settings).map(g => ({ ...g }))
-  if (isNew.value) {
-    const id = 'gym' + Date.now().toString(36)
-    list.push({ id, ...fields })
-    writeGyms(list, id)
-  } else {
-    writeGyms(list.map(g => (g.id === props.gymId ? { ...g, ...fields } : g)))
-  }
+  if (isNew.value) addGym(fields)
+  else updateGym(props.gymId, fields)
   emit('update:modelValue', false)
   toast(t('{gym} saved', { gym: fields.name || t('My gym') }))
 }
 function remove () {
-  // Hidden rather than deleted: climbs logged there still need its colours
-  const list = climbGyms(state.data.settings).map(g => (g.id === props.gymId ? { ...g, hidden: true } : { ...g }))
-  const cur = state.data.settings.climbing?.gymId
-  writeGyms(list, cur === props.gymId ? list.find(g => !g.hidden)?.id : null)
-  const name = gymName(list.find(g => g.id === props.gymId))
+  const name = gymName(gymById(state.data.settings, props.gymId))
+  removeGym(props.gymId)
   emit('update:modelValue', false)
-  toast(t('{gym} removed. Your climbs there are kept.', { gym: name }))
+  toast(t('{gym} removed. Your workouts and climbs there are kept.', { gym: name }))
 }
 </script>
 
 <style scoped>
 .gs { display: grid; gap: 8px; }
+.earlier { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 12px; background: var(--card-2); margin-top: 8px; }
+.climb-toggle { margin-top: 12px; min-height: 56px; border-radius: 12px; background: var(--card-2); text-align: left; }
+.climb-toggle .grow { display: grid; }
 .mt { margin-top: 12px; }
 .between { justify-content: space-between; align-items: center; }
 .radios { background: var(--card-2); }

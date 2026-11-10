@@ -226,7 +226,7 @@
           <Icon name="chevronRight" class="chev" />
         </button>
       </div>
-      <p class="t-tiny t-muted mt-s">{{ t('Add the gyms you climb at, and how each one grades, in Settings, Climbing.') }}</p>
+      <p class="t-tiny t-muted mt-s">{{ t('Add the gyms you climb at, and how each one grades, in Settings, Gyms.') }}</p>
     </Sheet>
   </div>
 </template>

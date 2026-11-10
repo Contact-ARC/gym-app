@@ -138,7 +138,7 @@ export function shiftMonth (month, n) {
  * Everything for the month-end report.
  * @returns {{ month, sessions, days, minutes, sets, volume, unit, prs, prCount, muscles, lifts, prevSessions, bestStreak }}
  */
-export function monthReport (allSessions, month, { unit = 'kg', exercisesById = {} } = {}) {
+export function monthReport (allSessions, month, { unit = 'kg', exercisesById = {}, gymOf } = {}) {
   const all = finished(allSessions)
   const mine = all.filter(s => monthKey(s.startedAt) === month)
   const prevMonth = shiftMonth(month, -1)
@@ -148,7 +148,7 @@ export function monthReport (allSessions, month, { unit = 'kg', exercisesById = 
   const prMap = {}
   for (const s of mine) {
     const before = all.filter(x => x.startedAt < s.startedAt)
-    for (const pr of detectPRs(s, before, unit)) {
+    for (const pr of detectPRs(s, before, unit, { exercisesById, ...(gymOf ? { gymOf } : {}) })) {
       const k = pr.exerciseId + ':' + pr.type
       if (!prMap[k] || pr.value > prMap[k].value || pr.type === 'reps') prMap[k] = { ...pr, date: s.startedAt }
     }

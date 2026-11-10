@@ -190,7 +190,7 @@ import Icon from '../ui/Icon.vue'
 import Segmented from '../ui/Segmented.vue'
 import ExercisePicker from '../ui/ExercisePicker.vue'
 import Sheet from '../ui/Sheet.vue'
-import { state, persist, finishedSessions, exercisesById, historyFor, days, streak, goalsWithProgress, goalCtx } from '../store.js'
+import { state, persist, finishedSessions, exercisesById, historyHere, days, streak, goalsWithProgress, goalCtx, prOptions } from '../store.js'
 import { plTotal, bodyweight } from '../lib/goals.js'
 import { dots } from '../lib/body.js'
 import { bestE1RM, heaviest, fmtLoad, unitFor, dateKey, convertLoad, detectPRs, isWorkSet, bestSeconds } from '../lib/training.js'
@@ -270,7 +270,7 @@ function select (id) { router.push(`/exercise/${id}?tab=progress`) }
 const exList = computed(() => loggedIds.value.map(id => {
   const ex = exercisesById.value[id]
   const u = unitFor(ex, state.data.profile)
-  const hist = historyFor(id) // newest first
+  const hist = historyHere(id) // newest first; machines: at the gym you're at
   if (ex?.logType === 'climb') {
     // Climbing: hardest send in the grade system you climbed in last (your gym's), and how it moved
     const sys = climbsIn(hist[0]?.sets).at(-1)?.system || systemFor(climbKind(ex), state.data.settings)
@@ -358,11 +358,12 @@ const statusLabel = (m) => {
 const showAllPRs = ref(false)
 const recentPRs = computed(() => {
   const all = [...finishedSessions.value].reverse() // oldest first
+  const prOpts = prOptions()
   const cutoff = Date.now() - 30 * 86400000
   const out = []
   all.forEach((s, i) => {
     if (new Date(s.startedAt).getTime() < cutoff) return
-    for (const p of detectPRs(s, all.slice(0, i), unit.value)) {
+    for (const p of detectPRs(s, all.slice(0, i), unit.value, prOpts)) {
       const u = unitFor(exercisesById.value[p.exerciseId], state.data.profile)
       out.push({ ...p, unit: u, date: s.startedAt, key: s.id + p.exerciseId + p.type })
     }
