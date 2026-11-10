@@ -75,6 +75,8 @@ export function loadForReps (oneRM, reps, rir = 0) {
 /** Weight-stack machines are logged by weight, unless you chose pin numbers (Settings). */
 export const logsPins = (profile) => profile?.machineUnit === 'pin'
 export const isStackMachine = (exercise) => exercise?.loadUnit === 'pin'
+/** Planned and logged in minutes: cardio, and timed exercises marked "timeUnit": "min" (bikes, SkiErg) */
+export const inMinutes = (exercise) => exercise?.logType === 'cardio' || exercise?.timeUnit === 'min'
 // Machines differ from gym to gym (stacks, pulleys, sleds), so their history, records and suggestions are kept
 // per gym. A kilo of barbell or dumbbell is the same anywhere.
 const GYM_BOUND_TAGS = new Set(['cable', 'smith', 'legpress', 'legcurl', 'legext', 'hacksquat', 'hipmachine', 'calfmachine', 'pressmachine', 'pecdeck', 'assisted'])
@@ -169,6 +171,20 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
       return { load: last.load ?? null, reps: null, seconds: Math.min(hi, mins + 5) * 60, unit, kind: 'same', text: t('Last time {n} minutes. Go a bit longer: {m}.', { n: mins, m: Math.min(hi, mins + 5) }) }
     }
     return { load: last.load ?? null, reps: null, seconds: hi * 60, unit, kind: 'up', text: t('You did the full {n} minutes. Make it a little harder: faster, steeper or (walking) carry more.', { n: hi }) }
+  }
+
+  // ── Timed in minutes (bikes, SkiErg: "timeUnit": "min") ───
+  if (item?.durationSec && inMinutes(exercise)) {
+    const [lo, hi] = item.durationSec.map(x => Math.round(x / 60))
+    const step = Math.max(1, Math.round((hi - lo) / 2))
+    const last = history[0]?.sets.find(s => s.seconds)
+    if (!last) return { load: null, reps: null, seconds: lo * 60, unit, kind: 'start', text: t('Start with {n} minutes at a pace you could keep talking at.', { n: lo }) }
+    const mins = Math.round((last.seconds || 0) / 60)
+    if (mins < hi) {
+      const m = Math.min(hi, Math.max(lo, mins + step))
+      return { load: null, reps: null, seconds: m * 60, unit, kind: 'same', text: t('Last time {n} minutes. Go a bit longer: {m}.', { n: mins, m }) }
+    }
+    return { load: null, reps: null, seconds: hi * 60, unit, kind: 'up', text: t('You did the full {n} minutes. Make it a little harder: push the pace or the resistance.', { n: hi }) }
   }
 
   // ── Timed holds/carries ───────────────────────────────
@@ -846,6 +862,9 @@ export const EQUIPMENT = {
   battlerope: 'Battle rope',
   rower: 'Rowing machine',
   treadmill: 'Treadmill',
+  bike: 'Exercise bike (spin, upright or recumbent)',
+  airbike: 'Air bike (fan bike)',
+  skierg: 'SkiErg',
   hangboard: 'Hangboard'
 }
 // First match wins for each piece of equipment, so the specific machines come first
@@ -853,6 +872,7 @@ const EQUIP_RULES = [
   [/hip (ab|ad)duction machine/, 'hipmachine'], [/leg extension/, 'legext'], [/pec deck/, 'pecdeck'],
   [/(chest|shoulder) press machine/, 'pressmachine'], [/hack squat/, 'hacksquat'], [/seated calf/, 'calfmachine'],
   [/assisted pull-up/, 'assisted'], [/back extension/, 'backext'], [/preacher/, 'preacher'], [/dip bars/, 'dips'],
+  [/air bike|fan bike|assault bike/, 'airbike'], [/ski ?erg/, 'skierg'], [/bike/, 'bike'],
   [/hangboard/, 'hangboard'], [/battle rope/, 'battlerope'], [/medicine ball(?! or)|slam ball/, 'medball'], [/exercise ball/, 'ball'], [/rowing machine/, 'rower'], [/treadmill/, 'treadmill'],
   [/smith/, 'smith'], [/leg press/, 'legpress'], [/leg curl/, 'legcurl'],
   [/ez bar/i, 'ezbar'], [/barbell|bar pad/, 'barbell'], [/rack/, 'rack'], [/bench/, 'bench'],

@@ -78,7 +78,7 @@ import {
 import { convertLoad, fmtLoad } from '../lib/training.js'
 import { climbText } from '../lib/climbing.js'
 import { cardioText } from '../lib/cardio.js'
-import { relativeDay } from '../lib/format.js'
+import { relativeDay, fmtSecs } from '../lib/format.js'
 import { t, locale } from '../i18n/index.js'
 
 const route = useRoute()
@@ -115,7 +115,7 @@ function setText (s) {
     ? (s.unit === 'pin' ? t('pin {n}', { n: s.load }) : fmtLoad(Math.round(convertLoad(s.load, s.unit || unit.value, unit.value) * 10) / 10, unit.value))
     : null
   let out = ''
-  if (s.seconds) out = load ? `${load} · ${s.seconds} s` : `${s.seconds} s`
+  if (s.seconds) out = load ? `${load} · ${fmtSecs(s.seconds)}` : fmtSecs(s.seconds)
   else out = load ? `${load} × ${reps ?? '–'}` : t('{n} reps', { n: reps ?? '–' })
   if (s.rir != null) out += ` @${s.rir}`
   return out

@@ -191,7 +191,7 @@ export default {
   Alternatives: 'Alternativas',
   "This exercise isn't in the library": 'Este ejercicio no está en la biblioteca',
   'Note saved': 'Nota guardada',
-  '{load} for {s}s': '{load} durante {s} s',
+  '{load} for {s}': '{load} durante {s}',
   drop: 'drop',
   'warm-up': 'calentamiento',
   'to failure': 'al fallo',
@@ -432,8 +432,7 @@ export default {
   Records: 'Récords',
   '{n} reps at {load}': '{n} repeticiones con {load}',
   'was {n}': 'antes {n}',
-  'was {n} s': 'antes {n} s',
-  'Longest set {n} s': 'Serie más larga {n} s',
+  'Longest set {n}': 'Serie más larga: {n}',
   'Heaviest set {v}': 'Serie más pesada {v}',
   'Estimated max {v}': 'Máximo estimado {v}',
 
@@ -1794,5 +1793,9 @@ export default {
   "Only the host can change the day.": "Solo quien organiza puede cambiar el día.",
   "That person isn't training with you any more.": "Esa persona ya no está entrenando contigo.",
   "Invites, your turn and \"spot me\" while you train with someone": "Invitaciones, tu turno y «ayúdame» cuando entrenas con alguien",
-  "{change} a side": "{change} por lado"
+  "{change} a side": "{change} por lado",
+  "You did the full {n} minutes. Make it a little harder: push the pace or the resistance.": "Hiciste los {n} minutos. Ponlo un poco más difícil: sube el ritmo o la resistencia.",
+  "Exercise bike (spin, upright or recumbent)": "Bicicleta estática (spinning, vertical o reclinada)",
+  "Air bike (fan bike)": "Air bike (bici de ventilador)",
+  "SkiErg": "SkiErg"
 }

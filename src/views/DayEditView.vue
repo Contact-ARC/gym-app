@@ -138,6 +138,7 @@ import { prescription, restLabel, dayTitle, mmss } from '../lib/format.js'
 import { t, tx } from '../i18n/index.js'
 import { tap } from '../lib/native.js'
 import { inSuperset } from '../lib/supersets.js'
+import { inMinutes } from '../lib/training.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -209,15 +210,15 @@ const curIndex = ref(-1)
 const cur = computed(() => items.value[curIndex.value] || null)
 const draft = reactive({ exerciseId: null, sets: 3, lo: 8, hi: 12, rest: 90, notes: '', superset: false })
 const timed = computed(() => ['time', 'cardio'].includes(ex(draft.exerciseId)?.logType) || (!!cur.value?.durationSec && !ex(draft.exerciseId)))
-// Cardio (treadmill) is planned in minutes; stored in seconds like any timed item
-const cardio = computed(() => ex(draft.exerciseId)?.logType === 'cardio')
+// Cardio (treadmill) and minute-long timed efforts (bikes) are planned in minutes; stored in seconds like any timed item
+const cardio = computed(() => inMinutes(ex(draft.exerciseId)))
 const rangeKind = () => (cardio.value ? 'cardio' : timed.value ? 'time' : 'reps')
 const confirmRemove = ref(false)
 
 function openItem (i) {
   curIndex.value = i
   const it = items.value[i]
-  const isCardio = ex(it.exerciseId)?.logType === 'cardio' && it.durationSec
+  const isCardio = inMinutes(ex(it.exerciseId)) && it.durationSec
   const range = isCardio ? it.durationSec.map(x => Math.round(x / 60)) : (it.durationSec || it.repRange || [8, 12])
   const next = items.value[i + 1]
   Object.assign(draft, {
@@ -294,6 +295,7 @@ const addAt = ref('end')
 function newItem (id) {
   const e = ex(id)
   if (e?.logType === 'cardio') return { exerciseId: id, sets: 1, durationSec: [1200, 1800], restSec: 60 }
+  if (e?.timeUnit === 'min') return { exerciseId: id, sets: 1, durationSec: [600, 900], restSec: 60 }
   return e?.logType === 'time'
     ? { exerciseId: id, sets: 3, durationSec: [30, 45], restSec: 60 }
     : { exerciseId: id, sets: 3, repRange: e?.logType === 'bodyweight' ? [8, 15] : [8, 12], restSec: 90 }

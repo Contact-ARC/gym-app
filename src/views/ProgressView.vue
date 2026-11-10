@@ -210,7 +210,7 @@ import { dots } from '../lib/body.js'
 import { bestE1RM, heaviest, fmtLoad, unitFor, dateKey, convertLoad, detectPRs, isWorkSet, bestSeconds } from '../lib/training.js'
 import { cardioTotals, fmtDistance } from '../lib/cardio.js'
 import { climbKind, systemFor, hardest, climbsIn, isSent } from '../lib/climbing.js'
-import { muscleLabel, monthName, fmtNum, prText, relativeDay } from '../lib/format.js'
+import { muscleLabel, monthName, fmtNum, prText, relativeDay, fmtSecs } from '../lib/format.js'
 import { muscleVolume, monthsWithWorkouts } from '../lib/stats.js'
 import { t, tn, tx, locale } from '../i18n/index.js'
 
@@ -323,7 +323,7 @@ const exList = computed(() => loggedIds.value.map(id => {
   const e = u === 'pin' ? heaviest(all, 'pin') : bestE1RM(all, unit.value)
   if (cardio) best = fmtDistance(Math.max(0, ...hist.map(h => cardioTotals(h.sets).km)), unit.value)
   else if (e) best = fmtLoad(e, u === 'pin' ? 'pin' : unit.value)
-  else if (bestSeconds(all)) best = `${bestSeconds(all)} s`
+  else if (bestSeconds(all)) best = fmtSecs(bestSeconds(all))
   else best = tn(Math.max(0, ...all.map(x => x.reps || 0)), '{n} rep', '{n} reps')
   const vals = per.filter(v => v > 0)
   let spark = null; let change = null

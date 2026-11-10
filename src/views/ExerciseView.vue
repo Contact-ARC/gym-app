@@ -167,7 +167,7 @@ import CustomExerciseSheet from '../ui/CustomExerciseSheet.vue'
 import Sheet from '../ui/Sheet.vue'
 import { state, exercisesById, historyFor, setExerciseNote, hideCustomExercise, days, suggestionFor } from '../store.js'
 import { currentGymId, gymById, gymName } from '../lib/climbing.js'
-import { relativeDay, fmtNum } from '../lib/format.js'
+import { relativeDay, fmtNum, fmtSecs } from '../lib/format.js'
 import { bestE1RM, heaviest, fmtLoad, unitFor, repRecords, bestSeconds, setVolume, isWorkSet, gymBound } from '../lib/training.js'
 import { useChartTheme } from '../lib/chartTheme.js'
 import { t, tn, tx, locale } from '../i18n/index.js'
@@ -267,7 +267,7 @@ const series = computed(() => {
 const fmtMetric = (m, v) => {
   if (m === 'volume') return `${fmtNum(v, 0)} ${myUnit.value}`
   if (m === 'reps') return tn(v, '{n} rep', '{n} reps')
-  if (m === 'secs') return `${v} s`
+  if (m === 'secs') return fmtSecs(v)
   if (m === 'km') return fmtDistance(v, myUnit.value)
   if (m === 'mins') return fmtDuration(v * 60)
   return fmtLoad(v, unit.value === 'pin' ? 'pin' : myUnit.value)
@@ -285,7 +285,7 @@ const trend = computed(() => {
   if (p.length < 2) return null
   const diff = p[p.length - 1][m] - p[0][m]
   const weeks = Math.max(1, Math.round((new Date(p[p.length - 1].date) - new Date(p[0].date)) / (7 * 86400000)))
-  const amount = m === 'reps' ? tn(Math.abs(diff), '{n} rep', '{n} reps') : m === 'secs' ? `${Math.abs(diff)} s` : (m === 'km' || m === 'mins') ? fmtMetric(m, Math.round(Math.abs(diff) * 100) / 100) : fmtLoad(Math.round(Math.abs(diff) * 10) / 10, unit.value === 'pin' ? 'pin' : myUnit.value)
+  const amount = m === 'reps' ? tn(Math.abs(diff), '{n} rep', '{n} reps') : m === 'secs' ? fmtSecs(Math.abs(diff)) : (m === 'km' || m === 'mins') ? fmtMetric(m, Math.round(Math.abs(diff) * 100) / 100) : fmtLoad(Math.round(Math.abs(diff) * 10) / 10, unit.value === 'pin' ? 'pin' : myUnit.value)
   const sign = diff > 0 ? '+' : diff < 0 ? '−' : '±'
   return {
     text: tn(weeks, '{change} in {n} week', '{change} in {n} weeks', { change: `${sign}${amount}` }),
@@ -393,7 +393,7 @@ function repsOf (s) {
 }
 function setStr (s) {
   if (s.cardio) return cardioText(s, myUnit.value)
-  if (s.seconds) return s.load ? t('{load} for {s}s', { load: fmtLoad(s.load, s.unit), s: s.seconds }) : `${s.seconds}s`
+  if (s.seconds) return s.load ? t('{load} for {s}', { load: fmtLoad(s.load, s.unit), s: fmtSecs(s.seconds) }) : fmtSecs(s.seconds)
   const reps = s.repsL != null && s.repsR != null && s.repsL !== s.repsR ? `${s.repsL}/${s.repsR}` : s.reps
   const tag = s.type === 'drop' ? ' ' + t('drop') : ''
   return `${s.load ? fmtLoad(s.load, s.unit) : t('BW')} × ${reps}${tag}`

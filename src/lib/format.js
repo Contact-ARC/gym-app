@@ -8,8 +8,8 @@ export function prescription (item, exercise = null) {
   if (!item) return ''
   const sets = item.sets || 1
   const side = exercise?.perSide ? t('/side') : ''
-  // Cardio: minutes ("20–30 min", or "2 × 10 min")
-  if (item.durationSec && exercise?.logType === 'cardio') {
+  // Cardio and other minute-long efforts: minutes ("20–30 min", or "2 × 10 min")
+  if (item.durationSec && (exercise?.logType === 'cardio' || exercise?.timeUnit === 'min')) {
     const [lo, hi] = item.durationSec.map(x => Math.round(x / 60))
     const mins = lo === hi ? t('{n} min', { n: lo }) : t('{n} min', { n: `${lo}–${hi}` })
     return sets > 1 ? `${sets} × ${mins}` : mins
@@ -20,6 +20,13 @@ export function prescription (item, exercise = null) {
     return `${sets} × ${lo === hi ? lo : `${lo}–${hi}`}${side}`
   }
   return tn(sets, '{n} set', '{n} sets')
+}
+
+/** A timed set: "45 s" under two minutes, "12 min" / "12:30" from there */
+export function fmtSecs (secs) {
+  const s = Math.max(0, Math.round(secs || 0))
+  if (s < 120) return `${s} s`
+  return s % 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : t('{n} min', { n: s / 60 })
 }
 
 /** 95 → "1:35" */
@@ -135,7 +142,7 @@ export function prText (p, unit) {
       main: p.load ? t('{n} reps at {load}', { n: p.value, load: fmtLoad(p.load, unit) }) : tn(p.value, '{n} rep', '{n} reps'),
       was: t('was {n}', { n: p.prev })
     }
-    case 'time': return { main: t('Longest set {n} s', { n: p.value }), was: t('was {n} s', { n: p.prev }) }
+    case 'time': return { main: t('Longest set {n}', { n: fmtSecs(p.value) }), was: t('was {n}', { n: fmtSecs(p.prev) }) }
     case 'distance': return { main: t('Farthest {d}', { d: fmtDistance(p.value, unit) }), was: t('was {n}', { n: fmtDistance(p.prev, unit) }) }
     case 'duration': return { main: t('Longest {d}', { d: fmtDuration(p.value) }), was: t('was {n}', { n: fmtDuration(p.prev) }) }
     case 'grade': return { main: t('Hardest send {g}', { g: p.value }), was: t('was {n}', { n: p.prev }) }

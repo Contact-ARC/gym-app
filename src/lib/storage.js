@@ -52,6 +52,7 @@ export function emptyData () {
     cache: { manifest: null, routine: null, exercises: null, fetchedAt: null },
     routineArchive: {}, // { [month]: routine }
     lastSeenRoutineMonth: null,
+    lastSeenRoutineKey: null, // 0.11.1: month|title of the routine whose "what's new" was seen (a replaced routine is announced again)
     lastBackupAt: null,
     welcomed: false,
     machineSettings: {}, // { [exerciseId]: [{ label, value }] }

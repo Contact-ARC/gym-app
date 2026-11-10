@@ -210,6 +210,7 @@
             </div>
 
             <CardioFields v-if="isCardio" :c="draft" :unit="profile.unit" />
+            <Stepper v-else-if="isTimed && timedInMin" v-model="draftMinutes" :label="t('Minutes')" :step="0.5" :min="0" :decimals="true" />
             <Stepper v-else-if="isTimed" v-model="draft.seconds" :label="t('Seconds')" :step="5" :min="0" :format="(v) => String(Math.round(v))" />
             <div v-else-if="split" class="split">
               <Stepper v-model="draft.repsL" :label="t('Left reps')" :step="1" :min="0" size="md" />
@@ -368,6 +369,7 @@
       <div v-if="editing" class="inputs">
         <Stepper v-if="showLoad" v-model="editDraft.load" :label="loadLabel" :unit="unitText" :step="inc" :min="0" :floor="barFloor" :decimals="unit !== 'pin'" size="md" />
         <CardioFields v-if="isCardio" :c="editDraft" :unit="profile.unit" size="md" />
+        <Stepper v-else-if="isTimed && timedInMin" v-model="editMinutes" :label="t('Minutes')" :step="0.5" :min="0" :decimals="true" size="md" />
         <Stepper v-else-if="isTimed" v-model="editDraft.seconds" :label="t('Seconds')" :step="5" :min="0" size="md" />
         <div v-else-if="editDraft.repsL != null" class="split">
           <Stepper v-model="editDraft.repsL" :label="t('Left reps')" :step="1" :min="0" size="md" />
@@ -466,7 +468,7 @@ import {
   unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, platesPerSide, warmupSets, platesFor, nextSetAdjust,
   warmupKind, warmupSize, isWorkSet, bestE1RM, heaviest, canDoAtGym, barSetupFor, plateWarmups, warmStepFor, isStackMachine
 } from '../lib/training.js'
-import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle, plateText, plateChangeText } from '../lib/format.js'
+import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle, plateText, plateChangeText, fmtSecs } from '../lib/format.js'
 import { effectiveRest, supersetNext } from '../lib/supersets.js'
 import { rest, startRest, stopRest, addRest, notifyProblem } from '../lib/restTimer.js'
 import { tap, buzz, keepAwake, openNotificationSettings } from '../lib/native.js'
@@ -676,7 +678,7 @@ function repsText (s) {
 }
 function setText (s) {
   if (s.cardio) return cardioText(s, profile.value.unit)
-  if (s.seconds) return s.load ? t('{load} for {s}s', { load: s.load, s: s.seconds }) : `${s.seconds}s`
+  if (s.seconds) return s.load ? t('{load} for {s}', { load: s.load, s: fmtSecs(s.seconds) }) : fmtSecs(s.seconds)
   const load = s.unit === 'pin' ? `P${s.load}` : (s.load ? String(s.load) : t('BW'))
   return `${load} × ${repsText(s)}`
 }
@@ -759,6 +761,14 @@ watch(() => [tgItem.value, draft.value?.load, machine.value.length], () => {
   if (tgItem.value == null || !(draft.value?.load > 0) || ex.value?.logType !== 'weight') return
   noteLoad(tgItem.value, draft.value.load, unit.value, machine.value.length ? machine.value : null)
 }, { immediate: true })
+// Bikes and other minute-long timed sets: entered in minutes, kept in seconds
+const timedInMin = computed(() => ex.value?.timeUnit === 'min')
+const minutesOf = (obj) => computed({
+  get: () => (obj().seconds == null ? null : Math.round((obj().seconds / 60) * 100) / 100),
+  set: (v) => { obj().seconds = v == null ? null : Math.round(v * 60) }
+})
+const draftMinutes = minutesOf(() => draft.value)
+const editMinutes = minutesOf(() => editDraft)
 function cardioDraft (last) {
   let prev = last?.cardio ? last : null
   if (!prev) for (const h of historyFor(item.value.exerciseId, session.value.id)) { prev = h.sets.find(x => x.cardio); if (prev) break }

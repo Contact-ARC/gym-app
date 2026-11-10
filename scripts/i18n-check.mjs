@@ -52,7 +52,9 @@ const EXTRA = [
   'Weekly recap', 'Sunday evening: how the week went', 'Sets', 'Volume', 'Best streak', 'High five', 'Fire', 'Strong', 'Funny',
   // 0.11: training together (errors and the notification kind)
   "It's full: 4 people at most.", 'Only the host can change the day.', "That person isn't training with you any more.",
-  'Training together', 'Invites, your turn and "spot me" while you train with someone'
+  'Training together', 'Invites, your turn and "spot me" while you train with someone',
+  // 0.11.1: equipment shown through a variable
+  'Exercise bike (spin, upright or recumbent)', 'Air bike (fan bike)', 'SkiErg'
 ]
 for (const k of EXTRA) keys.add(k)
 // Template placeholders like `${…}` aren't keys

@@ -44,7 +44,7 @@ import { exercisesById } from '../store.js'
 import { me } from '../lib/crew.js'
 import { togetherView, connection, spotMe } from '../lib/together.js'
 import { fmtLoad } from '../lib/training.js'
-import { plateChangeText } from '../lib/format.js'
+import { plateChangeText, fmtSecs } from '../lib/format.js'
 import { avatarStyle, initial } from './crewUi.js'
 import { t, tx } from '../i18n/index.js'
 
@@ -66,7 +66,7 @@ const change = computed(() => {
 function setLine (r) {
   if (r.load > 0 && r.reps) return `${fmtLoad(r.load, r.unit)} × ${r.reps}`
   if (r.reps) return `× ${r.reps}`
-  if (r.seconds) return `${r.seconds} s`
+  if (r.seconds) return fmtSecs(r.seconds)
   return ''
 }
 function spot () {

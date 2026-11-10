@@ -192,7 +192,7 @@ import { goalTitle } from '../lib/goalText.js'
 import { fmtLoad, unitFor, convertLoad, isWorkSet } from '../lib/training.js'
 import { climbText, climbTotals, climbsIn } from '../lib/climbing.js'
 import { cardioText } from '../lib/cardio.js'
-import { fmtDate, fmtNum, fmtMins, dayTitle, prText, PR_ORDER, sessionTitle } from '../lib/format.js'
+import { fmtDate, fmtNum, fmtMins, dayTitle, prText, PR_ORDER, sessionTitle, fmtSecs } from '../lib/format.js'
 import { shareText } from '../lib/native.js'
 import { drawCard, shareCanvas } from '../lib/shareCard.js'
 import { inCrew } from '../lib/crew.js'
@@ -289,7 +289,7 @@ function deltaOf (s, p) {
   let score = 0
   if (s.seconds || p.seconds) {
     const d = (s.seconds || 0) - (p.seconds || 0)
-    if (d) { parts.push(signed(d, v => `${v} s`)); score = d }
+    if (d) { parts.push(signed(d, v => fmtSecs(v))); score = d }
   } else {
     // Last time in pins, now in kg (or the reverse): the numbers can't be compared
     if (p.load && s.load && (p.unit === 'pin') !== (s.unit === 'pin')) return null
@@ -316,7 +316,7 @@ function setRows (id) {
   })
 }
 function setText (s) {
-  if (s.seconds) return s.load ? t('{load} for {s}s', { load: fmtLoad(s.load, s.unit), s: s.seconds }) : `${s.seconds}s`
+  if (s.seconds) return s.load ? t('{load} for {s}', { load: fmtLoad(s.load, s.unit), s: fmtSecs(s.seconds) }) : fmtSecs(s.seconds)
   const reps = s.repsL != null && s.repsR != null && s.repsL !== s.repsR ? `${s.repsL}/${s.repsR}` : s.reps
   const tag = TAGS[s.type] && s.type !== 'warmup' ? ` (${t(TAGS[s.type])})` : ''
   return `${s.load ? fmtLoad(s.load, s.unit) : t('BW')} × ${reps}${tag}`
@@ -340,7 +340,7 @@ function setsFor (id) {
   return session.value.sets.filter(s => s.exerciseId === id).map(s => {
     if (s.climb) return climbText(s.climb)
     if (s.cardio) return cardioText(s, state.data.profile.unit)
-    if (s.seconds) return s.load ? t('{load} for {s}s', { load: fmtLoad(s.load, s.unit), s: s.seconds }) : `${s.seconds}s`
+    if (s.seconds) return s.load ? t('{load} for {s}', { load: fmtLoad(s.load, s.unit), s: fmtSecs(s.seconds) }) : fmtSecs(s.seconds)
     const reps = s.repsL != null && s.repsR != null && s.repsL !== s.repsR ? `${s.repsL}/${s.repsR}` : s.reps
     const tag = TAGS[s.type] ? ` (${t(TAGS[s.type])})` : ''
     return `${s.load ? fmtLoad(s.load, s.unit) : t('BW')} × ${reps}${tag}`

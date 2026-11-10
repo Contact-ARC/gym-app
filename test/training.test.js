@@ -541,3 +541,16 @@ test('plate warm-ups: nothing between the bar and a working weight just above it
   assert.deepEqual(ez.sets.map(s => s.load), [0])
   assert.deepEqual(ez.final.perSide, [5])
 })
+
+test('minute-long timed sets: bikes are planned and suggested in minutes', () => {
+  const bike = { id: 'stationary-bike', logType: 'time', timeUnit: 'min' }
+  const item = { exerciseId: bike.id, sets: 1, durationSec: [720, 1080] }
+  const first = suggestNext({ item, exercise: bike, history: [], profile: { unit: 'kg' } })
+  assert.equal(first.seconds, 720)
+  assert.match(first.text, /12 minutes/)
+  const next = suggestNext({ item, exercise: bike, history: [{ sets: [{ seconds: 720 }] }], profile: { unit: 'kg' } })
+  assert.equal(next.seconds, 900) // +3 min a step
+  // A plank is still in seconds
+  const plank = suggestNext({ item: { sets: 3, durationSec: [30, 45] }, exercise: { id: 'plank', logType: 'time' }, history: [], profile: { unit: 'kg' } })
+  assert.equal(plank.seconds, 30)
+})

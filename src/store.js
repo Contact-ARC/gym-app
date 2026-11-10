@@ -204,14 +204,19 @@ export const updateAvailable = computed(() => {
   return v && compareVersions(v, APP_VERSION) > 0 ? manifest.value.app : null
 })
 
+// A routine is "new" for a new month, or (0.11.1) when the month's routine is replaced by a different one
+const routineKey = (r) => (r ? `${r.month}|${r.title || ''}` : null)
 export const newRoutineToAnnounce = computed(() => {
   const r = routine.value
   if (!r) return null
-  return r.month !== state.data.lastSeenRoutineMonth ? r : null
+  if (r.month !== state.data.lastSeenRoutineMonth) return r
+  const seen = state.data.lastSeenRoutineKey
+  return seen && seen !== routineKey(r) ? r : null
 })
 
 export function markRoutineSeen () {
   state.data.lastSeenRoutineMonth = routine.value?.month || null
+  state.data.lastSeenRoutineKey = routineKey(routine.value)
   persist()
 }
 
@@ -272,11 +277,13 @@ async function doRefresh () {
     }
     if (!Array.isArray(rt.days) || !rt.days.length) throw fail('data', t('Routine file has no days.'))
 
-    const prevMonth = state.data.cache.routine?.month
+    const prev = state.data.cache.routine
     state.data.cache = { manifest: man, routine: rt, exercises: ex, fetchedAt: new Date().toISOString() }
     state.data.routineArchive[rt.month] = rt
-    // New month → start the rotation again from the first day
-    if (prevMonth && prevMonth !== rt.month) state.data.nextDayKey = null
+    // New month, or this month's routine replaced by a different one → start the rotation again from the first day
+    if (prev?.month && (prev.month !== rt.month || (prev.title || '') !== (rt.title || ''))) state.data.nextDayKey = null
+    // Seen this month's routine before 0.11.1: remember which one, so a replacement is announced
+    if (!state.data.lastSeenRoutineKey && state.data.lastSeenRoutineMonth === prev?.month && prev) state.data.lastSeenRoutineKey = routineKey(prev)
     reconcileEdits()
     st.error = null
     st.errorKind = null
