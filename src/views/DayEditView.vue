@@ -72,10 +72,10 @@
           <Stepper v-model="draft.sets" :label="t('Sets')" :step="1" :min="1" :max="12" size="md" />
           <Stepper v-model="draft.rest" :label="t('Rest')" :step="15" :min="0" :max="600" size="md" :format="mmss" />
         </div>
-        <div class="label mt">{{ timed ? t('Seconds per set') : t('Reps per set') }}</div>
+        <div class="label mt">{{ cardio ? t('Minutes') : timed ? t('Seconds per set') : t('Reps per set') }}</div>
         <div class="grid2">
-          <Stepper v-model="draft.lo" :label="t('From')" :step="timed ? 5 : 1" :min="1" :max="draft.hi || 999" size="md" />
-          <Stepper v-model="draft.hi" :label="t('To')" :step="timed ? 5 : 1" :min="draft.lo || 1" :max="timed ? 600 : 100" size="md" />
+          <Stepper v-model="draft.lo" :label="t('From')" :step="timed && !cardio ? 5 : 1" :min="1" :max="draft.hi || 999" size="md" />
+          <Stepper v-model="draft.hi" :label="t('To')" :step="timed && !cardio ? 5 : 1" :min="draft.lo || 1" :max="cardio ? 180 : timed ? 600 : 100" size="md" />
         </div>
 
         <label class="label mt" for="it-notes">{{ t('Notes') }} <span class="t-faint">{{ t('(optional)') }}</span></label>
@@ -208,13 +208,17 @@ const itemOpen = ref(false)
 const curIndex = ref(-1)
 const cur = computed(() => items.value[curIndex.value] || null)
 const draft = reactive({ exerciseId: null, sets: 3, lo: 8, hi: 12, rest: 90, notes: '', superset: false })
-const timed = computed(() => ex(draft.exerciseId)?.logType === 'time' || (!!cur.value?.durationSec && !ex(draft.exerciseId)))
+const timed = computed(() => ['time', 'cardio'].includes(ex(draft.exerciseId)?.logType) || (!!cur.value?.durationSec && !ex(draft.exerciseId)))
+// Cardio (treadmill) is planned in minutes; stored in seconds like any timed item
+const cardio = computed(() => ex(draft.exerciseId)?.logType === 'cardio')
+const rangeKind = () => (cardio.value ? 'cardio' : timed.value ? 'time' : 'reps')
 const confirmRemove = ref(false)
 
 function openItem (i) {
   curIndex.value = i
   const it = items.value[i]
-  const range = it.durationSec || it.repRange || [8, 12]
+  const isCardio = ex(it.exerciseId)?.logType === 'cardio' && it.durationSec
+  const range = isCardio ? it.durationSec.map(x => Math.round(x / 60)) : (it.durationSec || it.repRange || [8, 12])
   const next = items.value[i + 1]
   Object.assign(draft, {
     exerciseId: it.exerciseId, sets: it.sets || 3, lo: range[0], hi: range[1], rest: it.restSec ?? 90,
@@ -230,7 +234,8 @@ function saveItem () {
   if (draft.exerciseId !== it.exerciseId) store.swap(it.ref, draft.exerciseId)
   const patch = {}
   if (draft.sets !== it.sets) patch.sets = draft.sets
-  const lo = Math.min(draft.lo, draft.hi); const hi = Math.max(draft.lo, draft.hi)
+  const k = cardio.value ? 60 : 1
+  const lo = Math.min(draft.lo, draft.hi) * k; const hi = Math.max(draft.lo, draft.hi) * k
   if (timed.value) { if (!it.durationSec || it.durationSec[0] !== lo || it.durationSec[1] !== hi) patch.durationSec = [lo, hi] }
   else if (!it.repRange || it.repRange[0] !== lo || it.repRange[1] !== hi) patch.repRange = [lo, hi]
   if (draft.rest !== (it.restSec ?? 90)) patch.restSec = draft.rest
@@ -288,6 +293,7 @@ const swapOpen = ref(false)
 const addAt = ref('end')
 function newItem (id) {
   const e = ex(id)
+  if (e?.logType === 'cardio') return { exerciseId: id, sets: 1, durationSec: [1200, 1800], restSec: 60 }
   return e?.logType === 'time'
     ? { exerciseId: id, sets: 3, durationSec: [30, 45], restSec: 60 }
     : { exerciseId: id, sets: 3, repRange: e?.logType === 'bodyweight' ? [8, 15] : [8, 12], restSec: 90 }
@@ -300,10 +306,10 @@ function picked (id) {
     return
   }
   // Swap inside the item sheet: switching between a timed and a rep exercise changes the range
-  const wasTimed = timed.value
+  const was = rangeKind()
   draft.exerciseId = id
-  if (timed.value !== wasTimed) {
-    const r = timed.value ? [30, 45] : [8, 12]
+  if (rangeKind() !== was) {
+    const r = { cardio: [20, 30], time: [30, 45], reps: [8, 12] }[rangeKind()]
     draft.lo = r[0]; draft.hi = r[1]
   }
 }

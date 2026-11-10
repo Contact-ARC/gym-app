@@ -66,7 +66,7 @@ import PhotoViewer from './PhotoViewer.vue'
 import { state, imageUrl } from '../store.js'
 import { muscleLabel, youtubeSearchUrl } from '../lib/format.js'
 import { openUrl } from '../lib/native.js'
-import { canDoAtGym } from '../lib/training.js'
+import { canDoAtGym, logsPins } from '../lib/training.js'
 import { t, tx } from '../i18n/index.js'
 
 const props = defineProps({
@@ -105,7 +105,7 @@ const equipmentLine = computed(() => {
   const e = (tx(props.ex, 'equipment') || []).join(', ')
   const extra = []
   if (props.ex.perSide) extra.push(t('one side at a time'))
-  if (props.ex.loadUnit === 'pin') extra.push(t('logged by pin position'))
+  if (props.ex.loadUnit === 'pin') extra.push(logsPins(state.data.profile) ? t('logged by pin position') : t('weight stack'))
   return [e.charAt(0).toUpperCase() + e.slice(1), ...extra].filter(Boolean).join('. ')
 })
 </script>

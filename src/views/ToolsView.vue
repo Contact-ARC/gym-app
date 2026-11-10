@@ -113,12 +113,22 @@
       <div v-if="warmups.length" class="group warm">
         <div v-for="(s, i) in warmups" :key="i" class="group-row">
           <span class="num t-num">{{ i + 1 }}</span>
-          <span class="grow t-num wv">{{ fmtLoad(s.load, unit) }} × {{ s.reps }}</span>
-          <span class="t-small t-muted">{{ s.label }}</span>
+          <span class="grow wtxt">
+            <span class="t-num wv">{{ fmtLoad(s.load, unit) }} × {{ s.reps }}</span>
+            <span v-if="s.perSide" class="t-small t-muted t-num">
+              {{ s.perSide.length ? t('{p} a side', { p: plateText(s.perSide) }) : t('Empty bar') }}<template v-if="plateChangeText(s)"> · <b class="chg">{{ plateChangeText(s) }}</b></template>
+            </span>
+          </span>
+          <span class="t-small t-muted">{{ s.perSide && !s.perSide.length ? '' : s.label }}</span>
         </div>
         <div class="group-row work">
           <span class="num t-num"><Icon name="checkBold" :size="16" /></span>
-          <span class="grow t-num wv">{{ fmtLoad(working, unit) }}</span>
+          <span class="grow wtxt">
+            <span class="t-num wv">{{ fmtLoad(warmPlan ? warmPlan.final.load : working, unit) }}</span>
+            <span v-if="warmPlan" class="t-small t-muted t-num">
+              {{ t('{p} a side', { p: plateText(warmPlan.final.perSide) }) }}<template v-if="plateChangeText(warmPlan.final)"> · <b class="chg">{{ plateChangeText(warmPlan.final) }}</b></template>
+            </span>
+          </span>
           <span class="t-small">{{ t('working sets') }}</span>
         </div>
       </div>
@@ -136,8 +146,10 @@ import Segmented from '../ui/Segmented.vue'
 import { weightPlateColors } from '../ui/plates.js'
 import { state, persist } from '../store.js'
 import { t } from '../i18n/index.js'
+import { plateText, plateChangeText } from '../lib/format.js'
 import {
-  estimate1RM, loadForReps, roundToIncrement, fmtLoad, platesPerSide, warmupSets, platesFor, DEFAULT_PLATES, DEFAULT_BAR
+  estimate1RM, loadForReps, roundToIncrement, fmtLoad, platesPerSide, warmupSets, platesFor, DEFAULT_PLATES, DEFAULT_BAR,
+  plateWarmups, warmStepFor
 } from '../lib/training.js'
 
 const tabs = computed(() => [{ label: t('Effort'), value: 'effort' }, { label: t('Plates'), value: 'plates' }, { label: t('Warm-up'), value: 'warmup' }])
@@ -208,12 +220,12 @@ function plateCss (p) {
 // Warm-up
 const working = ref(null)
 const warmBar = ref(true)
-const warmups = computed(() =>
-  warmupSets(
-    working.value, incs.value[warmBar.value ? 'upper' : 'dumbbell'], warmBar.value ? (state.data.profile.bar || 0) : 0,
-    warmBar.value && state.data.profile.bar ? platesFor(state.data.profile) : null
-  )
-)
+// Barbell: built from the working weight's plates, with what to add or swap at each step
+const warmPlan = computed(() => (warmBar.value && working.value
+  ? plateWarmups(working.value, bar.value || 0, platesOn.value, 'full', { stepRef: warmStepFor(unit.value), hasBar: true })
+  : null))
+const warmups = computed(() => warmPlan.value?.sets ||
+  warmupSets(working.value, incs.value[warmBar.value ? 'upper' : 'dumbbell'], 0, null))
 </script>
 
 <style scoped>
@@ -269,5 +281,7 @@ const warmups = computed(() =>
   background: var(--card-2); font-size: 16px; font-weight: 700; color: var(--ink-2);
 }
 .wv { font-size: 22px; font-weight: 600; }
+.wtxt { display: grid; }
+.chg { color: var(--ink-2); font-weight: 600; }
 .work .num { background: var(--ink); color: var(--paper); }
 </style>

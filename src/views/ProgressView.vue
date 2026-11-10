@@ -194,6 +194,7 @@ import { state, persist, finishedSessions, exercisesById, historyFor, days, stre
 import { plTotal, bodyweight } from '../lib/goals.js'
 import { dots } from '../lib/body.js'
 import { bestE1RM, heaviest, fmtLoad, unitFor, dateKey, convertLoad, detectPRs, isWorkSet, bestSeconds } from '../lib/training.js'
+import { cardioTotals, fmtDistance } from '../lib/cardio.js'
 import { climbKind, systemFor, hardest, climbsIn, isSent } from '../lib/climbing.js'
 import { muscleLabel, monthName, fmtNum, prText, relativeDay } from '../lib/format.js'
 import { muscleVolume, monthsWithWorkouts } from '../lib/stats.js'
@@ -287,15 +288,18 @@ const exList = computed(() => loggedIds.value.map(id => {
       sub: `${relativeDay(hist[0]?.date)} · ${tn(hist.length, '{n} session', '{n} sessions')} · ${t('{n} sent', { n: sends })}`
     }
   }
+  const cardio = ex?.logType === 'cardio'
   const per = hist.slice(0, 10).reverse().map(h => {
     const sets = h.sets.filter(isWorkSet)
-    if (u === 'pin') return heaviest(sets, unit.value)
+    if (cardio) return cardioTotals(sets).km
+    if (u === 'pin') return heaviest(sets, 'pin')
     return bestE1RM(sets, unit.value) || bestSeconds(sets) || Math.max(0, ...sets.map(x => x.reps || 0))
   })
   const all = hist.flatMap(h => h.sets.filter(isWorkSet))
   let best
-  const e = u === 'pin' ? heaviest(all, unit.value) : bestE1RM(all, unit.value)
-  if (e) best = fmtLoad(e, u === 'pin' ? 'pin' : unit.value)
+  const e = u === 'pin' ? heaviest(all, 'pin') : bestE1RM(all, unit.value)
+  if (cardio) best = fmtDistance(Math.max(0, ...hist.map(h => cardioTotals(h.sets).km)), unit.value)
+  else if (e) best = fmtLoad(e, u === 'pin' ? 'pin' : unit.value)
   else if (bestSeconds(all)) best = `${bestSeconds(all)} s`
   else best = tn(Math.max(0, ...all.map(x => x.reps || 0)), '{n} rep', '{n} reps')
   const vals = per.filter(v => v > 0)

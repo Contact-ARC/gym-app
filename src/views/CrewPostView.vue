@@ -77,6 +77,7 @@ import {
 } from '../lib/crew.js'
 import { convertLoad, fmtLoad } from '../lib/training.js'
 import { climbText } from '../lib/climbing.js'
+import { cardioText } from '../lib/cardio.js'
 import { relativeDay } from '../lib/format.js'
 import { t, locale } from '../i18n/index.js'
 
@@ -108,6 +109,7 @@ const setTag = (type) => t(TAGS[type] || type)
 
 function setText (s) {
   if (s.climb) return climbText(s.climb)
+  if (s.cardio) return cardioText(s, unit.value)
   const reps = s.repsL != null ? `${s.repsL}/${s.repsR}` : s.reps
   const load = s.load != null && s.load !== 0
     ? (s.unit === 'pin' ? t('pin {n}', { n: s.load }) : fmtLoad(Math.round(convertLoad(s.load, s.unit || unit.value, unit.value) * 10) / 10, unit.value))

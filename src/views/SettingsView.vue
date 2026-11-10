@@ -112,6 +112,13 @@
         </div>
         <Stepper v-model="p.bar" :step="5" :min="0" :max="50" size="md" class="mini" @update:model-value="persist" />
       </div>
+      <div class="group-row">
+        <div class="grow">
+          <div>{{ t('Log machines by pin number') }}</div>
+          <div class="t-tiny t-muted">{{ p.machineUnit === 'pin' ? t('Turn this off to log the weight on the stack instead. Pins differ from machine to machine.') : t('Machines are logged by the weight on the stack, in {unit}. Set each machine\'s plate in its Machine settings.', { unit: p.unit }) }}</div>
+        </div>
+        <Toggle :model-value="p.machineUnit === 'pin'" @update:model-value="(v) => { p.machineUnit = v ? 'pin' : 'weight'; persist() }" />
+      </div>
     </div>
 
     <h2 class="section-h">{{ t('Rest timer') }}</h2>
@@ -394,7 +401,9 @@ const incRows = computed(() => {
     { key: 'upper', label: t('Upper-body barbell'), help: t('Bench, overhead press, curls'), step: u === 'kg' ? 0.5 : 1, max: 20 },
     { key: 'lower', label: t('Lower-body barbell'), help: t('Squat, deadlift, hip thrust'), step: u === 'kg' ? 0.5 : 1, max: 40 },
     { key: 'dumbbell', label: t('Dumbbells'), help: t('Gap between dumbbell sizes'), step: u === 'kg' ? 0.5 : 1, max: 20 },
-    { key: 'pin', label: t('Machine pins'), help: t('Positions per jump on a stack'), step: 1, max: 5 }
+    p.value.machineUnit === 'pin'
+      ? { key: 'pin', label: t('Machine pins'), help: t('Positions per jump on a stack'), step: 1, max: 5 }
+      : { key: 'machine', label: t('Machines'), help: t('One plate on a weight stack (change it per machine)'), step: u === 'kg' ? 0.5 : 1, max: u === 'kg' ? 25 : 50 }
   ]
 })
 
@@ -441,6 +450,7 @@ function onUnit (u) {
   prof.increments = { ...DEFAULT_INCREMENTS[u] }
   prof.bar = DEFAULT_BAR[u]
   prof.plates = null // plate sizes are per unit
+  prof.machineSteps = {} // so are stack plates
   if (prof.bodyweight) prof.bodyweight = Math.round(convertLoad(prof.bodyweight, u === 'kg' ? 'lb' : 'kg', u))
   persist()
 }

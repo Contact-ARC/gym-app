@@ -245,6 +245,7 @@ function workoutDetail (s) {
     if (x.rir != null) set.rir = x.rir
     if (x.repsL != null) { set.repsL = x.repsL; set.repsR = x.repsR }
     if (x.climb) set.climb = { ...x.climb }
+    if (x.cardio) set.cardio = { ...x.cardio }
     by[x.exerciseId].push(set)
   }
   const detail = order.map(id => ({

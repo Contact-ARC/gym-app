@@ -23,7 +23,9 @@ export function emptyData () {
       level: 'standard', // standard | beginner (routine track)
       heightCm: null,
       sex: null, // null | male | female: only for the body-fat estimate and DOTS
-      plates: null // plates your gym has (Tools → Plates), in your unit; null = the standard set
+      plates: null, // plates your gym has (Tools → Plates), in your unit; null = the standard set
+      machineUnit: 'weight', // 0.9: weight-stack machines in kg/lb ('weight') or by pin number ('pin')
+      machineSteps: {} // 0.9: { [exerciseId]: one plate on that machine's stack, in your unit }
     },
     settings: {
       routinesUrl: null, // null = use DEFAULT_ROUTINES_URL from config.js
@@ -90,7 +92,12 @@ export function migrate (data) {
   const out = {
     ...base,
     ...data,
-    profile: { ...base.profile, ...(data.profile || {}) },
+    profile: {
+      ...base.profile, ...(data.profile || {}),
+      // 0.9: the machine step joined the weight jumps
+      increments: { ...DEFAULT_INCREMENTS[data.profile?.unit || 'kg'], ...(data.profile?.increments || {}) },
+      machineSteps: { ...(data.profile?.machineSteps || {}) }
+    },
     settings: { ...base.settings, ...(data.settings || {}), reminders: { ...base.settings.reminders, ...(data.settings?.reminders || {}) }, equipment: { ...(data.settings?.equipment || {}) } },
     cache: { ...base.cache, ...(data.cache || {}) },
     machineSettings: { ...(data.machineSettings || {}) },

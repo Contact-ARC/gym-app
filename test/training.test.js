@@ -1,9 +1,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  estimate1RM, loadForReps, roundToIncrement, suggestNext, platesPerSide, warmupSets,
+  estimate1RM, loadForReps, roundToIncrement, suggestNext, platesPerSide, warmupSets, plateWarmups,
   loadableAround, isLoadable, snapToPlates, platesFor, warmupKind, warmupSize,
-  detectPRs, compareVersions, pickActiveRoutine, convertLoad, routineWeek
+  detectPRs, compareVersions, pickActiveRoutine, convertLoad, routineWeek, unitFor, incrementFor, heaviest
 } from '../src/lib/training.js'
 
 const profile = { unit: 'kg', increments: { upper: 2.5, lower: 5, dumbbell: 2, pin: 1 } }
@@ -90,11 +90,33 @@ test('suggest: deload trims ~10%', () => {
   assert.equal(s.load, 36)
 })
 
-test('suggest: machine pins step by 1', () => {
+test('suggest: machine pins step by 1 (if you log pins)', () => {
   const curl = { id: 'machine-leg-curl', logType: 'weight', loadUnit: 'pin' }
-  const s = suggestNext({ item: { ...item, exerciseId: curl.id }, exercise: curl, history: [{ sets: [8, 8, 8].map(() => ({ load: 7, unit: 'pin', reps: 12 })) }], profile })
+  const pinProfile = { ...profile, machineUnit: 'pin' }
+  const s = suggestNext({ item: { ...item, exerciseId: curl.id }, exercise: curl, history: [{ sets: [8, 8, 8].map(() => ({ load: 7, unit: 'pin', reps: 12 })) }], profile: pinProfile })
   assert.equal(s.unit, 'pin')
   assert.equal(s.load, 8)
+})
+
+test('machines are logged in kg: the stack plate is the step, and old pin sets are left out', () => {
+  const curl = { id: 'machine-leg-curl', logType: 'weight', loadUnit: 'pin' }
+  assert.equal(unitFor(curl, profile), 'kg')
+  assert.equal(incrementFor(curl, profile), 5) // default plate on a stack
+  assert.equal(incrementFor(curl, { ...profile, machineSteps: { 'machine-leg-curl': 7 } }), 7) // this machine's plates
+  assert.equal(incrementFor(curl, { ...profile, machineUnit: 'pin' }), 1)
+  // Only pin history: nothing to go on in kg (not "7 kg")
+  const pins = [{ sets: [8, 8, 8].map(() => ({ load: 7, unit: 'pin', reps: 12 })) }]
+  const s = suggestNext({ item: { ...item, exerciseId: curl.id }, exercise: curl, history: pins, profile })
+  assert.equal(s.unit, 'kg')
+  assert.equal(s.load, null)
+  // kg sets after pin ones: used, and the pins aren't records to beat
+  const kg = [{ sets: [8, 8, 8].map(() => ({ load: 35, unit: 'kg', reps: 12 })) }, ...pins]
+  const s2 = suggestNext({ item: { ...item, exerciseId: curl.id }, exercise: curl, history: kg, profile })
+  assert.ok(s2.load >= 35)
+  assert.equal(heaviest([{ load: 12, unit: 'pin', reps: 8 }, { load: 30, unit: 'kg', reps: 8 }], 'kg'), 30)
+  assert.equal(heaviest([{ load: 12, unit: 'pin', reps: 8 }, { load: 30, unit: 'kg', reps: 8 }], 'pin'), 12)
+  const prs = detectPRs({ sets: [{ exerciseId: 'c', load: 40, unit: 'kg', reps: 10 }] }, [{ sets: [{ exerciseId: 'c', load: 12, unit: 'pin', reps: 10 }] }], 'kg')
+  assert.deepEqual(prs, []) // first time in kg is the baseline
 })
 
 test('suggest: timed hold builds toward the top of the range', () => {
@@ -345,7 +367,39 @@ test('next-set advice on a barbell stays loadable and within its limits', () => 
 
 test('barbell warm-ups only use loadable weights', () => {
   const w = warmupSets(100, 2.5, 20, few)
-  assert.deepEqual(w.map(s => s.load), [20, 60, 70])
+  assert.deepEqual(w.map(s => s.load), [20, 60]) // 20 + 20 a side: one 20 for the warm-up
+})
+
+test('bar warm-ups use the plates of the working weight, with the fewest changes', () => {
+  const P = [25, 20, 15, 10, 5, 2.5, 1.25]
+  const side = (r) => r.sets.map(s => [s.load, s.perSide.join('+'), s.add.join('+'), s.remove.join('+')])
+  // 70 kg: 15 + 10 a side, not a single 25 — warm up with the 10, swap it for the 15, put the 10 back
+  const p70 = plateWarmups(70, 20, P, 'full')
+  assert.deepEqual(side(p70), [[20, '', '', ''], [40, '10', '10', ''], [50, '15', '15', '10']])
+  assert.deepEqual([p70.final.load, p70.final.perSide, p70.final.add], [70, [15, 10], [10]])
+  // 100 kg: 40/60/80% exactly, never more than one plate off at a time
+  const p100 = plateWarmups(100, 20, P, 'full')
+  assert.deepEqual(p100.sets.map(s => s.load), [20, 40, 60, 80])
+  assert.deepEqual(p100.final.perSide, [20, 10, 10])
+  // Everything on the bar at the end is something you used on the way up, or the last addition
+  for (const w of [60, 85, 120, 142.5, 180]) {
+    const p = plateWarmups(w, 20, P, 'light')
+    assert.equal(p.final.load, w)
+    const loads = p.sets.map(s => s.load)
+    assert.ok(loads.every((l, i) => l < w && (i === 0 || l > loads[i - 1])), `ramp for ${w}`)
+    for (const s of p.sets) {
+      const fin = [...p.final.perSide]
+      for (const x of s.perSide) { const i = fin.indexOf(x); assert.ok(i >= 0, `warm-up plate ${x} for ${w} is in the final stack`); fin.splice(i, 1) }
+    }
+  }
+  // Light work: one or two steps; feeler: one
+  assert.equal(plateWarmups(70, 20, P, 'feeler').sets.length, 1)
+  // EZ bar: the bar isn't counted — 20 kg is 10 a side, the bar on its own first
+  const ez = plateWarmups(20, 0, P, 'full', { hasBar: true })
+  assert.deepEqual(ez.sets.map(s => [s.load, s.perSide.join('+')]), [[0, ''], [10, '5']])
+  assert.deepEqual(ez.final.perSide, [5, 5])
+  // Plates that can't make it: null, so the percentages are used
+  assert.equal(plateWarmups(70, 20, [], 'full'), null)
 })
 
 // ── Warm-ups: who gets one, and how big ──
@@ -391,8 +445,8 @@ test('warm-up sets: light ramp, feeler, dumbbell floor, barbell fallback', () =>
   assert.deepEqual(warmupSets(30, 2, 0, null, 'full').map(s => [s.load, s.reps]), [[12, 8], [18, 5], [24, 3]])
   assert.deepEqual(warmupSets(3, 2, 0, null, 'feeler'), []) // under the lightest dumbbell
   // A light barbell lift: the bar itself
-  assert.deepEqual(warmupSets(30, 2.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'feeler').map(s => s.load), [20])
-  assert.deepEqual(warmupSets(100, 2.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'light').map(s => s.load), [50, 75])
+  assert.deepEqual(warmupSets(30, 2.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'feeler').map(s => s.load), [25])
+  assert.deepEqual(warmupSets(100, 2.5, 20, [25, 20, 15, 10, 5, 2.5, 1.25], 'light').map(s => s.load), [50, 70])
 })
 
 test('alternatives your gym can do: hand-picked first, then the closest muscle match', () => {

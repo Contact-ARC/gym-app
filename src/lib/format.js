@@ -1,12 +1,19 @@
 import { t, tn, locale, i18n } from '../i18n/index.js'
 import { state } from '../store.js'
 import { fmtLoad } from './training.js'
+import { fmtDistance, fmtDuration } from './cardio.js'
 import { planActive, daysBetween } from './routines.js'
 
 export function prescription (item, exercise = null) {
   if (!item) return ''
   const sets = item.sets || 1
   const side = exercise?.perSide ? t('/side') : ''
+  // Cardio: minutes ("20–30 min", or "2 × 10 min")
+  if (item.durationSec && exercise?.logType === 'cardio') {
+    const [lo, hi] = item.durationSec.map(x => Math.round(x / 60))
+    const mins = lo === hi ? t('{n} min', { n: lo }) : t('{n} min', { n: `${lo}–${hi}` })
+    return sets > 1 ? `${sets} × ${mins}` : mins
+  }
   if (item.durationSec) return `${sets} × ${item.durationSec[0]}–${item.durationSec[1]}s${side}`
   if (item.repRange) {
     const [lo, hi] = item.repRange
@@ -129,6 +136,8 @@ export function prText (p, unit) {
       was: t('was {n}', { n: p.prev })
     }
     case 'time': return { main: t('Longest set {n} s', { n: p.value }), was: t('was {n} s', { n: p.prev }) }
+    case 'distance': return { main: t('Farthest {d}', { d: fmtDistance(p.value, unit) }), was: t('was {n}', { n: fmtDistance(p.prev, unit) }) }
+    case 'duration': return { main: t('Longest {d}', { d: fmtDuration(p.value) }), was: t('was {n}', { n: fmtDuration(p.prev) }) }
     case 'grade': return { main: t('Hardest send {g}', { g: p.value }), was: t('was {n}', { n: p.prev }) }
     case 'flash': return { main: t('Hardest flash {g}', { g: p.value }), was: t('was {n}', { n: p.prev }) }
     case 'load': return { main: t('Heaviest set {v}', { v: fmtLoad(p.value, unit) }), was: t('was {n}', { n: fmtLoad(p.prev, unit) }) }
@@ -137,7 +146,7 @@ export function prText (p, unit) {
 }
 
 /** Most telling record first: reps, heaviest, estimated max, time (climbing: hardest send, then flash). */
-export const PR_ORDER = { grade: 0, flash: 1, reps: 0, load: 1, e1rm: 2, time: 3 }
+export const PR_ORDER = { grade: 0, flash: 1, distance: 0, duration: 1, reps: 0, load: 1, e1rm: 2, time: 3 }
 
 /** "12 Dec" from a YYYY-MM-DD key. */
 export function shortDay (key) {
@@ -163,4 +172,24 @@ export function planDaysLine (p) {
   const n = p?.days?.length || 0
   const ex = (p?.days || []).reduce((t, d) => t + (d.items?.length || 0), 0)
   return n === 1 ? tn(ex, '{n} exercise', '{n} exercises') : tn(n, '{n} day', '{n} days')
+}
+
+/** Plates as people say them: "15 + 10", and a long run grouped: "3 × 25 + 10". */
+export function plateText (list = []) {
+  if (list.length <= 4) return list.join(' + ')
+  const groups = []
+  for (const p of list) {
+    const last = groups[groups.length - 1]
+    if (last && last.p === p) last.n++
+    else groups.push({ p, n: 1 })
+  }
+  return groups.map(g => (g.n > 1 ? `${g.n} × ${g.p}` : String(g.p))).join(' + ')
+}
+
+/** What to do to the bar between two warm-ups, per side: "add 10", "take off 10", "swap 10 for 15". */
+export function plateChangeText ({ add = [], remove = [] } = {}) {
+  if (add.length && remove.length) return t('swap {a} for {b}', { a: plateText(remove), b: plateText(add) })
+  if (add.length) return t('add {p}', { p: plateText(add) })
+  if (remove.length) return t('take off {p}', { p: plateText(remove) })
+  return ''
 }

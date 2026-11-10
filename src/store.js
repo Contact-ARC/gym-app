@@ -456,6 +456,8 @@ export function addItemToSession (sessionId, exerciseId) {
   const ex = exercisesById.value[exerciseId]
   const item = ex?.logType === 'climb'
     ? { exerciseId, originalExerciseId: exerciseId, sets: 0, restSec: 180, added: true } // open-ended: log climbs as you go
+    : ex?.logType === 'cardio'
+      ? { exerciseId, originalExerciseId: exerciseId, sets: 1, durationSec: [1200, 1800], restSec: 60, added: true } // 20–30 min
     : ex?.logType === 'time'
       ? { exerciseId, originalExerciseId: exerciseId, sets: 3, durationSec: [30, 45], restSec: 60, added: true }
       : { exerciseId, originalExerciseId: exerciseId, sets: 3, repRange: [8, 12], restSec: 90, added: true }
@@ -517,6 +519,40 @@ export function setMachineSettings (exerciseId, rows) {
   if (clean.length) state.data.machineSettings[exerciseId] = clean
   else delete state.data.machineSettings[exerciseId]
   persist()
+}
+
+// ── Weight-stack machines (0.9: logged in kg/lb) ──
+/** One plate on this machine's stack, in your unit (null: the usual step from Settings). */
+export function setMachineStep (exerciseId, step) {
+  const p = state.data.profile
+  p.machineSteps = { ...(p.machineSteps || {}) }
+  if (step > 0) p.machineSteps[exerciseId] = step
+  else delete p.machineSteps[exerciseId]
+  persist()
+}
+/** How many of your sets of this exercise are logged as pin numbers. */
+export function pinSetCount (exerciseId) {
+  let n = 0
+  for (const s of state.data.sessions) for (const x of s.sets || []) if (x.exerciseId === exerciseId && x.unit === 'pin') n++
+  return n
+}
+/**
+ * Turn this machine's pin sets into weights: pin 1 = `first`, each pin after it adds `step` (both in your unit).
+ * Returns how many sets changed.
+ */
+export function convertPinSets (exerciseId, first, step) {
+  const unit = state.data.profile.unit || 'kg'
+  let n = 0
+  for (const s of state.data.sessions) {
+    for (const x of s.sets || []) {
+      if (x.exerciseId !== exerciseId || x.unit !== 'pin') continue
+      x.load = x.load > 0 ? Math.round((first + (x.load - 1) * step) * 100) / 100 : x.load
+      x.unit = unit
+      n++
+    }
+  }
+  if (n) persist()
+  return n
 }
 
 export function finishSession (sessionId, rating = null) {

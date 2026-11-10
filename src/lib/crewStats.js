@@ -24,7 +24,7 @@ export function recordsBySession (sessions, unit) {
       if (!mine.length) continue
       const pin = mine.some(x => x.unit === 'pin')
       const e = pin ? 0 : bestE1RM(mine, unit)
-      const h = heaviest(mine, unit)
+      const h = heaviest(mine, pin ? 'pin' : unit)
       const t = bestSeconds(mine)
       const b = best[id]
       if (b && ((e > b.e && b.e > 0) || (h > b.h && b.h > 0) || (t > b.t && b.t > 0))) n++

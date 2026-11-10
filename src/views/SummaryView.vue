@@ -184,6 +184,7 @@ import { parseKey } from '../lib/routines.js'
 import { goalTitle } from '../lib/goalText.js'
 import { fmtLoad, unitFor, convertLoad, isWorkSet } from '../lib/training.js'
 import { climbText, climbTotals, climbsIn } from '../lib/climbing.js'
+import { cardioText } from '../lib/cardio.js'
 import { fmtDate, fmtNum, fmtMins, dayTitle, prText, PR_ORDER, sessionTitle } from '../lib/format.js'
 import { shareText } from '../lib/native.js'
 import { drawCard, shareCanvas } from '../lib/shareCard.js'
@@ -264,7 +265,7 @@ function previousSets (id) {
   const h = historyFor(id, session.value.id).find(x => x.date < session.value.startedAt)
   return h ? h.sets.filter(isWorkSet) : null
 }
-const hasPrev = computed(() => sum.value.exercises.some(id => previousSets(id)?.some(s => !s.climb)))
+const hasPrev = computed(() => sum.value.exercises.some(id => previousSets(id)?.some(s => !s.climb && !s.cardio)))
 function signed (n, unitStr) {
   const v = Math.round(Math.abs(n) * 100) / 100
   return `${n > 0 ? '+' : '−'}${unitStr(v)}`
@@ -277,6 +278,8 @@ function deltaOf (s, p) {
     const d = (s.seconds || 0) - (p.seconds || 0)
     if (d) { parts.push(signed(d, v => `${v} s`)); score = d }
   } else {
+    // Last time in pins, now in kg (or the reverse): the numbers can't be compared
+    if (p.load && s.load && (p.unit === 'pin') !== (s.unit === 'pin')) return null
     const pl = p.load && p.unit !== s.unit && s.unit !== 'pin' && p.unit !== 'pin' ? convertLoad(p.load, p.unit, s.unit) : (p.load || 0)
     const dl = Math.round(((s.load || 0) - pl) * 100) / 100
     const dr = (s.reps || 0) - (p.reps || 0)
@@ -292,6 +295,7 @@ function setRows (id) {
   let w = 0
   return session.value.sets.filter(s => s.exerciseId === id).map(s => {
     if (s.climb) { w++; return { id: s.id, warm: false, n: w, text: climbText(s.climb), climb: s.climb.result } }
+    if (s.cardio) { w++; return { id: s.id, warm: false, n: w, text: cardioText(s, state.data.profile.unit) } }
     const warm = !isWorkSet(s)
     const d = warm ? null : deltaOf(s, prev?.[w])
     if (!warm) w++
@@ -320,6 +324,7 @@ const TAGS = { warmup: 'warm-up', drop: 'drop', failure: 'to failure', amrap: 'm
 function setsFor (id) {
   return session.value.sets.filter(s => s.exerciseId === id).map(s => {
     if (s.climb) return climbText(s.climb)
+    if (s.cardio) return cardioText(s, state.data.profile.unit)
     if (s.seconds) return s.load ? t('{load} for {s}s', { load: fmtLoad(s.load, s.unit), s: s.seconds }) : `${s.seconds}s`
     const reps = s.repsL != null && s.repsR != null && s.repsL !== s.repsR ? `${s.repsL}/${s.repsR}` : s.reps
     const tag = TAGS[s.type] ? ` (${t(TAGS[s.type])})` : ''

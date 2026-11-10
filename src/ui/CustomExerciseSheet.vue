@@ -89,7 +89,7 @@ watch(() => props.modelValue, (open) => {
 })
 
 const kindOptions = computed(() => [
-  { label: t('Weight'), value: 'weight' }, { label: t('Pin'), value: 'pin' },
+  { label: t('Weight'), value: 'weight' }, { label: t('Machine'), value: 'pin' },
   { label: t('Bodyweight'), value: 'bodyweight' }, { label: t('Time'), value: 'time' }
 ])
 const equipOptions = computed(() => [

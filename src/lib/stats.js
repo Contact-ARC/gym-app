@@ -161,7 +161,9 @@ export function monthReport (allSessions, month, { unit = 'kg', exercisesById = 
     for (const id of new Set(workSets(s).map(x => x.exerciseId))) {
       const pin = s.sets.find(x => x.exerciseId === id)?.unit === 'pin'
       const mine = s.sets.filter(x => x.exerciseId === id)
-      const e = pin ? heaviest(mine, unit) : bestE1RM(mine, unit)
+      const e = pin ? heaviest(mine, 'pin') : bestE1RM(mine, unit)
+      // Switched this machine from pins to kg this month: start over on the new scale
+      if (byEx[id] && byEx[id].pin !== pin) delete byEx[id]
       if (e > 0) (byEx[id] ||= { pin, points: [] }).points.push(e)
     }
   }

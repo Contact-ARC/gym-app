@@ -2,12 +2,14 @@
 // Text goes through t() so the suggestions follow the app language (English is the key).
 import { t } from '../i18n/index.js'
 import { climbsIn, climbRecords, CLIMB_SET_WEIGHT } from './climbing.js'
+import { cardioRecords, CARDIO_SET_WEIGHT } from './cardio.js'
 
 export const KG_PER_LB = 0.45359237
 
 export const DEFAULT_INCREMENTS = {
-  kg: { upper: 2.5, lower: 5, dumbbell: 2, pin: 1 },
-  lb: { upper: 5, lower: 10, dumbbell: 5, pin: 1 }
+  // machine: one plate on a weight stack (0.9: machines are logged in kg/lb; pin: one position, if you log pins)
+  kg: { upper: 2.5, lower: 5, dumbbell: 2, machine: 5, pin: 1 },
+  lb: { upper: 5, lower: 10, dumbbell: 5, machine: 10, pin: 1 }
 }
 
 export const DEFAULT_PLATES = {
@@ -63,19 +65,32 @@ export function loadForReps (oneRM, reps, rir = 0) {
   return round2(oneRM / ((epley + brzycki) / 2))
 }
 
-/** Smallest load jump for an exercise given the user's profile. */
+/** Weight-stack machines are logged by weight, unless you chose pin numbers (Settings). */
+export const logsPins = (profile) => profile?.machineUnit === 'pin'
+export const isStackMachine = (exercise) => exercise?.loadUnit === 'pin'
+
+/**
+ * Smallest load jump for an exercise given the user's profile. Weight-stack machines: the plate on that
+ * machine's stack (profile.machineSteps[id], set from the machine's settings) or the usual one.
+ */
 export function incrementFor (exercise, profile) {
   const unit = profile?.unit || 'kg'
   const inc = profile?.increments || DEFAULT_INCREMENTS[unit]
-  if (exercise?.loadUnit === 'pin') return inc.pin || 1
+  if (isStackMachine(exercise)) {
+    if (logsPins(profile)) return inc.pin || 1
+    return profile?.machineSteps?.[exercise.id] || inc.machine || DEFAULT_INCREMENTS[unit].machine
+  }
   return inc[exercise?.incrementGroup || 'upper'] || DEFAULT_INCREMENTS[unit].upper
 }
 
 /** The unit a set for this exercise is logged in. */
 export function unitFor (exercise, profile) {
-  if (exercise?.loadUnit === 'pin') return 'pin'
+  if (isStackMachine(exercise) && logsPins(profile)) return 'pin'
   return profile?.unit || 'kg'
 }
+
+/** A set counts toward weights in `toUnit`: pin sets only toward pins, weights only toward weights. */
+export const sameScale = (s, toUnit) => (s?.unit === 'pin') === (toUnit === 'pin')
 
 function mostCommonLoad (sets) {
   const counts = new Map()
@@ -111,13 +126,16 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
   const factor = loadFactor ?? (deload ? 0.9 : 1)
   const why = reason || (deload ? t('Deload week') : t('Lighter day'))
   // Warm-ups and drop sets don't say anything about your working weight
-  history = history.map(h => ({ ...h, sets: h.sets.filter(isWorkSet).filter(x => x.type !== 'drop') })).filter(h => h.sets.length)
   const unit = unitFor(exercise, profile)
+  // Pin numbers say nothing about kg (and the reverse), so only sets on the same scale count
+  const otherScale = history.some(h => h.sets.some(x => x.load != null && x.load > 0 && !sameScale(x, unit)))
+  history = history.map(h => ({ ...h, sets: h.sets.filter(isWorkSet).filter(x => x.type !== 'drop' && (x.load == null || sameScale(x, unit))) })).filter(h => h.sets.length)
   const inc = incrementFor(exercise, profile)
   const logType = exercise?.logType || 'weight'
   // Barbell lifts: suggest totals you can load with your plates (Tools → Plates)
-  const onBar = logType === 'weight' && unit !== 'pin' && isBarbellLift(exercise)
-  const bar = onBar ? (profile?.bar ?? DEFAULT_BAR[unit] ?? 0) : null
+  const setup = logType === 'weight' && unit !== 'pin' ? barSetupFor(exercise, profile) : null
+  const onBar = !!setup
+  const bar = onBar ? setup.bar : null
   const plates = onBar ? platesFor(profile) : null
   /** A lighter weight than `ref` around `value`: loadable on a barbell (or `ref` if nothing lighter is). */
   const lighter = (value, ref) => {
@@ -125,6 +143,18 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
     let v = snapToPlates(value, bar, plates)
     if (v == null || v >= ref - 1e-9) v = snapToPlates(Math.min(value, ref - 0.01), bar, plates, 'down')
     return v == null || v >= ref - 1e-9 ? ref : v
+  }
+
+  // ── Cardio (treadmill) ────────────────────────────────
+  if (logType === 'cardio') {
+    const [lo, hi] = (item?.durationSec || [1200, 1800]).map(x => Math.round(x / 60))
+    const last = history[0]?.sets.find(s => s.cardio)
+    if (!last) return { load: null, reps: null, seconds: lo * 60, unit, kind: 'start', text: t('Start with {n} minutes at a pace you could keep talking at.', { n: lo }) }
+    const mins = Math.round((last.seconds || 0) / 60)
+    if (mins < hi) {
+      return { load: last.load ?? null, reps: null, seconds: Math.min(hi, mins + 5) * 60, unit, kind: 'same', text: t('Last time {n} minutes. Go a bit longer: {m}.', { n: mins, m: Math.min(hi, mins + 5) }) }
+    }
+    return { load: last.load ?? null, reps: null, seconds: hi * 60, unit, kind: 'up', text: t('You did the full {n} minutes. Make it a little harder: faster, steeper or (walking) carry more.', { n: hi }) }
   }
 
   // ── Timed holds/carries ───────────────────────────────
@@ -158,7 +188,9 @@ export function suggestNext ({ item, exercise, history = [], profile, deload = f
   if (!sessions.length) {
     const text = logType === 'bodyweight'
       ? t('No history yet — do {lo}–{hi} reps leaving 1–2 in the tank. Add weight once {hi} is easy.', { lo, hi })
-      : t('No history yet — pick a weight you could lift ~{n} times, then do {lo}–{hi} reps.', { lo, hi, n: hi + 2 })
+      : otherScale && unit !== 'pin'
+        ? t('Your earlier sets here are pin numbers. Pick the weight on the stack you could lift ~{n} times, then do {lo}–{hi} reps.', { lo, hi, n: hi + 2 })
+        : t('No history yet — pick a weight you could lift ~{n} times, then do {lo}–{hi} reps.', { lo, hi, n: hi + 2 })
     return { load: logType === 'bodyweight' ? 0 : null, reps: lo, seconds: null, unit, kind: 'start', text }
   }
 
@@ -409,12 +441,17 @@ const RAMPS = {
 
 /**
  * Warm-up ramp toward a working weight. bar = 0 for dumbbells/machines.
- * With `plates` (barbell lifts), each warm-up is a weight you can load with them.
+ * With `plates` (barbell and EZ bar lifts), the ramp is built from the working weight's own plates
+ * (see plateWarmups); opts: { stepRef, hasBar } for that.
  * kind: 'full' (empty bar + 40/60/80%), 'light' (50/75%) or 'feeler' (one set at ~55%).
  * Dumbbells and machines never go under one weight step (`inc`), the lightest you can pick.
  */
-export function warmupSets (working, inc, bar = 0, plates = null, kind = 'full') {
+export function warmupSets (working, inc, bar = 0, plates = null, kind = 'full', opts = {}) {
   if (!working || working <= 0) return []
+  if (plates && (bar > 0 || opts.hasBar)) {
+    const plan = plateWarmups(working, bar, plates, kind, opts)
+    if (plan) return plan.sets
+  }
   const out = []
   if (kind === 'full' && bar > 0 && working > bar) out.push({ load: bar, reps: 10, label: t('Empty bar') })
   for (const [pct, reps] of RAMPS[kind] || RAMPS.full) {
@@ -432,6 +469,158 @@ export function warmupSets (working, inc, bar = 0, plates = null, kind = 'full')
     out.push({ load: bar, reps: kind === 'feeler' ? 6 : 10, label: t('Empty bar') })
   }
   return out
+}
+
+// ── Warm-ups on a bar, with the plates you'll end up using ──
+// Instead of 40/60/80% (which can leave you with a pile of plates you take off again), the ramp is built
+// from the plates of the working weight: each warm-up is some of them, and the last step adds the rest.
+// 70 kg on a 20 kg bar: 15 + 10 a side, warm up with 10, then 15, then put the 10 back on.
+const PLAN_TARGETS = {
+  full: { 1: [0.6], 2: [0.5, 0.75], 3: [0.4, 0.6, 0.8] },
+  light: { 1: [0.6], 2: [0.5, 0.75] },
+  feeler: { 1: [0.55] }
+}
+const PLAN_REPS = {
+  full: { 1: [5], 2: [6, 3], 3: [8, 5, 3] },
+  light: { 1: [6], 2: [6, 4] },
+  feeler: { 1: [6] }
+}
+// How much each thing costs when picking a plan (lower is better)
+const PLAN_COST = {
+  extraPlate: 1.2, // each plate a side more than the fewest that make the working weight
+  swap: 0.4, // each plate taken off on the way up (a swap is one off, one on)
+  pctOff: 8, // being 10% away from the ideal warm-up costs 0.8
+  missing: 1.8, // each warm-up fewer than the ramp wants
+  none: 2 // no warm-up between the bar and the working weight at all
+}
+const sumCounts = (c, units) => c.reduce((n, k, i) => n + k * units[i], 0)
+const countOf = (c) => c.reduce((a, b) => a + b, 0)
+const moves = (a, b) => a.reduce((n, k, i) => n + Math.abs(k - b[i]), 0)
+
+/** Every way to make `goal` with at most `maxCount` plates (counts per plate size, heaviest first). */
+function plateCombos (goal, units, maxCount, limit = 600) {
+  const out = []
+  const c = new Array(units.length).fill(0)
+  const go = (i, left, used) => {
+    if (out.length >= limit) return
+    if (left === 0) { out.push([...c]); return }
+    if (i >= units.length || used >= maxCount) return
+    const most = Math.min(Math.floor(left / units[i]), maxCount - used)
+    for (let k = most; k >= 0; k--) {
+      c[i] = k
+      go(i + 1, left - k * units[i], used + k)
+    }
+    c[i] = 0
+  }
+  go(0, goal, 0)
+  return out
+}
+
+/**
+ * Warm-ups for a barbell (or EZ bar) lift using only the plates of the working weight.
+ * bar: what the bar weighs (0 for an EZ bar, whose weight isn't counted); hasBar: start with the bar alone.
+ * kind: 'full' | 'light' | 'feeler'. stepRef: roughly how much weight earns another warm-up (30 kg / 65 lb).
+ * Returns null when the plates can't make it (then use warmupSets' percentages), otherwise
+ *   { sets: [{ load, reps, label, perSide, add, remove }], final: { load, perSide, add, remove } }
+ * perSide: plates on each side for that step; add / remove: what to change from the step before.
+ */
+export function plateWarmups (working, bar, plates, kind = 'full', { stepRef = 30, hasBar = bar > 0 } = {}) {
+  if (!working || working <= 0 || !(plates || []).some(p => p > 0)) return null
+  const top = platesPerSide(working, bar, plates)
+  if (top.error || !top.perSide.length) return null
+  const W = top.achieved
+  const ps = [...new Set(plates.filter(p => p > 0).map(p => Math.round(p * PLATE_SCALE)))].sort((a, b) => b - a)
+  const gcd = (a, b) => (b ? gcd(b, a % b) : a)
+  const g = ps.reduce(gcd)
+  const units = ps.map(p => p / g)
+  const toKg = (u) => round2((u * g) / PLATE_SCALE)
+  const goal = top.perSide.reduce((n, p) => n + Math.round(p * PLATE_SCALE) / g, 0)
+  const fewest = top.perSide.length
+  const totalOf = (u) => round2(bar + 2 * toKg(u))
+
+  const want = kind === 'feeler' ? 1 : Math.max(1, Math.min(kind === 'light' ? 2 : 3, Math.round((W - bar) / stepRef)))
+  let best = null
+  for (const combo of plateCombos(goal, units, Math.min(fewest + 3, 8))) {
+    // Every part of this stack that a warm-up could be, by its weight a side
+    const bySum = new Map()
+    const sub = new Array(units.length).fill(0)
+    const walk = (i) => {
+      if (i === units.length) {
+        const u = sumCounts(sub, units)
+        if (u > 0 && u < goal) { if (!bySum.has(u)) bySum.set(u, []); bySum.get(u).push([...sub]) }
+        return
+      }
+      for (let k = 0; k <= combo[i]; k++) { sub[i] = k; walk(i + 1) }
+      sub[i] = 0
+    }
+    walk(0)
+    const sums = [...bySum.keys()].sort((a, b) => a - b)
+    const pct = sums.map(u => totalOf(u) / W)
+    for (let m = Math.min(want, sums.length); m >= 0; m--) {
+      // The m warm-ups closest to the ideal ramp, lightest first (each heavier than the one before)
+      const targets = PLAN_TARGETS[kind]?.[m] || []
+      let pick = []
+      let off = 0
+      if (m) {
+        const n = sums.length
+        const dp = Array.from({ length: m }, () => new Array(n).fill(Infinity))
+        const from = Array.from({ length: m }, () => new Array(n).fill(-1))
+        for (let i = 0; i < n; i++) dp[0][i] = Math.abs(pct[i] - targets[0])
+        for (let j = 1; j < m; j++) {
+          for (let i = j; i < n; i++) {
+            for (let k = j - 1; k < i; k++) {
+              const v = dp[j - 1][k] + Math.abs(pct[i] - targets[j])
+              if (v < dp[j][i]) { dp[j][i] = v; from[j][i] = k }
+            }
+          }
+        }
+        let end = -1
+        for (let i = 0; i < n; i++) if (end < 0 || dp[m - 1][i] < dp[m - 1][end]) end = i
+        off = dp[m - 1][end]
+        for (let j = m - 1, i = end; j >= 0; i = from[j][i], j--) pick.unshift(sums[i])
+      }
+      // Which plates make each warm-up, changing as few as possible from one step to the next
+      const steps = pick.map(u => bySum.get(u))
+      const empty = new Array(units.length).fill(0)
+      let layer = [{ c: empty, cost: 0, path: [] }]
+      for (const options of steps) {
+        layer = options.map(c => {
+          let b = null
+          for (const p of layer) { const v = p.cost + moves(p.c, c); if (!b || v < b.cost) b = { c, cost: v, path: [...p.path, c] } }
+          return b
+        })
+      }
+      let path = null
+      for (const p of layer) { const v = p.cost + moves(p.c, combo); if (!path || v < path.cost) path = { cost: v, path: p.path } }
+      const swaps = (path.cost - countOf(combo)) / 2
+      const cost = PLAN_COST.extraPlate * (countOf(combo) - fewest) + PLAN_COST.swap * 2 * swaps +
+        PLAN_COST.pctOff * off + PLAN_COST.missing * (want - m) + (m === 0 ? PLAN_COST.none : 0)
+      // On a tie: fewer plates, then heavier ones (combos come heaviest first)
+      if (!best || cost < best.cost - 1e-9) best = { cost, combo, m, pick, path: path.path }
+    }
+  }
+  if (!best) return null
+
+  const platesIn = (c) => c.flatMap((k, i) => new Array(k).fill(toKg(units[i])))
+  const diff = (a, b) => ({
+    add: b.flatMap((k, i) => new Array(Math.max(0, k - a[i])).fill(toKg(units[i]))),
+    remove: a.flatMap((k, i) => new Array(Math.max(0, k - b[i])).fill(toKg(units[i])))
+  })
+  const sets = []
+  if (kind === 'full' && hasBar && W > bar) sets.push({ load: round2(bar), reps: 10, label: t('Empty bar'), perSide: [], add: [], remove: [] })
+  let prev = new Array(units.length).fill(0)
+  best.path.forEach((c, j) => {
+    const load = totalOf(sumCounts(c, units))
+    sets.push({
+      load, reps: PLAN_REPS[kind]?.[best.m]?.[j] ?? 5,
+      label: kind === 'feeler' ? '' : `${Math.round((load / W) * 100)}%`,
+      perSide: platesIn(c), ...diff(prev, c)
+    })
+    prev = c
+  })
+  // Nothing fits between the bar and the working weight: the bar is the warm-up
+  if (!sets.length && hasBar && W > bar) sets.push({ load: round2(bar), reps: kind === 'feeler' ? 6 : 10, label: t('Empty bar'), perSide: [], add: [], remove: [] })
+  return { sets, final: { load: W, perSide: platesIn(best.combo), ...diff(prev, best.combo) } }
 }
 
 /** How big a warm-up an exercise's working sets call for, ignoring what you've done before it. */
@@ -494,11 +683,11 @@ export function sessionVolume (session, toUnit) {
   return round2((session.sets || []).reduce((t, s) => t + setVolume(s, toUnit), 0))
 }
 
-/** Best e1RM among sets (in `toUnit`; pin sets stay in pins). */
+/** Best e1RM among sets (in `toUnit`; with toUnit 'pin', only pin sets, in pins). */
 export function bestE1RM (sets, toUnit) {
   let best = 0
   for (const s of sets) {
-    if (!isWorkSet(s) || !s.reps || s.load == null || s.load <= 0) continue
+    if (!isWorkSet(s) || !s.reps || s.load == null || s.load <= 0 || !sameScale(s, toUnit)) continue
     const load = s.unit === 'pin' ? s.load : convertLoad(s.load, s.unit, toUnit)
     best = Math.max(best, estimate1RM(load, s.reps, s.rir || 0))
   }
@@ -508,7 +697,7 @@ export function bestE1RM (sets, toUnit) {
 export function heaviest (sets, toUnit) {
   let best = 0
   for (const s of sets) {
-    if (!isWorkSet(s) || s.load == null || !s.reps) continue
+    if (!isWorkSet(s) || s.load == null || !s.reps || !sameScale(s, toUnit)) continue
     best = Math.max(best, s.unit === 'pin' ? s.load : convertLoad(s.load, s.unit, toUnit))
   }
   return round2(best)
@@ -528,7 +717,7 @@ function loadIn (s, toUnit) {
 export function repRecords (sets, toUnit) {
   const pts = []
   for (const s of sets) {
-    if (!isWorkSet(s) || !s.reps) continue
+    if (!isWorkSet(s) || !s.reps || (s.load != null && !sameScale(s, toUnit))) continue
     pts.push({ load: loadIn(s, toUnit), reps: s.reps, date: s.date || null })
   }
   pts.sort((a, b) => b.load - a.load || b.reps - a.reps || String(a.date).localeCompare(String(b.date)))
@@ -565,18 +754,25 @@ export function detectPRs (session, previous, toUnit) {
       prs.push(...climbRecords(climbsIn(mine), climbsIn(before), id))
       continue
     }
-    // Machine pins aren't real weights, so an "estimated max" in pins means nothing
+    // Treadmill and other cardio: farthest and longest
+    if (mine.some(s => s.cardio)) {
+      prs.push(...cardioRecords(mine, before, id))
+      continue
+    }
+    // Machine pins aren't real weights, so an "estimated max" in pins means nothing. Sets on the other scale
+    // (pins from before you switched machines to kg) aren't compared at all.
     const pin = mine.some(s => s.unit === 'pin')
-    const e = pin ? 0 : bestE1RM(mine, toUnit); const eb = pin ? 0 : bestE1RM(before, toUnit)
+    const u = pin ? 'pin' : toUnit
+    const e = pin ? 0 : bestE1RM(mine, u); const eb = pin ? 0 : bestE1RM(before, u)
     if (e > eb && eb > 0) prs.push({ exerciseId: id, type: 'e1rm', value: e, prev: eb })
-    const h = heaviest(mine, toUnit); const hb = heaviest(before, toUnit)
+    const h = heaviest(mine, u); const hb = heaviest(before, u)
     if (h > hb && hb > 0) prs.push({ exerciseId: id, type: 'load', value: h, prev: hb })
     // Rep record: heaviest set that beat the best reps ever done at that weight or more
     let rep = null
     for (const s of mine) {
-      if (!s.reps) continue
-      const l = loadIn(s, toUnit)
-      const prevBest = Math.max(0, ...before.filter(b => b.reps && loadIn(b, toUnit) >= l - 0.01).map(b => b.reps))
+      if (!s.reps || (s.load != null && !sameScale(s, u))) continue
+      const l = loadIn(s, u)
+      const prevBest = Math.max(0, ...before.filter(b => b.reps && (b.load == null || sameScale(b, u)) && loadIn(b, u) >= l - 0.01).map(b => b.reps))
       if (prevBest > 0 && s.reps > prevBest && (!rep || l > rep.load || (l === rep.load && s.reps > rep.value))) {
         rep = { exerciseId: id, type: 'reps', value: s.reps, prev: prevBest, load: l }
       }
@@ -596,7 +792,7 @@ export function setsPerMuscle (sessions, exercisesById) {
       if (!isWorkSet(s) || (!s.reps && !s.seconds && !s.climb)) continue
       const ex = exercisesById[s.exerciseId]
       if (!ex) continue
-      const w = s.climb ? CLIMB_SET_WEIGHT : 1
+      const w = s.climb ? CLIMB_SET_WEIGHT : s.cardio ? CARDIO_SET_WEIGHT : 1
       for (const m of ex.primary || []) out[m] = (out[m] || 0) + w
       for (const m of ex.secondary || []) out[m] = (out[m] || 0) + 0.5 * w
     }
@@ -631,6 +827,7 @@ export const EQUIPMENT = {
   ball: 'Exercise ball',
   battlerope: 'Battle rope',
   rower: 'Rowing machine',
+  treadmill: 'Treadmill',
   hangboard: 'Hangboard'
 }
 // First match wins for each piece of equipment, so the specific machines come first
@@ -638,7 +835,7 @@ const EQUIP_RULES = [
   [/hip (ab|ad)duction machine/, 'hipmachine'], [/leg extension/, 'legext'], [/pec deck/, 'pecdeck'],
   [/(chest|shoulder) press machine/, 'pressmachine'], [/hack squat/, 'hacksquat'], [/seated calf/, 'calfmachine'],
   [/assisted pull-up/, 'assisted'], [/back extension/, 'backext'], [/preacher/, 'preacher'], [/dip bars/, 'dips'],
-  [/hangboard/, 'hangboard'], [/battle rope/, 'battlerope'], [/medicine ball(?! or)|slam ball/, 'medball'], [/exercise ball/, 'ball'], [/rowing machine/, 'rower'],
+  [/hangboard/, 'hangboard'], [/battle rope/, 'battlerope'], [/medicine ball(?! or)|slam ball/, 'medball'], [/exercise ball/, 'ball'], [/rowing machine/, 'rower'], [/treadmill/, 'treadmill'],
   [/smith/, 'smith'], [/leg press/, 'legpress'], [/leg curl/, 'legcurl'],
   [/ez bar/i, 'ezbar'], [/barbell|bar pad/, 'barbell'], [/rack/, 'rack'], [/bench/, 'bench'],
   [/dumbbell|kettlebell/, 'dumbbells'], [/cable|pulldown|row station|functional trainer/, 'cable'],
@@ -744,6 +941,29 @@ export function swapOptions ({ current, original = null, byId, available, usage 
 }
 
 /** Is this loaded on a straight barbell, so a plate breakdown makes sense? */
+/** EZ bar lifts: you load plates on it, but its weight isn't counted (they vary a lot, and few are marked). */
+export function isEzBar (exercise) {
+  if (!exercise || exercise.loadUnit === 'pin') return false
+  return /\bez[ -]?bar\b/i.test((exercise.equipment || []).join(' '))
+}
+
+/**
+ * How a lift is loaded with plates, or null (dumbbells, machines…):
+ *   barbell → { bar: your bar's weight, hasBar: true, ez: false }
+ *   EZ bar  → { bar: 0, hasBar: true, ez: true } — the weight you log is the plates only
+ */
+export function barSetupFor (exercise, profile) {
+  if (isBarbellLift(exercise)) {
+    const unit = profile?.unit || 'kg'
+    return { bar: profile?.bar ?? DEFAULT_BAR[unit] ?? 0, hasBar: true, ez: false }
+  }
+  if (isEzBar(exercise)) return { bar: 0, hasBar: true, ez: true }
+  return null
+}
+
+/** Roughly how much working weight earns another warm-up step on a bar. */
+export const warmStepFor = (unit) => (unit === 'lb' ? 65 : 30)
+
 export function isBarbellLift (exercise) {
   if (!exercise || exercise.loadUnit === 'pin') return false
   const eq = (exercise.equipment || []).join(' ').toLowerCase()

@@ -148,9 +148,22 @@
                 :aria-pressed="warmDone(k)" @click="toggleWarm(k)"
               >
                 <span class="tick"><Icon v-if="warmDone(k)" name="checkBold" :size="16" /></span>
-                <span class="grow t-num wv">{{ w.text || fmtLoad(w.load, unit) }} × {{ w.reps }}</span>
+                <span class="grow wtxt">
+                  <span class="t-num wv">{{ w.text || fmtLoad(w.load, unit) }} × {{ w.reps }}</span>
+                  <span v-if="w.plates || w.change" class="t-small t-muted wplates t-num">
+                    {{ w.plates }}<template v-if="w.plates && w.change"> · </template><b v-if="w.change">{{ w.change }}</b>
+                  </span>
+                </span>
                 <span class="t-tiny t-muted">{{ w.label }}</span>
               </button>
+              <div v-if="warmFinal" class="warm-row final">
+                <span class="tick"><Icon name="up" :size="16" /></span>
+                <span class="grow wtxt">
+                  <span class="t-num wv">{{ fmtLoad(warmFinal.load, unit) }}</span>
+                  <span class="t-small t-muted wplates t-num">{{ warmFinal.plates }}<template v-if="warmFinal.change"> · <b>{{ warmFinal.change }}</b></template></span>
+                </span>
+                <span class="t-tiny t-muted">{{ t('working sets') }}</span>
+              </div>
               <p class="t-tiny t-muted warm-foot">
                 <template v-if="warmKind === 'feeler'">{{ t('Your muscles are warm, but this is their first time with weight today.') + ' ' }}</template>
                 {{ unit === 'pin' ? t("Warm-ups aren't counted in your records.") : t("Based on {load}. Warm-ups aren't counted in your records.", { load: fmtLoad(warmBase, unit) }) }}
@@ -185,9 +198,13 @@
             <div v-if="showLoad">
               <Stepper v-model="draft.load" :label="loadLabel" :unit="unitText" :step="inc" :min="0" :decimals="unit !== 'pin'" />
               <p v-if="plateLine" class="t-small t-muted plate-line t-num">{{ plateLine }}</p>
+              <button v-if="oldPins" class="link-btn t-small pins-note" @click="msOpen = true">
+                <Icon name="info" :size="16" />{{ t('Your earlier sets here are pin numbers. Turn them into {unit}', { unit }) }}
+              </button>
             </div>
 
-            <Stepper v-if="isTimed" v-model="draft.seconds" :label="t('Seconds')" :step="5" :min="0" :format="(v) => String(Math.round(v))" />
+            <CardioFields v-if="isCardio" :c="draft" :unit="profile.unit" />
+            <Stepper v-else-if="isTimed" v-model="draft.seconds" :label="t('Seconds')" :step="5" :min="0" :format="(v) => String(Math.round(v))" />
             <div v-else-if="split" class="split">
               <Stepper v-model="draft.repsL" :label="t('Left reps')" :step="1" :min="0" size="md" />
               <Stepper v-model="draft.repsR" :label="t('Right reps')" :step="1" :min="0" size="md" />
@@ -197,7 +214,8 @@
               {{ split ? t('Same reps on both sides') : t('Different reps on each side?') }}
             </button>
 
-            <div v-if="isTimed" class="hold">
+            <div v-if="isCardio" />
+            <div v-else-if="isTimed" class="hold">
               <button class="btn btn-soft btn-block" @click="toggleHold">
                 <Icon :name="hold.running ? 'stop' : 'play'" />
                 {{ hold.running ? t('Stop at {n} s', { n: hold.elapsed }) : t('Time it') }}
@@ -328,7 +346,8 @@
     <Sheet v-model="editOpen" :title="editing ? setName(editing) : ''">
       <div v-if="editing" class="inputs">
         <Stepper v-if="showLoad" v-model="editDraft.load" :label="loadLabel" :unit="unitText" :step="inc" :min="0" :decimals="unit !== 'pin'" size="md" />
-        <Stepper v-if="isTimed" v-model="editDraft.seconds" :label="t('Seconds')" :step="5" :min="0" size="md" />
+        <CardioFields v-if="isCardio" :c="editDraft" :unit="profile.unit" size="md" />
+        <Stepper v-else-if="isTimed" v-model="editDraft.seconds" :label="t('Seconds')" :step="5" :min="0" size="md" />
         <div v-else-if="editDraft.repsL != null" class="split">
           <Stepper v-model="editDraft.repsL" :label="t('Left reps')" :step="1" :min="0" size="md" />
           <Stepper v-model="editDraft.repsR" :label="t('Right reps')" :step="1" :min="0" size="md" />
@@ -404,6 +423,8 @@ import ExercisePicker from '../ui/ExercisePicker.vue'
 import ClimbPanel from '../ui/ClimbPanel.vue'
 import SwapSheet from '../ui/SwapSheet.vue'
 import MachineSettingsSheet from '../ui/MachineSettingsSheet.vue'
+import CardioFields from '../ui/CardioFields.vue'
+import { cardioOf, cardioText, cardioStart } from '../lib/cardio.js'
 import ExerciseDetails from '../ui/ExerciseDetails.vue'
 import { plateStyle } from '../ui/plates.js'
 import { toast, hideToast } from '../ui/toast.js'
@@ -413,10 +434,10 @@ import {
 } from '../store.js'
 import { t, tn, tx } from '../i18n/index.js'
 import {
-  unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, isBarbellLift, platesPerSide, warmupSets, platesFor, nextSetAdjust,
-  warmupKind, warmupSize, isWorkSet, bestE1RM, heaviest, canDoAtGym
+  unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, platesPerSide, warmupSets, platesFor, nextSetAdjust,
+  warmupKind, warmupSize, isWorkSet, bestE1RM, heaviest, canDoAtGym, barSetupFor, plateWarmups, warmStepFor, isStackMachine
 } from '../lib/training.js'
-import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle } from '../lib/format.js'
+import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle, plateText, plateChangeText } from '../lib/format.js'
 import { effectiveRest, supersetNext } from '../lib/supersets.js'
 import { rest, startRest, stopRest, addRest, notifyProblem } from '../lib/restTimer.js'
 import { tap, buzz, keepAwake, openNotificationSettings } from '../lib/native.js'
@@ -531,12 +552,15 @@ function removeSet () {
 const profile = computed(() => state.data.profile)
 const unit = computed(() => unitFor(ex.value, profile.value))
 const inc = computed(() => incrementFor(ex.value, profile.value))
-const isTimed = computed(() => !!item.value?.durationSec)
+const isTimed = computed(() => !!item.value?.durationSec || isCardio.value)
+const isCardio = computed(() => ex.value?.logType === 'cardio')
 const isBodyweight = computed(() => ex.value?.logType === 'bodyweight')
 const showLoad = computed(() => !isTimed.value || !!ex.value?.loadable)
 const loadLabel = computed(() => {
   if (unit.value === 'pin') return t('Pin')
   if (isBodyweight.value) return t('Added weight')
+  if (barSetup.value?.ez) return t('Plates, not the bar')
+  if (isCardio.value) return t('Weight you carry')
   if (ex.value?.incrementGroup === 'dumbbell') return t('Each dumbbell')
   return t('Weight')
 })
@@ -547,6 +571,9 @@ const groupMates = computed(() => items.value
   .filter(({ it, i }) => it.group && it.group === item.value?.group && i !== current.value)
   .map(({ it }) => it.exerciseId))
 const machine = computed(() => state.data.machineSettings[item.value?.exerciseId] || [])
+// A machine you used to log by pin, now logged in kg: offer to convert the old sets
+const oldPins = computed(() => isStackMachine(ex.value) && unit.value !== 'pin' &&
+  historyFor(item.value.exerciseId, session.value.id).some(h => h.sets.some(s => s.unit === 'pin')))
 
 const targetLine = computed(() => {
   const p = session.value?.plan
@@ -570,6 +597,7 @@ function repsText (s) {
   return String(s.reps)
 }
 function setText (s) {
+  if (s.cardio) return cardioText(s, profile.value.unit)
   if (s.seconds) return s.load ? t('{load} for {s}s', { load: s.load, s: s.seconds }) : `${s.seconds}s`
   const load = s.unit === 'pin' ? `P${s.load}` : (s.load ? String(s.load) : t('BW'))
   return `${load} × ${repsText(s)}`
@@ -640,11 +668,19 @@ const draft = computed(() => {
       repsR: last?.repsR ?? null,
       seconds: last ? last.seconds : (s.seconds ?? item.value?.durationSec?.[0] ?? null),
       rir: null,
-      type: null
+      type: null,
+      // Cardio: speed (km/h) and incline from your last bout, or a sensible start
+      ...(isCardio.value ? cardioDraft(last) : {})
     }
   }
   return drafts[key]
 })
+function cardioDraft (last) {
+  let prev = last?.cardio ? last : null
+  if (!prev) for (const h of historyFor(item.value.exerciseId, session.value.id)) { prev = h.sets.find(x => x.cardio); if (prev) break }
+  const start = cardioStart(ex.value)
+  return { speed: prev?.cardio.speed ?? start.speed, incline: prev?.cardio.incline ?? start.incline }
+}
 const split = computed(() => !!ex.value?.perSide && draft.value.repsL != null)
 function toggleSplit () {
   const d = draft.value
@@ -652,15 +688,22 @@ function toggleSplit () {
   else { d.repsL = d.reps; d.repsR = d.reps }
 }
 
-// Plate breakdown for straight-bar lifts
+// Barbell and EZ bar lifts: how they're loaded (null for dumbbells, machines…)
+const barSetup = computed(() => (ex.value?.logType === 'weight' && unit.value !== 'pin' ? barSetupFor(ex.value, profile.value) : null))
+// Plate breakdown for the weight you're about to lift
 const plateLine = computed(() => {
-  if (!isBarbellLift(ex.value) || draft.value.load == null) return ''
-  const bar = profile.value.bar || 0
+  const b = barSetup.value
+  if (!b || draft.value.load == null) return ''
+  const bar = b.bar
   if (draft.value.load < bar) return t('Lighter than the {w} bar', { w: `${bar} ${unit.value}` })
-  const r = platesPerSide(draft.value.load, bar, platesFor(profile.value))
+  // The working weight after a warm-up: the same plates the warm-up built up to
+  const plan = warmPlan.value
+  const r = plan && Math.abs(plan.final.load - draft.value.load) < 0.001
+    ? { perSide: plan.final.perSide, remainder: 0, achieved: plan.final.load }
+    : platesPerSide(draft.value.load, bar, platesFor(profile.value))
   if (!r.perSide.length) return t('Just the bar')
   const extra = Math.abs(r.remainder) > 0.001 ? t(' (closest: {w})', { w: fmtLoad(r.achieved, unit.value) }) : ''
-  return t('Each side: {plates}', { plates: r.perSide.join(' + ') }) + extra
+  return (b.ez ? t('Each side: {plates}, plus the bar', { plates: plateText(r.perSide) }) : t('Each side: {plates}', { plates: plateText(r.perSide) })) + extra
 })
 
 // ── Warm-ups ───────────────────────────────────────────────
@@ -691,9 +734,25 @@ const warmKind = computed(() => {
   return warmupKind({ exercise: ex.value, item: item.value, before: doneBefore.value })
 })
 const warmBase = computed(() => planLogged(current.value)[0]?.load ?? draft.value.load)
+// Bar lifts: warm up with the plates of the working weight (see plateWarmups)
+const warmPlan = computed(() => {
+  const kind = warmKind.value
+  const b = barSetup.value
+  if (!kind || !b || !warmBase.value) return null
+  return plateWarmups(warmBase.value, b.bar, platesFor(profile.value), kind, { stepRef: warmStepFor(unit.value), hasBar: b.hasBar })
+})
 const warmups = computed(() => {
   const kind = warmKind.value
   if (!kind) return []
+  if (warmPlan.value) {
+    return warmPlan.value.sets.map(w => ({
+      ...w,
+      // The EZ bar's own weight isn't counted, so its bar-only warm-up is "0 kg": say what it is
+      text: barSetup.value.ez && !w.load ? t('Bar only') : '',
+      plates: w.perSide.length ? t('{p} a side', { p: plateText(w.perSide) }) : '',
+      change: plateChangeText(w)
+    }))
+  }
   // Pin-stack machines have no real weight: describe it
   if (unit.value === 'pin') {
     const lighter = t('A few pins lighter')
@@ -703,9 +762,13 @@ const warmups = computed(() => {
   }
   const w = warmBase.value
   if (!w) return []
-  const onBar = isBarbellLift(ex.value)
-  const bar = onBar ? (profile.value.bar || 0) : 0
-  return warmupSets(w, inc.value, bar, onBar && bar > 0 ? platesFor(profile.value) : null, kind)
+  return warmupSets(w, inc.value, 0, null, kind)
+})
+// After the last warm-up: what goes on for the working sets
+const warmFinal = computed(() => {
+  const f = warmPlan.value?.final
+  if (!f) return null
+  return { load: f.load, plates: t('{p} a side', { p: plateText(f.perSide) }), change: plateChangeText(f) }
 })
 const showWarmup = computed(() => !!warmKind.value && warmups.value.length > 0)
 function toggleWarmup () {
@@ -767,6 +830,7 @@ function logNow () {
     reps: isTimed.value ? null : (split.value ? Math.min(d.repsL ?? 0, d.repsR ?? 0) : d.reps),
     ...sideReps,
     seconds: isTimed.value ? d.seconds : null,
+    ...(isCardio.value ? { cardio: cardioOf(d) } : {}),
     rir: isTimed.value ? null : d.rir,
     ...(d.type ? { type: d.type } : {})
   })
@@ -780,7 +844,7 @@ function logNow () {
       targetRir: session.value.plan?.deload ? 3 : (session.value.plan?.rir ?? 2),
       inc: inc.value, unit: unit.value, logType: ex.value?.logType,
       // Barbell lifts: only weights you can load with your plates
-      ...(isBarbellLift(ex.value) ? { bar: profile.value.bar || 0, plates: platesFor(profile.value) } : {})
+      ...(barSetup.value ? { bar: barSetup.value.bar, plates: platesFor(profile.value) } : {})
     })
     if (adj) {
       d.load = adj.load
@@ -862,9 +926,9 @@ function logNow () {
 const prSets = computed(() => {
   const out = new Set()
   if (!item.value) return out
-  const toUnit = profile.value.unit
-  const hist = historyFor(item.value.exerciseId, session.value.id).flatMap(h => h.sets).filter(isWorkSet)
   const pin = unit.value === 'pin'
+  const toUnit = pin ? 'pin' : profile.value.unit // pins and weights are never compared
+  const hist = historyFor(item.value.exerciseId, session.value.id).flatMap(h => h.sets).filter(isWorkSet)
   let bestE = pin ? 0 : bestE1RM(hist, toUnit)
   let bestH = heaviest(hist, toUnit)
   if (!bestE && !bestH) return out // first time: that's the baseline, not a record
@@ -915,19 +979,23 @@ function startManualRest () {
 // ── Edit a logged set ──────────────────────────────────────
 const editOpen = ref(false)
 const editing = ref(null)
-const editDraft = reactive({ load: null, reps: null, repsL: null, repsR: null, seconds: null, rir: null, type: null })
+const editDraft = reactive({ load: null, reps: null, repsL: null, repsR: null, seconds: null, rir: null, type: null, speed: null, incline: null })
 const confirmingDelete = ref(false)
 function openEdit (s) {
   // A set of the other exercise in a superset: switch to it, so the weight unit and steps match
   if (s.itemIndex != null && s.itemIndex !== current.value) go(s.itemIndex, 'swap')
   confirmingDelete.value = false
   editing.value = s
-  Object.assign(editDraft, { load: s.load, reps: s.reps, repsL: s.repsL ?? null, repsR: s.repsR ?? null, seconds: s.seconds, rir: s.rir ?? null, type: s.type ?? null })
+  Object.assign(editDraft, {
+    load: s.load, reps: s.reps, repsL: s.repsL ?? null, repsR: s.repsR ?? null, seconds: s.seconds, rir: s.rir ?? null, type: s.type ?? null,
+    speed: s.cardio?.speed ?? null, incline: s.cardio?.incline ?? null
+  })
   editOpen.value = true
 }
 // Close first, then save: the sheet reacts at once whatever the phone's storage is doing
 function saveEdit () {
-  const patch = { ...editDraft }
+  const { speed, incline, ...patch } = editDraft
+  if (editing.value.cardio) patch.cardio = cardioOf({ seconds: patch.seconds, speed, incline })
   if (patch.repsL != null && patch.repsR != null) patch.reps = Math.min(patch.repsL, patch.repsR)
   if (!patch.type) { delete patch.type; delete editing.value.type }
   editOpen.value = false
@@ -983,6 +1051,12 @@ function swipeEnd (e) {
 const swapOpen = ref(false)
 const addOpen = ref(false)
 const msOpen = ref(false)
+// Converted this machine's old pin sets (or changed its plate): start the weight from the new numbers
+watch(msOpen, (open) => {
+  if (open) return
+  const key = `${current.value}:${item.value?.exerciseId}`
+  if (drafts[key] && drafts[key].load == null && !planLogged(current.value).length) { delete suggCache[key]; delete drafts[key] }
+})
 const notInGym = computed(() => !!ex.value && !canDoAtGym(ex.value, state.data.settings.equipment))
 function resetSuggestions () {
   Object.keys(suggCache).forEach(k => delete suggCache[k])
@@ -1196,6 +1270,12 @@ function discard () {
 .warm-row.on .tick { background: var(--ok); border-color: var(--ok); }
 .warm-row.on .wv { color: var(--ink-3); text-decoration: line-through; }
 .wv { font-size: 18px; font-weight: 600; }
+.wtxt { display: grid; padding: 6px 0; }
+.wplates b { color: var(--ink-2); font-weight: 600; }
+.warm-row.final { cursor: default; }
+.warm-row.final:active { background: none; }
+.warm-row.final .tick { border-style: dashed; color: var(--ink-3); }
+.warm-row.on .wplates { opacity: 0.6; }
 .warm-foot { padding: 4px 8px 0; }
 
 .sets { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
@@ -1231,6 +1311,7 @@ function discard () {
 
 .inputs { display: flex; flex-direction: column; gap: 18px; margin-top: 22px; }
 .plate-line { text-align: center; margin-top: 6px; }
+.pins-note { display: flex; align-items: center; gap: 6px; margin: 6px auto 0; text-align: left; }
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .link-btn { align-self: center; margin-top: -8px; padding: 6px 10px; color: var(--ink-2); text-decoration: underline; text-underline-offset: 3px; }
 .rir-label { text-align: left; }

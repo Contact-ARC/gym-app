@@ -155,6 +155,7 @@ import { toast } from '../ui/toast.js'
 import ExerciseDetails from '../ui/ExerciseDetails.vue'
 import ClimbProgress from '../ui/ClimbProgress.vue'
 import MachineSettingsSheet from '../ui/MachineSettingsSheet.vue'
+import { cardioTotals, cardioText, fmtDistance, fmtDuration } from '../lib/cardio.js'
 import CustomExerciseSheet from '../ui/CustomExerciseSheet.vue'
 import Sheet from '../ui/Sheet.vue'
 import { state, exercisesById, historyFor, setExerciseNote, hideCustomExercise, days, suggestionFor } from '../store.js'
@@ -171,6 +172,8 @@ const ct = useChartTheme()
 const ex = computed(() => exercisesById.value[route.params.id])
 const unit = computed(() => unitFor(ex.value, state.data.profile))
 const myUnit = computed(() => state.data.profile.unit)
+// What sets are compared in: pins if you log this machine by pin, otherwise your unit (old pin sets left out)
+const scale = computed(() => (unit.value === 'pin' ? 'pin' : myUnit.value))
 const machine = computed(() => state.data.machineSettings[ex.value?.id] || [])
 const msOpen = ref(false)
 const editOpen = ref(false)
@@ -200,6 +203,7 @@ watch(() => route.params.id, () => {
 
 // ── Per-session numbers ──
 const kind = computed(() => {
+  if (ex.value?.logType === 'cardio') return 'cardio'
   if (unit.value === 'pin') return 'pin'
   const sets = history.value.flatMap(workSetsOf)
   if (sets.some(s => s.load > 0 && s.reps)) return 'load'
@@ -211,10 +215,13 @@ const points = computed(() => [...history.value].reverse().map(h => {
   return {
     date: h.date,
     e1rm: kind.value === 'load' ? bestE1RM(sets, myUnit.value) : 0,
-    top: heaviest(sets, myUnit.value),
+    top: heaviest(sets, scale.value),
     volume: Math.round(sets.reduce((n, s) => n + setVolume(s, myUnit.value), 0)),
     reps: Math.max(0, ...sets.map(s => s.reps || 0)),
-    secs: bestSeconds(sets)
+    secs: bestSeconds(sets),
+    // Cardio: distance and minutes in the session
+    km: cardioTotals(sets).km,
+    mins: Math.round(cardioTotals(sets).seconds / 60)
   }
 }))
 
@@ -222,6 +229,7 @@ const metrics = computed(() => {
   switch (kind.value) {
     case 'load': return [{ label: t('Est. max'), value: 'e1rm' }, { label: t('Heaviest'), value: 'top' }, { label: t('Volume'), value: 'volume' }, { label: t('Reps'), value: 'reps' }]
     case 'pin': return [{ label: t('Heaviest pin'), value: 'top' }, { label: t('Reps'), value: 'reps' }]
+    case 'cardio': return [{ label: t('Distance'), value: 'km' }, { label: t('Minutes'), value: 'mins' }]
     case 'time': return [{ label: t('Longest'), value: 'secs' }]
     default: return [{ label: t('Reps'), value: 'reps' }]
   }
@@ -242,12 +250,14 @@ const fmtMetric = (m, v) => {
   if (m === 'volume') return `${fmtNum(v, 0)} ${myUnit.value}`
   if (m === 'reps') return tn(v, '{n} rep', '{n} reps')
   if (m === 'secs') return `${v} s`
+  if (m === 'km') return fmtDistance(v, myUnit.value)
+  if (m === 'mins') return fmtDuration(v * 60)
   return fmtLoad(v, unit.value === 'pin' ? 'pin' : myUnit.value)
 }
 
 // ── Headline ──
-const headMetric = computed(() => ({ load: 'e1rm', pin: 'top', time: 'secs', reps: 'reps' })[kind.value])
-const headLabel = computed(() => ({ load: t('Best estimated max'), pin: t('Heaviest pin'), time: t('Longest set'), reps: t('Most reps') })[kind.value])
+const headMetric = computed(() => ({ load: 'e1rm', pin: 'top', time: 'secs', reps: 'reps', cardio: 'km' })[kind.value])
+const headLabel = computed(() => ({ load: t('Best estimated max'), pin: t('Heaviest pin'), time: t('Longest set'), reps: t('Most reps'), cardio: t('Farthest in a session') })[kind.value])
 const headValue = computed(() => fmtMetric(headMetric.value, Math.max(0, ...points.value.map(p => p[headMetric.value]))))
 /** Change over the chosen range: "+7.5 kg in 8 weeks" */
 const trend = computed(() => {
@@ -257,7 +267,7 @@ const trend = computed(() => {
   if (p.length < 2) return null
   const diff = p[p.length - 1][m] - p[0][m]
   const weeks = Math.max(1, Math.round((new Date(p[p.length - 1].date) - new Date(p[0].date)) / (7 * 86400000)))
-  const amount = m === 'reps' ? tn(Math.abs(diff), '{n} rep', '{n} reps') : m === 'secs' ? `${Math.abs(diff)} s` : fmtLoad(Math.round(Math.abs(diff) * 10) / 10, unit.value === 'pin' ? 'pin' : myUnit.value)
+  const amount = m === 'reps' ? tn(Math.abs(diff), '{n} rep', '{n} reps') : m === 'secs' ? `${Math.abs(diff)} s` : (m === 'km' || m === 'mins') ? fmtMetric(m, Math.round(Math.abs(diff) * 100) / 100) : fmtLoad(Math.round(Math.abs(diff) * 10) / 10, unit.value === 'pin' ? 'pin' : myUnit.value)
   const sign = diff > 0 ? '+' : diff < 0 ? '−' : '±'
   return {
     text: tn(weeks, '{change} in {n} week', '{change} in {n} weeks', { change: `${sign}${amount}` }),
@@ -322,13 +332,18 @@ const bests = computed(() => {
     add(t('Most volume in a session'), 'volume', 'volume')
   }
   if (kind.value === 'pin') add(t('Heaviest pin'), 'top', 'top')
+  if (kind.value === 'cardio') {
+    add(t('Farthest in a session'), 'km', 'km')
+    add(t('Longest session'), 'mins', 'mins')
+    return out
+  }
   add(t('Most reps in a set'), 'reps', 'reps')
   if (kind.value === 'time') add(t('Longest set'), 'secs', 'secs')
   return out
 })
 const records = computed(() => {
   const sets = history.value.flatMap(h => h.sets.map(s => ({ ...s, date: h.date })))
-  return repRecords(sets, myUnit.value)
+  return repRecords(sets, scale.value)
 })
 const showAllRecords = ref(false)
 const showAllSessions = ref(false)
@@ -359,6 +374,7 @@ function repsOf (s) {
   return s.type === 'drop' ? `${reps} ${t('drop')}` : reps
 }
 function setStr (s) {
+  if (s.cardio) return cardioText(s, myUnit.value)
   if (s.seconds) return s.load ? t('{load} for {s}s', { load: fmtLoad(s.load, s.unit), s: s.seconds }) : `${s.seconds}s`
   const reps = s.repsL != null && s.repsR != null && s.repsL !== s.repsR ? `${s.repsL}/${s.repsR}` : s.reps
   const tag = s.type === 'drop' ? ' ' + t('drop') : ''

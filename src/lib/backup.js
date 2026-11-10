@@ -137,7 +137,7 @@ const csvRow = (cells) => cells.map(csvCell).join(',')
 
 /** One row per logged set. Columns stay in English so spreadsheets and scripts can rely on them. */
 export function setsCSV (sessions, exById = exercisesById.value) {
-  const head = ['date', 'time', 'workout', 'day', 'exercise_id', 'exercise', 'set', 'set_type', 'load', 'unit', 'reps', 'reps_left', 'reps_right', 'seconds', 'rir', 'effort', 'energy', 'grade', 'grade_system', 'result', 'tries', 'wall', 'style', 'note']
+  const head = ['date', 'time', 'workout', 'day', 'exercise_id', 'exercise', 'set', 'set_type', 'load', 'unit', 'reps', 'reps_left', 'reps_right', 'seconds', 'rir', 'effort', 'energy', 'grade', 'grade_system', 'result', 'tries', 'wall', 'style', 'note', 'speed_kmh', 'incline_pct', 'distance_km']
   const rows = [csvRow(head)]
   const done = sessions.filter(s => s.finishedAt).sort((a, b) => a.startedAt.localeCompare(b.startedAt))
   for (const s of done) {
@@ -150,7 +150,9 @@ export function setsCSV (sessions, exById = exercisesById.value) {
         tx(exById[x.exerciseId], 'name') || x.exerciseId, counter[x.exerciseId], x.type || 'normal',
         x.load, x.unit, x.reps, x.repsL, x.repsR, x.climb ? x.climb.seconds || '' : x.seconds, x.rir, s.rating?.effort, s.rating?.energy,
         // Climbs: the grade and how it went (the columns stay empty for lifting sets)
-        x.climb?.grade, x.climb?.system, x.climb?.result, x.climb?.attempts, x.climb?.wall, x.climb?.style, x.climb?.note
+        x.climb?.grade, x.climb?.system, x.climb?.result, x.climb?.attempts, x.climb?.wall, x.climb?.style, x.climb?.note,
+        // Treadmill and other cardio
+        x.cardio?.speed, x.cardio?.incline, x.cardio?.distance
       ]))
     }
   }
