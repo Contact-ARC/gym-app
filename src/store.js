@@ -18,6 +18,7 @@ export const state = reactive({
   data: emptyData(),
   routineStatus: { loading: false, error: null, errorKind: null, lastAttempt: null }, // errorKind: offline | server | data
   saveError: null, // set while saving to the phone keeps failing
+  dataStatus: null, // how the data file loaded: new | ok | unreadable
   notice: null, // one-off message for the app shell to show (e.g. data restored from a backup)
   reviewDayChange: null, // day id whose "the routine changed this day" choice was asked for from its screen
   today: dateKey() // refreshed when the app comes back to the foreground
@@ -41,6 +42,7 @@ export const plain = (x) => JSON.parse(JSON.stringify(toRaw(x)))
 
 /** Save everything. Never throws: a problem is reported (banner + error log) instead of stopping the caller. */
 export function persist () {
+  for (const fn of persistHooks) { try { fn() } catch (e) { console.warn('persist hook failed', e) } }
   try {
     return saveData(toRaw(state.data)) // saveData turns it into JSON straight away
   } catch (e) {
@@ -49,6 +51,16 @@ export function persist () {
     reportError(e, 'save')
     return Promise.resolve()
   }
+}
+
+// 0.12 (accounts): the sync watches every save, and starts over when the data is replaced wholesale
+const persistHooks = []
+export function onPersist (fn) { persistHooks.push(fn) }
+const replacedHooks = []
+/** The data was replaced as a whole (a backup imported, or the damaged file swapped for a backup) */
+export function onDataReplaced (fn) { replacedHooks.push(fn) }
+function dataReplaced (why) {
+  for (const fn of replacedHooks) { try { fn(why) } catch (e) { console.warn('replaced hook failed', e) } }
 }
 
 // Other modules (crew feed, automatic backups) react to workouts starting, finishing or being deleted
@@ -68,6 +80,7 @@ function emit (kind, payload) {
 export async function initStore () {
   const { data, status } = await loadData()
   state.data = data
+  state.dataStatus = status // new | ok | unreadable (0.12: the sync starts over rather than trust an empty phone)
   if (status === 'unreadable') {
     // The data file is damaged: fall back to the newest automatic backup rather than starting empty
     try {
@@ -77,6 +90,7 @@ export async function initStore () {
         state.data = parseBackup(await readBackup(latest))
         const d = backupDate(latest.name)
         state.notice = { key: 'Your data file was damaged, so the app loaded your automatic backup from {when}.', vars: { when: d ? dateKey(d) : latest.name } }
+        dataReplaced('restored')
         await persist()
       } else {
         state.notice = { key: "Your data file couldn't be read. A copy was kept; import a backup from Settings if you have one." }
@@ -830,6 +844,7 @@ export function importJSON (text) {
     if (s.finishedAt && m < thisMonth) data.reportsSeen[m] = true
   }
   state.data = data
+  dataReplaced('import')
   return persist()
 }
 

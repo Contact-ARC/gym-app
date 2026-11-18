@@ -122,6 +122,16 @@ async function join (code, name, create) {
   return res.crew
 }
 
+/** A new secret key for this phone (0.12: also used when the account brings the crew to a new phone) */
+export const newCrewKey = randomKey
+
+/** 0.12: signed in on a phone that isn't in a crew yet, and the account is: carry on as that member. */
+export async function adoptMembership ({ code, name, memberId, key }) {
+  Object.assign(state.data.crew, { code, name, memberId, key, queue: [], sharedPlans: {} })
+  await persist()
+  await syncNow({ withBoard: true })
+}
+
 export function createCrew (name) {
   return join(randomCode(), name, true)
 }

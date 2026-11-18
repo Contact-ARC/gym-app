@@ -94,6 +94,16 @@ jobs:
           ./gradlew assembleRelease --no-daemon
           cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/gym-crew-${VERSION_NAME}.apk"
 
+      # The signing certificate's SHA-1 (public: anyone with the APK can read it). Google sign-in needs it in
+      # the Android OAuth client in Google Cloud (README, Accounts). Shown on the run's summary page.
+      - name: Signing certificate fingerprint
+        continue-on-error: true
+        run: |
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          sha1=$("$apksigner" verify --print-certs gym-crew-*.apk | grep -m1 'SHA-1' | awk '{print $NF}' | sed 's/../&:/g;s/:$//' | tr a-z A-Z)
+          echo "Signing SHA-1: $sha1"
+          echo "**Signing certificate SHA-1** (for the Android OAuth client in Google Cloud): \`$sha1\`" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:

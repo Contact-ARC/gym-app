@@ -1,5 +1,6 @@
 // Progress photos: resized on the phone and kept in the app's private storage.
-// They are never uploaded, shared with the crew, or included in JSON backups.
+// Never shared with the crew or included in JSON backups. Since 0.12, when you're signed in, they're
+// also saved to your account's private photo folder (lib/sync.js), so they follow you to a new phone.
 import { Filesystem, Directory } from '@capacitor/filesystem'
 
 const DIR = 'photos'

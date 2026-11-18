@@ -23,6 +23,9 @@ for (const f of files) {
 }
 // Strings passed to t() indirectly (labels in data tables)
 const EXTRA = [
+  // 0.12: account errors shown through a variable
+  'That crew membership belongs to another Google account.', 'One item was too big to save to your account.',
+  "Couldn't reach your account. Check your connection.", 'Sign-in was cancelled.',
   'Chest', 'Front delts', 'Side delts', 'Rear delts', 'Triceps', 'Biceps', 'Forearms', 'Lats', 'Upper back', 'Traps', 'Lower back',
   'Abs', 'Obliques', 'Glutes', 'Quads', 'Hamstrings', 'Adductors', 'Calves',
   'Barbells and plates', 'Squat rack or half rack', 'Benches', 'Dumbbells or kettlebells', 'EZ bar', 'Cable stack or functional trainer',

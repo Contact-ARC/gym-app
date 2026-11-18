@@ -93,7 +93,7 @@
           <span class="ph-date t-tiny">{{ shortDate(p.date) }}<template v-if="p.pose"> · {{ poseLabel(p.pose) }}</template></span>
         </button>
       </div>
-      <p class="t-tiny t-muted foot">{{ t("Photos stay on this phone only. They aren't in backups and are never shared with the crew.") }}</p>
+      <p class="t-tiny t-muted foot">{{ signedIn ? t("Photos are saved to your account, where only you can see them. They aren't in backups and are never shared with the crew.") : t("Photos stay on this phone only. They aren't in backups and are never shared with the crew.") }}</p>
     </section>
 
     <!-- History -->
@@ -190,6 +190,7 @@
 </template>
 
 <script setup>
+import { signedIn } from '../lib/account.js'
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Line } from 'vue-chartjs'

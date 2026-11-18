@@ -105,5 +105,12 @@ export {
   mdiPineTree as tree,
   mdiMoonWaningCrescent as moon,
   mdiTimerSand as timerSand,
-  mdiHelp as help
+  mdiHelp as help,
+  // 0.12: accounts
+  mdiGoogle as google,
+  mdiCloudSync as cloudSync,
+  mdiCloudCheckOutline as cloudCheck,
+  mdiCloudOffOutline as cloudOff,
+  mdiLogout as logout,
+  mdiAccountCircleOutline as account
 } from '@mdi/js'

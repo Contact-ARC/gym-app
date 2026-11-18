@@ -1,0 +1,26 @@
+# Keeps the free Supabase project from being paused for inactivity (it pauses after a quiet week).
+# Once a day, reads one number from the crew database through the public API, the same way the app does.
+# The project address and public key come from latest.json in the routines repo, so moving the crew
+# server needs no change here. Run it by hand from Actions → Keep Supabase awake → Run workflow.
+name: Keep Supabase awake
+
+on:
+  schedule:
+    - cron: '17 5 * * *' # every day, 06:17 / 07:17 in Spain
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Ping the crew database
+        run: |
+          set -euo pipefail
+          latest=$(curl -fsS --retry 3 https://raw.githubusercontent.com/Contact-ARC/gym-routines/main/latest.json)
+          url=$(echo "$latest" | jq -r '.crew.url // empty')
+          key=$(echo "$latest" | jq -r '.crew.anonKey // empty')
+          if [ -z "$url" ] || [ -z "$key" ]; then echo "No crew server in latest.json"; exit 1; fi
+          echo "Crews: $(curl -fsS --retry 3 -X POST "$url/rest/v1/rpc/crew_ping" -H "apikey: $key" -H 'Content-Type: application/json' -d '{}')"

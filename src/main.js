@@ -17,6 +17,7 @@ import { initStore, state, nextDay, activeSession, startSession, persist, autoRe
 import { closeTopOverlay } from './ui/overlay.js'
 import { t, tn, setLang, deviceLang } from './i18n/index.js'
 import { initCrew } from './lib/crew.js'
+import { initSync } from './lib/sync.js'
 import { initPush } from './lib/push.js'
 import { initTogether } from './lib/together.js'
 import { initAutoBackup } from './lib/backup.js'
@@ -33,6 +34,7 @@ initStore().then(() => {
   installErrorHandlers(app)
   app.mount('#app')
   initCrew()
+  initSync() // 0.12: saving to your account, when signed in
   initPush(router).catch(() => {}) // crew notifications (listeners first, so a tap that opened the app lands)
   initTogether() // a shared workout picks up where it was
   initAutoBackup()

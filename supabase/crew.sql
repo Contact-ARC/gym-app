@@ -39,6 +39,15 @@ alter table public.crew_members add column if not exists is_owner boolean not nu
 alter table public.crew_members add column if not exists push_token text;
 alter table public.crew_members add column if not exists push_prefs jsonb not null default '{}'::jsonb;
 alter table public.crew_members add column if not exists lang text not null default 'en';
+-- 0.12: the Gym Crew account a member belongs to (null until they sign in), and more than one phone per member
+alter table public.crew_members add column if not exists user_id uuid;
+create index if not exists crew_members_user on public.crew_members (user_id);
+create table if not exists public.crew_member_keys (
+  member uuid not null references public.crew_members (id) on delete cascade,
+  key_hash text not null,
+  created_at timestamptz not null default now(),
+  primary key (member, key_hash)
+);
 
 create table if not exists public.crew_events (
   id bigint generated always as identity primary key,
@@ -144,7 +153,8 @@ do $$
 declare tbl text;
 begin
   foreach tbl in array array['crew_members', 'crew_events', 'crew_comments', 'crew_plans', 'crew_nudges',
-                             'crew_challenges', 'crew_push_log', 'crew_settings', 'crew_together', 'crew_together_log'] loop
+                             'crew_challenges', 'crew_push_log', 'crew_settings', 'crew_together', 'crew_together_log',
+                             'crew_member_keys'] loop
     execute format('alter table public.%I enable row level security', tbl);
     execute format('revoke all on public.%I from anon, authenticated', tbl);
   end loop;
@@ -156,10 +166,14 @@ end $$;
 create or replace function public._crew_auth(p_member uuid, p_key text)
 returns public.crew_members
 language plpgsql stable security definer set search_path = public, extensions as $$
-declare m public.crew_members;
+declare
+  m public.crew_members;
+  h text := encode(extensions.digest(coalesce(p_key, ''), 'sha256'), 'hex');
 begin
-  select * into m from public.crew_members
-   where id = p_member and key_hash = encode(extensions.digest(coalesce(p_key, ''), 'sha256'), 'hex');
+  -- The key the member joined with, or one added when they signed in on another phone (0.12)
+  select * into m from public.crew_members c
+   where c.id = p_member
+     and (c.key_hash = h or exists (select 1 from public.crew_member_keys k where k.member = c.id and k.key_hash = h));
   if not found then raise exception 'not_a_member'; end if;
   return m;
 end $$;
@@ -1098,6 +1112,53 @@ language sql security definer set search_path = public, extensions as $$
   update public.crew_members set push_token = null where push_token = p_token
 $$;
 
+-- ── Accounts (0.12) ──────────────────────────────────────────
+-- Signed in with Google: tie this phone's crew membership to the account, so another phone signed in
+-- to the same account can pick it up (crew_restore) without joining again.
+create or replace function public.crew_link(p_member uuid, p_key text)
+returns json
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  m public.crew_members := public._crew_auth(p_member, p_key);
+  v_user uuid := auth.uid();
+begin
+  if v_user is null then raise exception 'not_signed_in'; end if;
+  if m.user_id is not null and m.user_id <> v_user then raise exception 'other_account'; end if;
+  update public.crew_members set user_id = v_user where id = m.id;
+  return json_build_object('member_id', m.id, 'crew', m.crew);
+end $$;
+
+-- A phone signed in to an account that's already in a crew: add this phone's key to that member.
+-- Returns null when the account isn't in a crew.
+create or replace function public.crew_restore(p_key text)
+returns json
+language plpgsql security definer set search_path = public, extensions as $$
+declare
+  v_user uuid := auth.uid();
+  m public.crew_members;
+begin
+  if v_user is null then raise exception 'not_signed_in'; end if;
+  if char_length(coalesce(p_key, '')) < 32 then raise exception 'bad_key'; end if;
+  select * into m from public.crew_members where user_id = v_user order by updated_at desc limit 1;
+  if not found then return null; end if;
+  insert into public.crew_member_keys (member, key_hash)
+  values (m.id, encode(extensions.digest(p_key, 'sha256'), 'hex'))
+  on conflict do nothing;
+  -- Keep a handful of phones per member at most: the oldest extra keys go
+  delete from public.crew_member_keys k
+   where k.member = m.id
+     and k.key_hash not in (select key_hash from public.crew_member_keys where member = m.id order by created_at desc limit 5);
+  return json_build_object('member_id', m.id, 'crew', m.crew, 'name', m.name, 'is_owner', m.is_owner);
+end $$;
+
+-- Keep-alive for Supabase's free plan: a scheduled job calls this once a day so the project never
+-- counts as inactive. Reads one row and returns how many crews there are; nothing else.
+create or replace function public.crew_ping()
+returns int
+language sql stable security definer set search_path = public as $$
+  select count(distinct crew)::int from public.crew_members
+$$;
+
 -- Sunday-evening recap for every crew that trained this week
 create or replace function public._crew_recap_all()
 returns void
@@ -1179,3 +1240,11 @@ begin
     execute format('grant execute on function public.%s to anon, authenticated', f);
   end loop;
 end $$;
+
+-- 0.12: accounts (signed-in users only) and the keep-alive (anyone)
+revoke all on function public.crew_link(uuid, text) from public, anon;
+grant execute on function public.crew_link(uuid, text) to authenticated;
+revoke all on function public.crew_restore(text) from public, anon;
+grant execute on function public.crew_restore(text) to authenticated;
+revoke all on function public.crew_ping() from public;
+grant execute on function public.crew_ping() to anon, authenticated;

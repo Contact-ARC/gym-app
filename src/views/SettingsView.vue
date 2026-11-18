@@ -5,6 +5,9 @@
     </div>
     <h1 class="t-title">{{ t('Settings') }}</h1>
 
+    <h2 id="account" class="section-h">{{ t('Account') }}</h2>
+    <AccountCard />
+
     <h2 class="section-h">{{ t('You') }}</h2>
     <div class="group">
       <div class="group-row">
@@ -265,6 +268,7 @@
       <p class="t-body">
         {{ t('Everything on this phone will be replaced with the backup ({n} workouts). Export first if you might want the current data.', { n: pendingCount }) }}
       </p>
+      <p v-if="signedIn" class="t-small t-muted">{{ t("You're signed in, so what's saved in your account is added back afterwards: nothing in your account is deleted.") }}</p>
       <template #actions>
         <button class="btn btn-soft btn-lg" @click="importOpen = false">{{ t('Cancel') }}</button>
         <button class="btn btn-danger btn-lg" @click="confirmImport">{{ t('Replace') }}</button>
@@ -334,6 +338,8 @@ import { APP_VERSION, DEFAULT_ROUTINES_URL } from '../config.js'
 import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT } from '../lib/training.js'
 import { activeGyms, currentGymId, gymName, gymColours, swatch } from '../lib/climbing.js'
 import GymSheet from '../ui/GymSheet.vue'
+import AccountCard from '../ui/AccountCard.vue'
+import { signedIn } from '../lib/account.js'
 import { previewRestSound } from '../lib/restTimer.js'
 import {
   isNative, shareBackupFile, openUrl, copyText, disarmRestCountdown, ensureNotifyPermission, notificationStatus, openNotificationSettings,

@@ -30,6 +30,7 @@ so a new month never needs a new APK. Workout history lives only on each phone.
 - **v0.9.2, gyms**: one list of the places you train (Settings → Gyms; climbing gyms are in it too). The gym you're at has its equipment, bar, plates, weight jumps, machine steps and machine settings in the usual profile/settings fields, and each other gym keeps a copy in `gym.lift`, swapped in by `switchGym`. Workouts record `gymId`; ones from before have none and count as `settings.climbing.legacyGymId` (changeable per gym). Machines (`gymBound`: weight stacks, cables, plate-loaded machines) have history, suggestions and records per gym; free weights count everywhere. A machine used only at another gym starts from that gym's weight and offers its settings to use or adjust
 - **v0.10, badges**: 33 badges in six groups (`lib/badges.js`, worked out from your history so the dates are real). Level badges go Bronze → Diamond (workouts, streak, records, tonnage, variety, plates on each lift, total, bodyweight multiples, pull-ups, cardio distance, climbs); feats repeat with ×N (record day, perfect week, full house, comeback, early bird, night owl, weekend, heavy day, deload, challenge, goal, 5K, flash) and four are secret. A zigzag seal (`ui/BadgeSeal.vue`): dotted outline until earned, then filled with a tier-coloured edge and ribbon. Badge wall with progress and "almost there" (`/badges`, `/badges/<member>`), a detail sheet with the levels, dates and who in the crew has it, 3 pinned on your profile and the board. Shared as `stats.badgeState`; new badges and levels go to the feed, repeat feats only at ×5, ×10, ×25…
 - **v0.11, training together**: 2 to 4 crew members do the host's day at once (`lib/together.js`, `crew_together_*` in `crew.sql`). Start from a workout's ⋯, invite people or give them the 4-digit code; join from the invite, the Crew screen or the code. Everyone logs into their own workout; sets are mirrored through an outbox (each message has an id, so a resend after a dropped connection is harmless), a Supabase Realtime broadcast says "something changed" (`lib/realtime.js`, no data on it) and the phones also check every few seconds. Turns go round the group on each exercise, then on to the next; anyone can do something else and come back. On a shared bar the lightest person's warm-up is everyone's and each heavier stack holds the lighter one, so a change of lifter is only adding or taking off plates (`lib/togetherPlan.js`); on machines you see the others' seat and weight. "You're up" and "Spot me" also come as notifications (channel `crew_together`). Badges: Trained together ×N and Partner streak
+- **v0.12, accounts**: optional Google sign-in (Settings → Account; `lib/account.js`, Android's own account picker through `@capgo/capacitor-social-login`, then Supabase Auth's `id_token` grant, plain fetch). Signed in, your data is saved to your account and follows you to any phone (`lib/sync.js`): the data file is split into records (`lib/syncRecords.js`: each finished workout, body entry, photo, goal, routine, own exercise, routine change, machine setting, note, challenge, past routine, plus settings, profile and small things), changed records are sent after each save and other phones' changes fetched (`sync_push` / `sync_pull` in `supabase/account.sql`), the later change wins, deletions travel, and a sudden mass deletion is treated as a wiped phone and fetched back instead. The first sync on a phone (or after an import) merges without deleting. Progress photos go to a private storage bucket, one folder per user. The crew membership follows the account too: a new phone signed in to the account rejoins as the same member (`crew_link` / `crew_restore`, more than one key per member). Delete account removes everything saved in it; each phone keeps its own copy
 - **v0.11.1, minute-long timed sets**: an exercise with `"timeUnit": "min"` (bikes, SkiErg) is set and logged in minutes, like cardio, with minute-based suggestions; times of 2 min or more show as minutes everywhere (`fmtSecs`). A routine replaced within the same month (new title) is announced again and the day rotation restarts (`lastSeenRoutineKey`).
 
 ## First-time setup (one person does this once)
@@ -107,8 +108,9 @@ Notes:
   secret; the database stores only its hash, and every write checks it. The crew code is the invite.
 - If the app shows an auth error with the publishable key, use the legacy `anon` key instead
   (same page, "Legacy API keys" tab). Both work with the same SQL.
-- Free Supabase projects pause after about a week with no activity. If that happens, press Restore in the
-  dashboard. The app queues posts while it can't reach the board and sends them later.
+- Free Supabase projects pause after about a week with no activity; the daily **Keep Supabase awake** workflow
+  prevents that. If it ever happens, press Restore in the dashboard. The app queues posts while it can't reach
+  the board and sends them later.
 - Shared: display name, workouts (day, length, every set's weight and reps unless "Show every set" is off,
   records), totals for the week, month and all time, best lifts and badges, and routines you choose to share.
   Never shared: notes, body weight, measurements, photos (DOTS only if you turn it on). Anyone can turn off posting to the feed, or leave the crew
@@ -156,6 +158,43 @@ If notifications don't arrive:
 - In the app: Crew → ⋯ → Notifications → **Send me a test** (0.10+). It sends one through the whole chain and says which link broke.
 - In Supabase: SQL Editor → run [`supabase/check-notifications.sql`](supabase/check-notifications.sql) (read-only), and Edge Functions → crew-push → **Logs** shows Firebase's answer for every send.
 
+## Accounts (optional, one person does this once)
+Sign in with Google and saving to an account (0.12+). Needs the crew board set up first (same Supabase project).
+Until it's set up, Settings → Account says so and everything else works.
+
+**Google Cloud (console.cloud.google.com)**: use the project Firebase created (same Google account).
+1. **APIs & Services → OAuth consent screen** (Google Auth Platform): app name Gym Crew, your email as support
+   and developer contact, audience **External**. Scopes: leave the defaults (email, profile, openid).
+   Then **Audience → Publish app** ("In production") so anyone can sign in. With only these scopes Google
+   doesn't need to review it. (In "Testing" only the accounts listed as test users can sign in.)
+2. **Credentials → Create credentials → OAuth client ID → Web application**, name "Gym Crew web". No URLs needed.
+   Copy its **Client ID** (`…apps.googleusercontent.com`) and **Client secret**.
+3. **Create credentials → OAuth client ID → Android**: package name `com.gymcrew.app`, SHA-1 = the release
+   signing certificate's. The release build prints it on the run's summary page ("Signing certificate SHA-1"),
+   or run `keytool -list -v -keystore gym-crew-release.jks` (JDK's keytool) and take "SHA1".
+   Nothing from this client goes anywhere else: Google checks the APK's signature against it.
+
+**Supabase**
+1. SQL Editor → run the latest [`supabase/crew.sql`](supabase/crew.sql), then [`supabase/account.sql`](supabase/account.sql). Both are safe to re-run.
+2. **Authentication → Sign In / Providers → Google** → enable. Client ID = the **Web** client ID
+   (also put it under "Client IDs" / "Authorized Client IDs" if that field is there), Client secret = the Web client's secret → Save.
+   "Skip nonce checks" stays off.
+3. Storage should now list a private bucket `progress-photos` (account.sql makes it).
+
+**Routines repo**: add the Web client ID to the crew block in `gym-routines/latest.json` and push:
+```json
+"crew": { "url": "https://<id>.supabase.co", "anonKey": "sb_publishable_…", "googleClientId": "<web client id>.apps.googleusercontent.com" }
+```
+
+Notes:
+- If sign-in says "Developer console is not set up correctly" ([28444]), the APK's SHA-1 or the package name doesn't
+  match the Android client, or the Web client ID is wrong. Google Cloud changes can take a few hours to apply.
+- What's saved: everything in the app except the workout in progress, the routine cache, automatic-backup state,
+  reminders, the routine address and crew keys. Whoever owns the Supabase project can read it in the dashboard.
+- Free Supabase projects pause after a quiet week. The **Keep Supabase awake** workflow (`.github/workflows/keep-alive.yml`)
+  reads one number from the database every day so that doesn't happen. If it ever does pause, nothing is lost:
+  each phone keeps its own copy and catches up after Restore.
+
 ## Installing on a phone
 1. On the phone, open GitHub in Chrome, signed in to the account, → `gym-app` → Releases → download the APK.
 2. Open it. Android asks to allow installs from Chrome ("Install unknown apps") — allow it once.
@@ -197,13 +236,17 @@ src/
   lib/crew.js          crew board client (plain fetch to Supabase RPC) + offline queue
   lib/backup.js        automatic backups + CSV export
   lib/shareCard.js     canvas-drawn share images
-  lib/photos.js        progress photos (resized, app storage only)
+  lib/photos.js        progress photos (resized, app storage; saved to your account when signed in)
+  lib/account.js       Google sign-in, Supabase session, photo storage calls (0.12)
+  lib/sync.js          saving to your account: changes up, other phones' changes down (0.12)
+  lib/syncRecords.js   how the data splits into records (unit-tested)
   i18n/                t() translation helper + es.js (check coverage: npm run i18n)
   views/               Home, Day, Exercise, Workout, Summary, Progress, History, Report, Body, Crew, Tools, Settings, Welcome
 supabase/crew.sql      crew board database setup (run once in Supabase)
+supabase/account.sql   accounts: saved data, private photo bucket (run after crew.sql)
 android/               Capacitor Android project (signing reads env vars from CI)
 assets/                icon sources (regenerate: npx @capacitor/assets generate --android)
-.github/workflows/     release.yml
+.github/workflows/     release.yml, keep-alive.yml (daily ping so free Supabase doesn't pause)
 ```
 
 ## Data & backups
@@ -214,7 +257,10 @@ assets/                icon sources (regenerate: npx @capacitor/assets generate 
 - That still lives on the phone, so **Settings → Export** a copy off it now and then (the app reminds you after
   14 days, or 35 while automatic backups are working).
 - **CSV export**: one row per set (`gym-crew-sets-*.csv`) plus body entries, for Sheets/Excel. Column names stay English.
-- Progress photos are stored only in app storage and are **not** in backups.
+- Progress photos are stored in app storage and are **not** in backups. Signed in (0.12+), they're also saved to
+  your account's private photo folder.
+- **Signed in** (0.12+), everything is also saved to your account and comes back on any phone you sign in on.
+  Import while signed in merges the backup with your account (nothing in the account is deleted).
 - **Import** replaces all data on the phone with the backup — handy when switching phones.
 - Machine/cable weights are logged as **pin positions** so different stacks don't corrupt your kg charts.
 - Dumbbell weights are logged **per dumbbell**.
