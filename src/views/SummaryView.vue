@@ -32,6 +32,13 @@
       </template>
     </div>
 
+    <!-- 0.13: heart rate from a watch, through Health Connect -->
+    <div v-if="session.hr" class="row hr t-small">
+      <Icon name="heart" :size="20" class="hr-i" />
+      <span class="grow">{{ t('Heart rate: {avg} average, {max} highest', { avg: session.hr.avg, max: session.hr.max }) }}</span>
+      <span class="t-tiny t-muted">{{ t('bpm') }}</span>
+    </div>
+
     <div v-if="justFinished && (streak.weeks || streak.thisWeek)" class="row streak t-small" :class="{ safe: streak.safe }">
       <Icon name="fire" :size="20" />
       <span class="grow">
@@ -455,6 +462,8 @@ function del () {
 .pop-enter-from, .pop-leave-to { opacity: 0; }
 @media (prefers-reduced-motion: reduce) { .ring-fg.anim, .b-seal, .burst span { animation: none; } .burst { display: none; } }
 .done-head { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; margin: 4px 0 22px; }
+.hr { gap: 8px; align-items: center; margin-top: 10px; padding: 10px 14px; border-radius: var(--r-card); background: var(--card); }
+.hr-i { color: var(--err); }
 .stats { display: grid; grid-template-columns: repeat(3, 1fr); background: var(--card); border-radius: var(--r-card); }
 .stat { padding: 16px 8px; text-align: center; }
 .stat + .stat { border-left: 1px solid var(--line); }

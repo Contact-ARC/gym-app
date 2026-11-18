@@ -8,6 +8,11 @@
     <h2 id="account" class="section-h">{{ t('Account') }}</h2>
     <AccountCard />
 
+    <template v-if="healthSupported">
+      <h2 id="health" class="section-h">{{ t('Health') }}</h2>
+      <HealthCard />
+    </template>
+
     <h2 class="section-h">{{ t('You') }}</h2>
     <div class="group">
       <div class="group-row">
@@ -339,6 +344,8 @@ import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT } from '../lib/
 import { activeGyms, currentGymId, gymName, gymColours, swatch } from '../lib/climbing.js'
 import GymSheet from '../ui/GymSheet.vue'
 import AccountCard from '../ui/AccountCard.vue'
+import HealthCard from '../ui/HealthCard.vue'
+import { healthSupported } from '../lib/health.js'
 import { signedIn } from '../lib/account.js'
 import { previewRestSound } from '../lib/restTimer.js'
 import {

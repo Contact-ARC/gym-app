@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
         // App-specific plugins must be registered before the bridge starts
         registerPlugin(RestTimerPlugin.class);
         registerPlugin(PushSetupPlugin.class);
+        registerPlugin(HealthBridgePlugin.class); // 0.13: Health Connect (Kotlin)
         super.onCreate(savedInstanceState);
     }
 }

@@ -18,6 +18,7 @@ import { closeTopOverlay } from './ui/overlay.js'
 import { t, tn, setLang, deviceLang } from './i18n/index.js'
 import { initCrew } from './lib/crew.js'
 import { initSync } from './lib/sync.js'
+import { initHealth } from './lib/health.js'
 import { initPush } from './lib/push.js'
 import { initTogether } from './lib/together.js'
 import { initAutoBackup } from './lib/backup.js'
@@ -35,6 +36,7 @@ initStore().then(() => {
   app.mount('#app')
   initCrew()
   initSync() // 0.12: saving to your account, when signed in
+  initHealth() // 0.13: Health Connect, when connected
   initPush(router).catch(() => {}) // crew notifications (listeners first, so a tap that opened the app lands)
   initTogether() // a shared workout picks up where it was
   initAutoBackup()

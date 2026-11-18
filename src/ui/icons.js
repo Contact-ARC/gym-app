@@ -112,5 +112,7 @@ export {
   mdiCloudCheckOutline as cloudCheck,
   mdiCloudOffOutline as cloudOff,
   mdiLogout as logout,
-  mdiAccountCircleOutline as account
+  mdiAccountCircleOutline as account,
+  // 0.13: Health Connect
+  mdiHeartPulse as heart
 } from '@mdi/js'

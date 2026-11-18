@@ -78,6 +78,25 @@
       <p class="t-tiny t-muted foot">{{ t('Change is since your first measurement.') }}</p>
     </section>
 
+    <!-- 0.13: steps from Health Connect -->
+    <section v-if="steps.length">
+      <h2 class="section-h">{{ t('Steps') }}</h2>
+      <div class="card card-pad steps">
+        <div class="row st-head">
+          <span class="t-num st-today">{{ fmtNum(steps.at(-1).count, 0) }}</span>
+          <span class="t-small t-muted grow">{{ steps.at(-1).date === state.today ? t('today') : shortDate(steps.at(-1).date) }}</span>
+          <span class="t-tiny t-muted">{{ t('7-day average {n}', { n: fmtNum(stepsAvg, 0) }) }}</span>
+        </div>
+        <div class="st-bars" role="img" :aria-label="t('Steps, last 7 days')">
+          <div v-for="d in steps" :key="d.date" class="st-col">
+            <div class="st-bar" :style="{ height: Math.max(4, Math.round((d.count / stepsMax) * 64)) + 'px' }" :class="{ now: d.date === state.today }" />
+            <span class="t-tiny t-muted">{{ dayLetter(d.date) }}</span>
+          </div>
+        </div>
+        <p class="t-tiny t-muted foot">{{ t('From Health Connect') }}</p>
+      </div>
+    </section>
+
     <!-- Photos -->
     <section>
       <div class="row ph-head">
@@ -103,7 +122,8 @@
         <button v-for="e in entries.slice(0, showAll ? 999 : 8)" :key="e.id" class="group-row" @click="openEntry(e)">
           <span class="t-small t-muted when">{{ shortDate(e.date) }}</span>
           <span class="grow t-num">{{ e.weight != null ? `${fmtNum(e.weight, 1)} ${e.unit}` : '' }}</span>
-          <span class="t-tiny t-muted">{{ measuredCount(e) ? tn(measuredCount(e), '{n} measurement', '{n} measurements') : '' }}</span>
+          <span v-if="e.source === 'hc'" class="t-tiny t-muted">{{ t('from {app}', { app: sourceName(e.app) || 'Health Connect' }) }}</span>
+          <span v-else class="t-tiny t-muted">{{ measuredCount(e) ? tn(measuredCount(e), '{n} measurement', '{n} measurements') : '' }}</span>
           <Icon name="chevronRight" class="chev" />
         </button>
       </div>
@@ -191,6 +211,8 @@
 
 <script setup>
 import { signedIn } from '../lib/account.js'
+import { healthSettings, healthOn } from '../lib/health.js'
+import { sourceName } from '../lib/healthRecords.js'
 import { computed, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Line } from 'vue-chartjs'
@@ -406,6 +428,12 @@ async function removePhoto () {
   delete thumbs[p.id]; delete full[p.id]
   toast(t('Photo deleted'))
 }
+
+// 0.13: daily steps from Health Connect (when connected and allowed)
+const steps = computed(() => (healthOn.value ? healthSettings.value.steps || [] : []))
+const stepsMax = computed(() => Math.max(1, ...steps.value.map(d => d.count)))
+const stepsAvg = computed(() => (steps.value.length ? steps.value.reduce((a, d) => a + d.count, 0) / steps.value.length : 0))
+const dayLetter = (date) => new Date(date + 'T12:00:00').toLocaleDateString(locale(), { weekday: 'narrow' })
 </script>
 
 <style scoped>
@@ -449,4 +477,11 @@ async function removePhoto () {
 .viewer figure { margin: 0; text-align: center; }
 .viewer img { width: 100%; max-height: 60vh; object-fit: contain; border-radius: 12px; background: var(--card-2); }
 .cmp { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.steps { display: grid; gap: 10px; }
+.st-head { align-items: baseline; gap: 8px; }
+.st-today { font-size: 26px; font-weight: 700; }
+.st-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; height: 84px; }
+.st-col { display: grid; justify-items: center; gap: 4px; align-content: end; }
+.st-bar { width: 100%; max-width: 28px; border-radius: 6px; background: color-mix(in srgb, var(--ok) 32%, transparent); }
+.st-bar.now { background: var(--ok); }
 </style>
