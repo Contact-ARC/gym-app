@@ -66,7 +66,7 @@ const change = computed(() => {
 function setLine (r) {
   if (r.load > 0 && r.reps) return `${fmtLoad(r.load, r.unit)} × ${r.reps}`
   if (r.reps) return `× ${r.reps}`
-  if (r.seconds) return fmtSecs(r.seconds)
+  if (r.seconds) return fmtSecs(r.seconds) + (r.level != null ? ' · ' + t('level {n}', { n: r.level }) : '')
   return ''
 }
 function spot () {

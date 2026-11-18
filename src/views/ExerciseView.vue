@@ -101,7 +101,7 @@
     <template v-else>
       <ExerciseDetails :ex="ex" />
 
-      <section v-if="bound || machine.length">
+      <section>
         <h2 class="section-h">{{ t('Your machine settings') }}</h2>
         <button class="group group-row settings-btn" @click="msOpen = true">
           <div class="grow">
@@ -167,7 +167,7 @@ import CustomExerciseSheet from '../ui/CustomExerciseSheet.vue'
 import Sheet from '../ui/Sheet.vue'
 import { state, exercisesById, historyFor, setExerciseNote, hideCustomExercise, days, suggestionFor } from '../store.js'
 import { currentGymId, gymById, gymName } from '../lib/climbing.js'
-import { relativeDay, fmtNum, fmtSecs } from '../lib/format.js'
+import { relativeDay, fmtNum, fmtSecs, levelText } from '../lib/format.js'
 import { bestE1RM, heaviest, fmtLoad, unitFor, repRecords, bestSeconds, setVolume, isWorkSet, gymBound } from '../lib/training.js'
 import { useChartTheme } from '../lib/chartTheme.js'
 import { t, tn, tx, locale } from '../i18n/index.js'
@@ -211,8 +211,8 @@ const gymChoices = computed(() => {
 const history = computed(() => (ex.value ? historyFor(ex.value.id, null, bound.value ? viewGym.value : null) : []))
 const workSetsOf = (h) => h.sets.filter(isWorkSet)
 
-// Your progress first once you've done it, How to do it until then (?tab=progress / ?tab=how to choose)
-const firstTab = () => (route.query.tab === 'progress' || route.query.tab === 'how' ? route.query.tab : (history.value.length ? 'progress' : 'how'))
+// How to do it first, always (it's what you want mid-workout); ?tab=progress opens progress (Progress links)
+const firstTab = () => (route.query.tab === 'progress' ? 'progress' : 'how')
 const tab = ref(firstTab())
 watch(() => route.params.id, () => {
   tab.value = firstTab()
@@ -394,7 +394,7 @@ function repsOf (s) {
 }
 function setStr (s) {
   if (s.cardio) return cardioText(s, myUnit.value)
-  if (s.seconds) return s.load ? t('{load} for {s}', { load: fmtLoad(s.load, s.unit), s: fmtSecs(s.seconds) }) : fmtSecs(s.seconds)
+  if (s.seconds) return (s.load ? t('{load} for {s}', { load: fmtLoad(s.load, s.unit), s: fmtSecs(s.seconds) }) : fmtSecs(s.seconds)) + levelText(s)
   const reps = s.repsL != null && s.repsR != null && s.repsL !== s.repsR ? `${s.repsL}/${s.repsR}` : s.reps
   const tag = s.type === 'drop' ? ' ' + t('drop') : ''
   return `${s.load ? fmtLoad(s.load, s.unit) : t('BW')} × ${reps}${tag}`

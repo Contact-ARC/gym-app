@@ -122,6 +122,8 @@ export {
   mdiWatchVariant as watch,
   mdiCalendarWeek as calWeek,
   mdiFireCircle as burn,
+  // 0.15.2: workout header, your progress with this exercise
+  mdiTrendingUp as trendUp,
   // 0.14
   mdiDumbbell as dumbbell,
   mdiWeightKilogram as plate

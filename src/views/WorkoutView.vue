@@ -89,16 +89,20 @@
             >{{ planLogged(gi)[r - 1] ? setText(planLogged(gi)[r - 1]) : (gi === current && r === planLogged(gi).length + 1 ? t('now') : '') }}</button>
           </template>
         </div>
+        <div class="ss-rounds">
+          <button v-if="canRemoveRound" class="btn btn-soft btn-sm" @click="removeRound"><Icon name="minus" :size="18" />{{ t('Round') }}</button>
+          <button class="btn btn-soft btn-sm" @click="addRound"><Icon name="plus" :size="18" />{{ t('Round') }}</button>
+        </div>
       </div>
 
       <Transition :name="slideDir" mode="out-in">
         <section :key="current + ':' + item.exerciseId" class="ex">
           <div class="row ex-top">
-            <button v-if="thumb" class="thumb" :aria-label="t('How to do it')" @click="openExercise">
+            <button v-if="thumb" class="thumb" :aria-label="t('Show {what} full screen', { what: name(item.exerciseId) })" @click="photosOpen = true">
               <img :src="thumb" alt="" @error="(e) => (e.target.parentElement.style.display = 'none')">
             </button>
             <div class="grow">
-              <h1 class="t-title ex-name" :class="{ 'in-ss': !!group, long: name(item.exerciseId).length > 22 }" @click="openExercise">{{ name(item.exerciseId) }}</h1>
+              <h1 class="t-title ex-name" :class="{ 'in-ss': !!group, long: name(item.exerciseId).length > 22 }" role="link" tabindex="0" :aria-label="t('How to do {name}', { name: name(item.exerciseId) })" @click="openExercise('how')" @keydown.enter="openExercise('how')">{{ nameHead }}<span class="name-tail">{{ nameTail }}<Icon name="chevronRight" :size="22" class="name-go" /></span></h1>
               <div class="t-small t-muted ex-meta">
                 <span v-if="isClimbEx">{{ t('Log every climb as you go') }}</span>
                 <span v-else>{{ prescription({ ...item, sets: rowCount(current) }, ex) }}</span>
@@ -107,8 +111,10 @@
                 <span v-if="item.track" class="t-faint">{{ t('beginner version') }}</span>
               </div>
             </div>
-            <button class="icon-btn info-btn" :aria-label="t('This exercise: your progress and how to do it')" @click="openExercise"><Icon name="info" /></button>
-            <button class="icon-btn" :aria-label="t('Exercise options')" @click="exMenuOpen = true"><Icon name="more" /></button>
+            <div class="ex-acts">
+              <button class="icon-btn" :aria-label="t('Your progress with this exercise')" @click="openExercise('progress')"><Icon name="trendUp" /></button>
+              <button class="icon-btn" :aria-label="t('Exercise options')" @click="exMenuOpen = true"><Icon name="more" /></button>
+            </div>
           </div>
 
           <ClimbPanel v-if="isClimbEx" ref="climbPanel" :session-id="session.id" :item-index="current" :exercise-id="item.exerciseId" />
@@ -174,6 +180,11 @@
                 <span class="grow"><span class="t-num wv">{{ fmtLoad(warmFinal.load, unit) }}</span> <span class="t-small t-muted">{{ t('working sets') }}</span></span>
                 <span v-if="warmFinal.change" class="wdo t-num">{{ warmFinal.change }}</span>
               </div>
+              <!-- Back from 0.8: what a feeler set is, and that warm-ups don't touch records -->
+              <p class="t-tiny t-muted warm-foot">
+                <template v-if="warmKind === 'feeler'">{{ t('Your muscles are warm, but this is their first time with weight today.') + ' ' }}</template>
+                {{ t("Warm-ups aren't counted in your records.") }}
+              </p>
             </div>
           </div>
 
@@ -212,6 +223,7 @@
             <CardioFields v-if="isCardio" :c="draft" :unit="profile.unit" />
             <Stepper v-else-if="isTimed && timedInMin" v-model="draftMinutes" :label="t('Minutes')" :step="0.5" :min="0" :decimals="true" />
             <Stepper v-else-if="isTimed" v-model="draft.seconds" :label="t('Seconds')" :step="5" :min="0" :format="(v) => String(Math.round(v))" />
+            <Stepper v-if="resistance" v-model="draft.level" :label="levelLabel" :step="1" :min="resistance.min" :max="resistance.max" size="md" />
             <div v-else-if="split" class="split">
               <Stepper v-model="draft.repsL" :label="t('Left reps')" :step="1" :min="0" size="md" />
               <Stepper v-model="draft.repsR" :label="t('Right reps')" :step="1" :min="0" size="md" />
@@ -330,10 +342,19 @@
         <button class="group-row" @click="exMenuOpen = false; msOpen = true"><Icon name="settings" /><span class="grow">{{ t('Machine settings') }}</span></button>
         <button class="group-row" @click="exMenuOpen = false; openNote()"><Icon name="note" /><span class="grow">{{ state.data.exerciseNotes[item.exerciseId] ? t('Edit your note') : t('Add a note for next time') }}</span></button>
         <button v-if="canWarm" class="group-row" @click="toggleWarmup"><Icon name="up" /><span class="grow">{{ showWarmup ? t('Hide warm-up sets') : t('Warm-up sets') }}</span></button>
-        <button class="group-row" @click="addSet(); exMenuOpen = false"><Icon name="plus" /><span class="grow">{{ t('Add a set') }}</span></button>
-        <button v-if="rowCount(current) > Math.max(1, planLogged(current).length)" class="group-row" @click="removeSet(); exMenuOpen = false">
-          <Icon name="minus" /><span class="grow">{{ t('Remove a set') }}</span>
-        </button>
+      </div>
+      <!-- Sets of this exercise; in a superset, rounds of the whole thing. One line each, the sheet stays open -->
+      <div class="group ex-sets">
+        <div class="group-row cnt-row">
+          <span class="grow">{{ t('Sets') }} <b class="t-num">{{ rowCount(current) }}</b></span>
+          <button class="icon-btn cnt-btn" :disabled="!canRemoveSet(current)" :aria-label="t('Remove a set')" @click="removeSet"><Icon name="minus" /></button>
+          <button class="icon-btn cnt-btn" :aria-label="t('Add a set')" @click="addSet"><Icon name="plus" /></button>
+        </div>
+        <div v-if="group" class="group-row cnt-row">
+          <span class="grow">{{ t('Rounds') }} <b class="t-num">{{ groupRounds }}</b></span>
+          <button class="icon-btn cnt-btn" :disabled="!canRemoveRound" :aria-label="t('Remove a round')" @click="removeRound"><Icon name="minus" /></button>
+          <button class="icon-btn cnt-btn" :aria-label="t('Add a round')" @click="addRound"><Icon name="plus" /></button>
+        </div>
       </div>
     </Sheet>
 
@@ -346,10 +367,12 @@
     <GymPickSheet v-model="gymPickOpen" :session-id="session.id" />
     <TogetherSheet v-model="togetherOpen" />
 
+    <PhotoViewer v-model="photosOpen" :photos="workoutPhotos" :title="name(item?.exerciseId)" />
+
     <!-- Quick look at how to do the current exercise -->
     <Sheet v-model="infoOpen" :title="name(item?.exerciseId)">
       <ExerciseDetails v-if="ex" :ex="ex" in-sheet />
-      <RouterLink :to="`/exercise/${item?.exerciseId}`" class="btn btn-ghost btn-block full-link" @click="infoOpen = false">
+      <RouterLink :to="`/exercise/${item?.exerciseId}?tab=progress`" class="btn btn-ghost btn-block full-link" @click="infoOpen = false">
         {{ t('Your progress with this exercise') }}
       </RouterLink>
     </Sheet>
@@ -371,6 +394,7 @@
         <CardioFields v-if="isCardio" :c="editDraft" :unit="profile.unit" size="md" />
         <Stepper v-else-if="isTimed && timedInMin" v-model="editMinutes" :label="t('Minutes')" :step="0.5" :min="0" :decimals="true" size="md" />
         <Stepper v-else-if="isTimed" v-model="editDraft.seconds" :label="t('Seconds')" :step="5" :min="0" size="md" />
+        <Stepper v-if="resistance && isTimed" v-model="editDraft.level" :label="levelLabel" :step="1" :min="resistance.min" :max="resistance.max" size="md" />
         <div v-else-if="editDraft.repsL != null" class="split">
           <Stepper v-model="editDraft.repsL" :label="t('Left reps')" :step="1" :min="0" size="md" />
           <Stepper v-model="editDraft.repsR" :label="t('Right reps')" :step="1" :min="0" size="md" />
@@ -457,6 +481,7 @@ import { activeGyms, gymName, gymById, sessionGymId } from '../lib/climbing.js'
 import CardioFields from '../ui/CardioFields.vue'
 import { cardioOf, cardioText, cardioStart } from '../lib/cardio.js'
 import ExerciseDetails from '../ui/ExerciseDetails.vue'
+import PhotoViewer from '../ui/PhotoViewer.vue'
 import { plateStyle } from '../ui/plates.js'
 import { toast, hideToast } from '../ui/toast.js'
 import {
@@ -468,7 +493,7 @@ import {
   unitFor, incrementFor, fmtLoad, fillsPlannedSet, SET_TYPES, platesPerSide, warmupSets, platesFor, nextSetAdjust,
   warmupKind, warmupSize, isWorkSet, bestE1RM, heaviest, canDoAtGym, barSetupFor, plateWarmups, warmStepFor, isStackMachine
 } from '../lib/training.js'
-import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle, plateText, plateChangeText, fmtSecs } from '../lib/format.js'
+import { prescription, restLabel, dayTitle, mmss, fmtDate, sessionTitle, plateText, plateChangeText, fmtSecs, levelText } from '../lib/format.js'
 import { effectiveRest, supersetNext } from '../lib/supersets.js'
 import { rest, startRest, stopRest, addRest, notifyProblem } from '../lib/restTimer.js'
 import { tap, buzz, keepAwake, openNotificationSettings } from '../lib/native.js'
@@ -534,9 +559,18 @@ const groupRounds = computed(() => (group.value ? Math.max(...group.value.indice
 const groupRest = computed(() => (group.value ? effectiveRest(items.value, group.value.indices[group.value.indices.length - 1]) : 0))
 const thumb = computed(() => (ex.value?.images?.[0] ? imageUrl(ex.value.images[0]) : ''))
 const infoOpen = ref(false)
-// The exercise's own page: your progress with it, and how to do it (the workout keeps running)
-function openExercise () {
-  if (item.value) router.push(`/exercise/${item.value.exerciseId}`)
+const photosOpen = ref(false)
+// The name with its last word kept together with the › (so the arrow never sits alone on a line)
+const nameHead = computed(() => { const n = name(item.value?.exerciseId) || ''; const i = n.lastIndexOf(' '); return i < 0 ? '' : n.slice(0, i + 1) })
+const nameTail = computed(() => { const n = name(item.value?.exerciseId) || ''; const i = n.lastIndexOf(' '); return i < 0 ? n : n.slice(i + 1) })
+const workoutPhotos = computed(() => (ex.value?.images || []).map((img, i) => ({
+  src: imageUrl(img),
+  alt: i === 0 ? t('{name}, start position', { name: name(ex.value.id) }) : t('{name}, end position', { name: name(ex.value.id) })
+})))
+// The exercise's own page (the workout keeps running): the name opens how to do it, the arrow your progress.
+// The photo opens the exercise's photos full screen, without leaving the workout.
+function openExercise (tab = 'how') {
+  if (item.value) router.push(`/exercise/${item.value.exerciseId}?tab=${tab}`)
 }
 
 const chips = []
@@ -572,10 +606,31 @@ function firstIncomplete () {
   return idx < 0 ? 0 : idx
 }
 
-function addSet () { item.value.extraSets = (item.value.extraSets || 0) + 1; persist() }
-function removeSet () {
-  if ((item.value.extraSets || 0) > 0) item.value.extraSets--
-  else item.value.removedSets = (item.value.removedSets || 0) + 1
+// One exercise's sets (in a superset, just that exercise's row)
+function bumpSet (i, by) {
+  const it = items.value[i]
+  if (!it) return
+  if (by > 0) it.extraSets = (it.extraSets || 0) + 1
+  else if ((it.extraSets || 0) > 0) it.extraSets--
+  else it.removedSets = (it.removedSets || 0) + 1
+}
+const canRemoveSet = (i) => rowCount(i) > Math.max(1, planLogged(i).length)
+function addSet () { bumpSet(current.value, 1); persist() }
+function removeSet () { if (canRemoveSet(current.value)) { bumpSet(current.value, -1); persist() } }
+
+// The whole superset, a round at a time: every exercise gets one more (or one fewer) set. Uneven rows are
+// brought level when adding; removing takes the last round off the longest rows.
+const canRemoveRound = computed(() => !!group.value && group.value.indices.some(i => rowCount(i) === groupRounds.value && canRemoveSet(i)))
+function addRound () {
+  if (!group.value) return
+  const target = groupRounds.value + 1
+  for (const i of group.value.indices) while (rowCount(i) < target) bumpSet(i, 1)
+  persist()
+}
+function removeRound () {
+  if (!canRemoveRound.value) return
+  const top = groupRounds.value
+  for (const i of group.value.indices) if (rowCount(i) === top && canRemoveSet(i)) bumpSet(i, -1)
   persist()
 }
 
@@ -682,7 +737,7 @@ function repsText (s) {
 }
 function setText (s) {
   if (s.cardio) return cardioText(s, profile.value.unit)
-  if (s.seconds) return s.load ? t('{load} for {s}', { load: s.load, s: fmtSecs(s.seconds) }) : fmtSecs(s.seconds)
+  if (s.seconds) return (s.load ? t('{load} for {s}', { load: s.load, s: fmtSecs(s.seconds) }) : fmtSecs(s.seconds)) + levelText(s)
   const load = s.unit === 'pin' ? `P${s.load}` : (s.load ? String(s.load) : t('BW'))
   return `${load} × ${repsText(s)}`
 }
@@ -755,7 +810,9 @@ const draft = computed(() => {
       rir: null,
       type: null,
       // Cardio: speed (km/h) and incline from your last bout, or a sensible start
-      ...(isCardio.value ? cardioDraft(last) : {})
+      ...(isCardio.value ? cardioDraft(last) : {}),
+      // Bikes, rowers: the level (or damper) you used last time
+      level: resistance.value ? lastLevel(last) : null
     }
   }
   return drafts[key]
@@ -773,6 +830,20 @@ function cardioDraft (last) {
   if (!prev) for (const h of historyFor(item.value.exerciseId, session.value.id)) { prev = h.sets.find(x => x.cardio); if (prev) break }
   const start = cardioStart(ex.value)
   return { speed: prev?.cardio.speed ?? start.speed, incline: prev?.cardio.incline ?? start.incline }
+}
+// Cardio machines with a difficulty level or damper ("resistance" in the exercise data: bikes 1–40, rowers 1–10)
+const resistance = computed(() => {
+  const r = ex.value?.resistance
+  return r ? { kind: r.kind || 'level', min: r.min ?? 1, max: r.max ?? 40 } : null
+})
+const levelLabel = computed(() => (resistance.value?.kind === 'damper' ? t('Damper') : t('Level')))
+function lastLevel (last) {
+  if (last?.level != null) return last.level
+  for (const h of historyFor(item.value.exerciseId, session.value.id)) {
+    const s = h.sets.find(x => x.level != null)
+    if (s) return s.level
+  }
+  return null
 }
 const split = computed(() => !!ex.value?.perSide && draft.value.repsL != null)
 function toggleSplit () {
@@ -930,6 +1001,7 @@ function logNow () {
     ...sideReps,
     seconds: isTimed.value ? d.seconds : null,
     ...(isCardio.value ? { cardio: cardioOf(d) } : {}),
+    ...(resistance.value && d.level != null ? { level: d.level } : {}),
     rir: isTimed.value ? null : d.rir,
     ...(d.type ? { type: d.type } : {})
   })
@@ -1078,7 +1150,7 @@ function startManualRest () {
 // ── Edit a logged set ──────────────────────────────────────
 const editOpen = ref(false)
 const editing = ref(null)
-const editDraft = reactive({ load: null, reps: null, repsL: null, repsR: null, seconds: null, rir: null, type: null, speed: null, incline: null })
+const editDraft = reactive({ load: null, reps: null, repsL: null, repsR: null, seconds: null, rir: null, type: null, speed: null, incline: null, level: null })
 const confirmingDelete = ref(false)
 function openEdit (s) {
   // A set of the other exercise in a superset: switch to it, so the weight unit and steps match
@@ -1087,13 +1159,14 @@ function openEdit (s) {
   editing.value = s
   Object.assign(editDraft, {
     load: s.load, reps: s.reps, repsL: s.repsL ?? null, repsR: s.repsR ?? null, seconds: s.seconds, rir: s.rir ?? null, type: s.type ?? null,
-    speed: s.cardio?.speed ?? null, incline: s.cardio?.incline ?? null
+    speed: s.cardio?.speed ?? null, incline: s.cardio?.incline ?? null, level: s.level ?? null
   })
   editOpen.value = true
 }
 // Close first, then save: the sheet reacts at once whatever the phone's storage is doing
 function saveEdit () {
-  const { speed, incline, ...patch } = editDraft
+  const { speed, incline, level, ...patch } = editDraft
+  if (level != null) patch.level = level
   if (editing.value.cardio) patch.cardio = cardioOf({ seconds: patch.seconds, speed, incline })
   if (patch.repsL != null && patch.repsR != null) patch.reps = Math.min(patch.repsL, patch.repsR)
   if (!patch.type) { delete patch.type; delete editing.value.type }
@@ -1311,16 +1384,24 @@ watch(() => (tgItem.value == null ? null : [tgItem.value, draft.value?.load, mac
 
 .ex-top { align-items: flex-start; margin-top: 8px; gap: 8px; }
 .ex-top h1 { margin-top: 4px; cursor: pointer; }
+.name-tail { white-space: nowrap; }
+.name-go { display: inline-block; vertical-align: -3px; margin-left: 2px; color: var(--ink-3); }
 /* Long names: two lines at most, a little smaller, so weight and reps stay high on the screen */
 .ex-name { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .ex-name.long { font-size: 25px; }
 .ex-top h1.in-ss { font-size: 24px; }
 .thumb { flex: 0 0 auto; width: 64px; height: 48px; margin-top: 4px; border-radius: 10px; overflow: hidden; background: var(--card-2); }
 .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.info-btn { margin-right: -10px; }
+.ex-acts { display: flex; flex: 0 0 auto; margin-right: -8px; }
+.ex-acts .icon-btn { width: 40px; }
 .full-link { margin-top: 18px; }
 
 /* Superset: one card that shows both exercises and the rounds */
+.ss-rounds { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.ex-sets { margin-top: 12px; }
+.cnt-row { gap: 6px; }
+.cnt-btn { background: var(--card-2); width: 40px; height: 40px; }
+.cnt-btn:disabled { opacity: 0.35; }
 .ss-card { margin-top: 10px; padding: 12px; border-radius: 16px; background: var(--card); border: 2px solid var(--plate-bg); }
 .ss-head { display: flex; gap: 8px; align-items: flex-start; color: var(--ink-2); padding: 0 4px; }
 .ss-head b { color: var(--ink); }
@@ -1379,6 +1460,7 @@ watch(() => (tgItem.value == null ? null : [tgItem.value, draft.value?.load, mac
 .warm-head { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px; padding: 0 16px; text-align: left; }
 .warm-head b { margin-right: 8px; }
 .warm-list { padding: 0 8px 8px; }
+.warm-foot { margin: 6px 8px 2px; }
 .warm-row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 42px; padding: 0 8px; border-radius: 10px; text-align: left; }
 .warm-row:active { background: var(--press); }
 .tick { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; border: 2px solid var(--line); color: #fff; flex: 0 0 auto; }

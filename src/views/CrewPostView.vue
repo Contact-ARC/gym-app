@@ -78,7 +78,7 @@ import {
 import { convertLoad, fmtLoad } from '../lib/training.js'
 import { climbText } from '../lib/climbing.js'
 import { cardioText } from '../lib/cardio.js'
-import { relativeDay, fmtSecs } from '../lib/format.js'
+import { relativeDay, fmtSecs, levelText } from '../lib/format.js'
 import { t, locale } from '../i18n/index.js'
 
 const route = useRoute()
@@ -116,6 +116,7 @@ function setText (s) {
     : null
   let out = ''
   if (s.seconds) out = load ? `${load} · ${fmtSecs(s.seconds)}` : fmtSecs(s.seconds)
+  if (s.seconds) out += levelText(s)
   else out = load ? `${load} × ${reps ?? '–'}` : t('{n} reps', { n: reps ?? '–' })
   if (s.rir != null) out += ` @${s.rir}`
   return out

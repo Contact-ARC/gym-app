@@ -103,6 +103,11 @@ export function fmtMins (m) {
   return m < 1 ? '<1' : String(Math.round(m))
 }
 
+/** " · level 6" after a cardio machine set logged with its resistance level or damper (0.15.5), or nothing */
+export function levelText (s) {
+  return s?.level != null ? ' · ' + t('level {n}', { n: s.level }) : ''
+}
+
 /** Sleep or other long durations in minutes: "7h 05m" */
 export function fmtHm (min) {
   if (min == null || !isFinite(min)) return '–'

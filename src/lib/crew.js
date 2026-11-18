@@ -239,6 +239,7 @@ function workoutDetail (s) {
     if (!by[x.exerciseId]) { by[x.exerciseId] = []; order.push(x.exerciseId) }
     const set = { load: x.load ?? null, unit: x.unit, reps: x.reps ?? null }
     if (x.seconds) set.seconds = x.seconds
+    if (x.level != null) set.level = x.level
     if (x.type && x.type !== 'normal') set.type = x.type
     if (x.rir != null) set.rir = x.rir
     if (x.repsL != null) { set.repsL = x.repsL; set.repsR = x.repsR }
