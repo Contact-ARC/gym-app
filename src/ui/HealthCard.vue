@@ -25,6 +25,10 @@
     <!-- Connected -->
     <template v-else>
       <p v-if="!health.granted.length" class="t-small t-err">{{ t('Nothing is allowed at the moment. Open Health Connect to allow what you want to share.') }}</p>
+      <div v-else-if="newOnes.length && !h.askedMore" class="more">
+        <p class="t-small">{{ t('Gym Crew can now also read workouts from other apps, active calories, sleep, resting heart rate and VO2 max.') }}</p>
+        <button class="btn btn-soft btn-sm" :disabled="health.busy" @click="allowMore">{{ t('Allow more') }}</button>
+      </div>
       <div class="group">
         <div class="group-row">
           <div class="grow"><div>{{ t('Send workouts') }}</div><div class="t-tiny t-muted">{{ t('Each finished workout, with treadmill distance') }}</div></div>
@@ -35,7 +39,7 @@
           <Toggle v-model="h.body" :aria-label="t('Send weight and body fat')" @update:model-value="changed" />
         </div>
         <div class="group-row">
-          <div class="grow"><div>{{ t('Read from other apps') }}</div><div class="t-tiny t-muted">{{ t('Heart rate during workouts, weigh-ins and steps') }}</div></div>
+          <div class="grow"><div>{{ t('Read from other apps') }}</div><div class="t-tiny t-muted">{{ t('Heart rate and calories during workouts, weigh-ins, steps, sleep and workouts from other apps') }}</div></div>
           <Toggle v-model="h.read" :aria-label="t('Read from other apps')" @update:model-value="changed" />
         </div>
       </div>
@@ -66,7 +70,7 @@ import { toast } from './toast.js'
 import { persist } from '../store.js'
 import {
   health, healthSupported, healthSettings, healthOn, refreshStatus, connectHealth, disconnectHealth, runHealth,
-  openHealthSettings, openHealthStore
+  openHealthSettings, openHealthStore, missingPermissions
 } from '../lib/health.js'
 import { t } from '../i18n/index.js'
 
@@ -92,6 +96,13 @@ async function connect () {
     toast(ok ? t('Connected to Health Connect') : t('Nothing was allowed, so nothing is shared.'))
   } catch (e) { toast(e.message || String(e)) }
 }
+// Read permissions added in an update that this phone hasn't been asked for yet
+const NEW_IN_013 = ['read:exercise', 'read:activeCalories', 'read:sleep', 'read:restingHeartRate', 'read:vo2max']
+const newOnes = computed(() => missingPermissions.value.filter(p => NEW_IN_013.includes(p)))
+async function allowMore () {
+  h.value.askedMore = true
+  try { await connectHealth() } catch (e) { toast(e.message || String(e)) }
+}
 async function changed () {
   await persist()
   runHealth()
@@ -114,5 +125,7 @@ async function disconnect () {
 .hc-on { color: var(--err); }
 .btns { gap: 8px; }
 .note { margin: 0; }
+.more { display: grid; gap: 8px; justify-items: start; padding: 10px 12px; border-radius: 12px; background: var(--card-2); }
+.more p { margin: 0; }
 .off { color: var(--err); }
 </style>

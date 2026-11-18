@@ -173,3 +173,58 @@ export function importedEntries ({ weights = [], fats = [] }, { unit = 'kg', kno
   }
   return { entries: out, seen }
 }
+
+// ── More from Health Connect (0.13): other workouts, sleep, resting heart rate, VO2 max ──
+const localDay = (iso) => {
+  const d = new Date(iso)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/**
+ * Workouts other apps or a watch recorded, minus the ones that are really a Gym Crew workout seen twice
+ * (a watch recording the same gym session): those overlapping one of yours for more than half their time.
+ * → [{ id, start, end, minutes, type, title, source, date }], newest first
+ */
+export function otherWorkouts (workouts = [], sessions = [], { day = localDay } = {}) {
+  const mine = sessions.filter(s => s.startedAt && s.finishedAt).map(s => [new Date(s.startedAt).getTime(), new Date(s.finishedAt).getTime()])
+  const out = []
+  for (const w of workouts) {
+    const a = new Date(w.start).getTime()
+    const b = new Date(w.end).getTime()
+    if (!(b > a)) continue
+    const overlap = Math.max(0, ...mine.map(([s, e]) => Math.min(b, e) - Math.max(a, s)))
+    if (overlap > (b - a) / 2) continue
+    out.push({ id: w.id, start: w.start, end: w.end, minutes: Math.round((b - a) / 60000), type: w.type || 'other', title: w.title || '', source: w.source || '', date: day(w.start) })
+  }
+  return out.sort((x, y) => String(y.start).localeCompare(String(x.start)))
+}
+
+/**
+ * Hours slept per night, by the day you woke up: [{ date, minutes }], oldest first. When two apps
+ * recorded the same night (a watch and the phone), the one with more sleep counts, not both added up.
+ */
+export function sleepNights (sessions = [], { day = localDay } = {}) {
+  const byNight = new Map() // date → source → minutes
+  for (const s of sessions) {
+    const a = new Date(s.start).getTime()
+    const b = new Date(s.end).getTime()
+    if (!(b > a)) continue
+    const date = day(s.end)
+    const per = byNight.get(date) || new Map()
+    per.set(s.source || '', (per.get(s.source || '') || 0) + (b - a) / 60000)
+    byNight.set(date, per)
+  }
+  return [...byNight.entries()]
+    .map(([date, per]) => ({ date, minutes: Math.round(Math.max(...per.values())) }))
+    .sort((x, y) => x.date.localeCompare(y.date))
+}
+
+/** The latest reading of each day: [{ date, value }], oldest first */
+export function dailyLatest (readings = [], key, { day = localDay } = {}) {
+  const byDay = new Map()
+  for (const r of [...readings].sort((a, b) => String(a.time).localeCompare(String(b.time)))) {
+    if (r[key] == null) continue
+    byDay.set(day(r.time), r[key])
+  }
+  return [...byDay.entries()].map(([date, value]) => ({ date, value })).sort((x, y) => x.date.localeCompare(y.date))
+}

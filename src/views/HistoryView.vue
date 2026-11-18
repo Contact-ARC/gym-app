@@ -50,7 +50,16 @@
               <Icon name="chevronRight" class="chev" />
             </RouterLink>
           </div>
-          <p v-else class="t-small t-muted rest-day">{{ t('No workout this day.') }}</p>
+          <p v-else-if="!selectedOthers.length" class="t-small t-muted rest-day">{{ t('No workout this day.') }}</p>
+          <div v-if="selectedOthers.length" class="group others">
+            <div v-for="w in selectedOthers" :key="w.id" class="group-row">
+              <span class="oth-i"><Icon name="heart" :size="18" /></span>
+              <div class="grow">
+                <div class="t-h3 truncate">{{ otherTitle(w) }}</div>
+                <div class="t-small t-muted">{{ t('{n} min', { n: fmtMins(w.minutes) }) }} · {{ t('from {app}', { app: sourceName(w.source) || 'Health Connect' }) }}</div>
+              </div>
+            </div>
+          </div>
         </section>
 
         <RouterLink v-if="monthSessions.length" :to="`/report/${month}`" class="btn btn-soft btn-block report-btn">
@@ -60,6 +69,19 @@
 
       <!-- List -->
       <template v-else>
+        <section v-if="others.length">
+          <h2 class="section-h">{{ t('Other activity, last 30 days') }}</h2>
+          <div class="group others">
+            <div v-for="w in others.slice(0, showOthers ? 60 : 4)" :key="w.id" class="group-row">
+              <span class="oth-i"><Icon name="heart" :size="18" /></span>
+              <div class="grow">
+                <div class="t-h3 truncate">{{ otherTitle(w) }}</div>
+                <div class="t-small t-muted">{{ when(w.start) }}, {{ t('{n} min', { n: fmtMins(w.minutes) }) }} · {{ sourceName(w.source) || 'Health Connect' }}</div>
+              </div>
+            </div>
+          </div>
+          <button v-if="others.length > 4" class="btn btn-ghost btn-sm" @click="showOthers = !showOthers">{{ showOthers ? t('Show fewer') : t('Show all {n}', { n: others.length }) }}</button>
+        </section>
         <section v-for="g in groups" :key="g.key">
           <h2 class="section-h">{{ monthName(g.key) }}</h2>
           <div class="group">
@@ -90,6 +112,8 @@ import { dayTitle, monthName, fmtDate, fmtMins, sessionTitle } from '../lib/form
 import { dateKey } from '../lib/training.js'
 import { calendarMonth, shiftMonth, monthKey, sessionMinutes, workSets, addDays, weekStart } from '../lib/stats.js'
 import { t, tn, locale } from '../i18n/index.js'
+import { healthSettings, healthOn } from '../lib/health.js'
+import { sourceName } from '../lib/healthRecords.js'
 
 const router = useRouter()
 
@@ -127,6 +151,17 @@ watch(month, (m) => {
   }
 })
 const selectedSessions = computed(() => finishedSessions.value.filter(s => dateKey(s.startedAt) === selected.value).reverse())
+// 0.13: workouts other apps or a watch recorded, from Health Connect (read only)
+const others = computed(() => (healthOn.value && healthSettings.value.read ? healthSettings.value.others || [] : []))
+const selectedOthers = computed(() => others.value.filter(w => w.date === selected.value))
+const showOthers = ref(false)
+const OTHER_NAMES = {
+  running: 'Run', treadmill: 'Treadmill run', walking: 'Walk', hiking: 'Hike', biking: 'Ride', bike: 'Indoor ride', swimming: 'Swim',
+  rower: 'Rowing', strength: 'Strength training', hiit: 'HIIT', climbing: 'Climbing', yoga: 'Yoga', basketball: 'Basketball',
+  football: 'Football', tennis: 'Tennis', squash: 'Squash', badminton: 'Badminton', elliptical: 'Elliptical', stairs: 'Stair climber',
+  pilates: 'Pilates', boxing: 'Boxing', martialArts: 'Martial arts', dancing: 'Dancing', other: 'Workout'
+}
+const otherTitle = (w) => w.title || t(OTHER_NAMES[w.type] || 'Workout')
 const selectedLabel = computed(() => (selected.value === state.today ? t('Today') : fmtDate(selected.value + 'T12:00:00')))
 
 const dotStyle = (s) => ({ background: dayPlate(s.dayIndex ?? -1).bg })
@@ -176,4 +211,6 @@ const groups = computed(() => {
 .dot { width: 8px; height: 8px; border-radius: 50%; box-shadow: 0 0 0 1px var(--plate-ring); }
 .rest-day { margin: 0 4px; }
 .report-btn { margin-top: 20px; }
+.others { margin-top: 8px; }
+.oth-i { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--err-soft); color: var(--err); flex: 0 0 auto; }
 </style>

@@ -78,11 +78,12 @@
       <p class="t-tiny t-muted foot">{{ t('Change is since your first measurement.') }}</p>
     </section>
 
-    <!-- 0.13: steps from Health Connect -->
-    <section v-if="steps.length">
-      <h2 class="section-h">{{ t('Steps') }}</h2>
-      <div class="card card-pad steps">
+    <!-- 0.13: from Health Connect (steps, sleep, resting heart rate, VO2 max) -->
+    <section v-if="steps.length || sleep.length || resting || vo2">
+      <h2 class="section-h">{{ t('From Health Connect') }}</h2>
+      <div v-if="steps.length" class="card card-pad hcard">
         <div class="row st-head">
+          <span class="t-small t-muted">{{ t('Steps') }}</span>
           <span class="t-num st-today">{{ fmtNum(steps.at(-1).count, 0) }}</span>
           <span class="t-small t-muted grow">{{ steps.at(-1).date === state.today ? t('today') : shortDate(steps.at(-1).date) }}</span>
           <span class="t-tiny t-muted">{{ t('7-day average {n}', { n: fmtNum(stepsAvg, 0) }) }}</span>
@@ -93,7 +94,32 @@
             <span class="t-tiny t-muted">{{ dayLetter(d.date) }}</span>
           </div>
         </div>
-        <p class="t-tiny t-muted foot">{{ t('From Health Connect') }}</p>
+      </div>
+      <div v-if="sleep.length" class="card card-pad hcard">
+        <div class="row st-head">
+          <span class="t-small t-muted">{{ t('Sleep') }}</span>
+          <span class="t-num st-today">{{ hm(sleep.at(-1).minutes) }}</span>
+          <span class="t-small t-muted grow">{{ sleep.at(-1).date === state.today ? t('last night') : shortDate(sleep.at(-1).date) }}</span>
+          <span class="t-tiny t-muted">{{ t('average {t}', { t: hm(sleepAvg) }) }}</span>
+        </div>
+        <div class="st-bars" role="img" :aria-label="t('Sleep, last 7 nights')">
+          <div v-for="d in sleep" :key="d.date" class="st-col">
+            <div class="st-bar sl" :style="{ height: Math.max(4, Math.round((d.minutes / sleepMax) * 64)) + 'px' }" :class="{ now: d.date === state.today }" />
+            <span class="t-tiny t-muted">{{ dayLetter(d.date) }}</span>
+          </div>
+        </div>
+      </div>
+      <div v-if="resting || vo2" class="vitals">
+        <div v-if="resting" class="card card-pad vit">
+          <div class="t-tiny t-muted">{{ t('Resting heart rate') }}</div>
+          <div class="t-num cv">{{ resting.last }}<span class="cu"> {{ t('bpm') }}</span></div>
+          <div class="t-tiny t-muted">{{ resting.avg != null ? t('30-day average {n}', { n: resting.avg }) : shortDate(resting.date) }}</div>
+        </div>
+        <div v-if="vo2" class="card card-pad vit">
+          <div class="t-tiny t-muted">{{ t('VO2 max') }}</div>
+          <div class="t-num cv">{{ fmtNum(vo2.last, 1) }}</div>
+          <div class="t-tiny t-muted">{{ vo2.change != null ? t('{c} in 30 days', { c: (vo2.change > 0 ? '+' : '') + fmtNum(vo2.change, 1) }) : shortDate(vo2.date) }}</div>
+        </div>
       </div>
     </section>
 
@@ -429,8 +455,23 @@ async function removePhoto () {
   toast(t('Photo deleted'))
 }
 
-// 0.13: daily steps from Health Connect (when connected and allowed)
-const steps = computed(() => (healthOn.value ? healthSettings.value.steps || [] : []))
+// 0.13: from Health Connect (when connected and reading is on)
+const reading = computed(() => healthOn.value && healthSettings.value.read)
+const steps = computed(() => (reading.value ? healthSettings.value.steps || [] : []))
+const sleep = computed(() => (reading.value ? healthSettings.value.sleep || [] : []))
+const sleepMax = computed(() => Math.max(60, ...sleep.value.map(d => d.minutes)))
+const sleepAvg = computed(() => (sleep.value.length ? sleep.value.reduce((a, d) => a + d.minutes, 0) / sleep.value.length : 0))
+const hm = (min) => { const m = Math.round(min); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` }
+const resting = computed(() => {
+  const r = reading.value ? healthSettings.value.resting || [] : []
+  if (!r.length) return null
+  return { last: r.at(-1).value, date: r.at(-1).date, avg: r.length >= 3 ? Math.round(r.reduce((a, x) => a + x.value, 0) / r.length) : null }
+})
+const vo2 = computed(() => {
+  const v = reading.value ? healthSettings.value.vo2 || [] : []
+  if (!v.length) return null
+  return { last: v.at(-1).value, date: v.at(-1).date, change: v.length >= 2 ? Math.round((v.at(-1).value - v[0].value) * 10) / 10 : null }
+})
 const stepsMax = computed(() => Math.max(1, ...steps.value.map(d => d.count)))
 const stepsAvg = computed(() => (steps.value.length ? steps.value.reduce((a, d) => a + d.count, 0) / steps.value.length : 0))
 const dayLetter = (date) => new Date(date + 'T12:00:00').toLocaleDateString(locale(), { weekday: 'narrow' })
@@ -477,8 +518,12 @@ const dayLetter = (date) => new Date(date + 'T12:00:00').toLocaleDateString(loca
 .viewer figure { margin: 0; text-align: center; }
 .viewer img { width: 100%; max-height: 60vh; object-fit: contain; border-radius: 12px; background: var(--card-2); }
 .cmp { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
-.steps { display: grid; gap: 10px; }
-.st-head { align-items: baseline; gap: 8px; }
+.hcard { display: grid; gap: 10px; margin-bottom: 10px; }
+.st-bar.sl { background: color-mix(in srgb, var(--info) 35%, transparent); }
+.st-bar.sl.now { background: var(--info); }
+.vitals { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.vit { display: grid; gap: 2px; }
+.st-head { align-items: baseline; gap: 8px; flex-wrap: wrap; }
 .st-today { font-size: 26px; font-weight: 700; }
 .st-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; height: 84px; }
 .st-col { display: grid; justify-items: center; gap: 4px; align-content: end; }

@@ -10,7 +10,7 @@ import { registerPlugin } from '@capacitor/core'
 import { App as CapApp } from '@capacitor/app'
 import { state, persist, plain, onPersist, onDataReplaced, onSessionFinished, exercisesById, saveBodyEntry } from '../store.js'
 import { isNative } from './native.js'
-import { healthRecords, healthChanges, recordHash, importedEntries } from './healthRecords.js'
+import { healthRecords, healthChanges, recordHash, importedEntries, otherWorkouts, sleepNights, dailyLatest } from './healthRecords.js'
 import { t } from '../i18n/index.js'
 
 const Native = registerPlugin('HealthBridge')
@@ -21,8 +21,11 @@ function bridge () {
 
 export const ALL_PERMISSIONS = [
   'write:exercise', 'write:distance', 'write:weight', 'write:bodyFat', 'write:height',
-  'read:weight', 'read:bodyFat', 'read:heartRate', 'read:steps'
+  'read:weight', 'read:bodyFat', 'read:heartRate', 'read:steps',
+  'read:exercise', 'read:activeCalories', 'read:sleep', 'read:restingHeartRate', 'read:vo2max'
 ]
+/** Permissions the app could use but this phone hasn't allowed (e.g. ones added in an update) */
+export const missingPermissions = computed(() => ALL_PERMISSIONS.filter(p => !health.granted.includes(p)))
 
 /** status: null (checking) | available | not_installed | update_required | unsupported | none (not Android) */
 export const health = reactive({ status: null, granted: [], busy: false, error: null, lastRun: null })
@@ -31,7 +34,7 @@ const has = (key) => health.granted.includes(key)
 
 function settings () {
   if (!state.data.health) {
-    state.data.health = { on: false, workouts: true, body: true, read: true, written: {}, imported: [], ignored: [], hrTries: {}, steps: [], lastBodyRead: null }
+    state.data.health = { on: false, workouts: true, body: true, read: true, written: {}, imported: [], ignored: [], hrTries: {}, steps: [], others: [], sleep: [], resting: [], vo2: [], lastBodyRead: null }
   }
   return state.data.health
 }
@@ -81,6 +84,10 @@ export async function disconnectHealth () {
   h.on = false
   h.written = {}
   h.steps = []
+  h.others = []
+  h.sleep = []
+  h.resting = []
+  h.vo2 = []
   health.granted = []
   await persist()
 }
@@ -153,11 +160,14 @@ async function writeChanges (b, h) {
 }
 
 async function readOthers (b, h) {
-  // Heart rate during recent workouts (a watch may sync its data a while after the workout)
-  if (has('read:heartRate')) {
+  // Heart rate and active calories during recent workouts (a watch may sync a while after the workout)
+  const wantHr = has('read:heartRate')
+  const wantKcal = has('read:activeCalories')
+  if (wantHr || wantKcal) {
     const now = Date.now()
+    const missing = (s) => (wantHr && !s.hr) || (wantKcal && s.kcal == null)
     const recent = state.data.sessions.filter(s =>
-      s.finishedAt && !s.hr && now - new Date(s.finishedAt) > 3 * 60000 && now - new Date(s.finishedAt) < 30 * 86400000 &&
+      s.finishedAt && missing(s) && now - new Date(s.finishedAt) > 3 * 60000 && now - new Date(s.finishedAt) < 30 * 86400000 &&
       (h.hrTries[s.id] || 0) < 4
     ).slice(-30)
     if (recent.length) {
@@ -165,10 +175,29 @@ async function readOthers (b, h) {
       const byId = new Map((res.results || []).map(r => [r.id, r]))
       for (const s of recent) {
         const r = byId.get(s.id)
-        if (r?.avg) { s.hr = { avg: Math.round(r.avg), max: Math.round(r.max || r.avg) }; delete h.hrTries[s.id]; touched = true } else h.hrTries[s.id] = (h.hrTries[s.id] || 0) + 1
+        let found = false
+        if (r?.avg && !s.hr) { s.hr = { avg: Math.round(r.avg), max: Math.round(r.max || r.avg) }; found = true }
+        if (r?.kcal > 0 && s.kcal == null) { s.kcal = Math.round(r.kcal); found = true }
+        if (found) touched = true
+        if (missing(s)) h.hrTries[s.id] = (h.hrTries[s.id] || 0) + 1
+        else delete h.hrTries[s.id]
       }
     }
   }
+  // Workouts other apps or a watch recorded (shown in History)
+  if (has('read:exercise')) {
+    const res = await b.readWorkouts({ since: new Date(Date.now() - 30 * 86400000).toISOString() })
+    h.others = otherWorkouts(res.workouts || [], state.data.sessions).slice(0, 60)
+  } else h.others = []
+  if (has('read:sleep')) {
+    const res = await b.sleep({ since: new Date(Date.now() - 8 * 86400000).toISOString() })
+    h.sleep = sleepNights(res.sessions || []).slice(-7)
+  } else h.sleep = []
+  if (has('read:restingHeartRate') || has('read:vo2max')) {
+    const res = await b.vitals({ since: new Date(Date.now() - 30 * 86400000).toISOString() })
+    h.resting = dailyLatest(res.resting || [], 'bpm')
+    h.vo2 = dailyLatest(res.vo2 || [], 'value').map(v => ({ ...v, value: Math.round(v.value * 10) / 10 }))
+  } else { h.resting = []; h.vo2 = [] }
   if (has('read:steps')) {
     const res = await b.steps({ days: 7 })
     h.steps = (res.days || []).map(d => ({ date: d.date, count: Math.round(d.count) }))

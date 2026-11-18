@@ -23,6 +23,10 @@ for (const f of files) {
 }
 // Strings passed to t() indirectly (labels in data tables)
 const EXTRA = [
+  // 0.13: names of workouts from other apps (History)
+  'Run', 'Treadmill run', 'Walk', 'Hike', 'Ride', 'Indoor ride', 'Swim', 'Rowing', 'Strength training', 'HIIT', 'Climbing',
+  'Yoga', 'Basketball', 'Football', 'Tennis', 'Squash', 'Badminton', 'Elliptical', 'Stair climber', 'Pilates', 'Boxing',
+  'Martial arts', 'Dancing',
   // 0.12: account errors shown through a variable
   'That crew membership belongs to another Google account.', 'One item was too big to save to your account.',
   "Couldn't reach your account. Check your connection.", 'Sign-in was cancelled.',

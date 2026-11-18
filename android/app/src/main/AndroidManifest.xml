@@ -92,7 +92,8 @@
 
     <!-- Health Connect (0.13): only what Settings → Health Connect asks for; each is the person's choice on
          Health Connect's own screen. Writes: workouts (+ treadmill distance), weight, body fat, height.
-         Reads: weight and body fat from other apps, heart rate during workouts, steps. -->
+         Reads: weight and body fat from other apps, heart rate and active calories during workouts, steps,
+         workouts other apps recorded, sleep, resting heart rate, VO2 max. -->
     <uses-permission android:name="android.permission.health.WRITE_EXERCISE" />
     <uses-permission android:name="android.permission.health.WRITE_DISTANCE" />
     <uses-permission android:name="android.permission.health.WRITE_WEIGHT" />
@@ -102,6 +103,11 @@
     <uses-permission android:name="android.permission.health.WRITE_HEIGHT" />
     <uses-permission android:name="android.permission.health.READ_HEART_RATE" />
     <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <uses-permission android:name="android.permission.health.READ_ACTIVE_CALORIES_BURNED" />
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE" />
+    <uses-permission android:name="android.permission.health.READ_VO2_MAX" />
     <!-- To find the Health Connect app on Android 13 and older -->
     <queries>
         <package android:name="com.google.android.apps.healthdata" />

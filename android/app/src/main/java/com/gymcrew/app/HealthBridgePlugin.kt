@@ -8,13 +8,17 @@ import androidx.activity.result.ActivityResult
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.PermissionController
 import androidx.health.connect.client.permission.HealthPermission
+import androidx.health.connect.client.records.ActiveCaloriesBurnedRecord
 import androidx.health.connect.client.records.BodyFatRecord
 import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HeightRecord
 import androidx.health.connect.client.records.Record
+import androidx.health.connect.client.records.RestingHeartRateRecord
+import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.records.Vo2MaxRecord
 import androidx.health.connect.client.records.WeightRecord
 import androidx.health.connect.client.records.metadata.Metadata
 import androidx.health.connect.client.request.AggregateGroupByPeriodRequest
@@ -58,7 +62,10 @@ import org.json.JSONObject
  *   revokeAll() · openSettings() · openStore()
  *   write({ records: [...] })                 → { written: [id], failed: [{ id, error }] }
  *   remove({ items: [{ kind, id }] })         → {}
- *   heartRate({ windows: [{ id, start, end }] }) → { results: [{ id, avg, max }] }
+ *   heartRate({ windows: [{ id, start, end }] }) → { results: [{ id, avg, max, kcal }] }
+ *   readWorkouts({ since })                   → { workouts: [{ id, start, end, type, title, source }] }
+ *   sleep({ since })                          → { sessions: [{ id, start, end, source }] }
+ *   vitals({ since })                         → { resting: [{ time, bpm }], vo2: [{ time, value }] }
  *   steps({ days })                           → { days: [{ date: "YYYY-MM-DD", count }] }
  *   readBody({ since })                       → { weights: [{ id, time, kg, source }], fats: [{ id, time, percent, source }] }
  */
@@ -103,7 +110,12 @@ class HealthBridgePlugin : Plugin() {
             "read:weight" to HealthPermission.getReadPermission(WeightRecord::class),
             "read:bodyFat" to HealthPermission.getReadPermission(BodyFatRecord::class),
             "read:heartRate" to HealthPermission.getReadPermission(HeartRateRecord::class),
-            "read:steps" to HealthPermission.getReadPermission(StepsRecord::class)
+            "read:steps" to HealthPermission.getReadPermission(StepsRecord::class),
+            "read:exercise" to HealthPermission.getReadPermission(ExerciseSessionRecord::class),
+            "read:activeCalories" to HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
+            "read:sleep" to HealthPermission.getReadPermission(SleepSessionRecord::class),
+            "read:restingHeartRate" to HealthPermission.getReadPermission(RestingHeartRateRecord::class),
+            "read:vo2max" to HealthPermission.getReadPermission(Vo2MaxRecord::class)
         )
     }
 
@@ -317,29 +329,125 @@ class HealthBridgePlugin : Plugin() {
     }
 
     // ── Reading ─────────────────────────────────────────────
-    /** Average and highest heart rate in each window (a workout), from any watch or app */
+    /** Average and highest heart rate, and active calories, in each window (a workout), from any watch or app */
     @PluginMethod
     fun heartRate(call: PluginCall) {
         val windows = call.getArray("windows") ?: JSArray()
         call.work { client ->
+            val granted = client.permissionController.getGrantedPermissions()
+            val hr = allows(granted, "read:heartRate")
+            val kcal = allows(granted, "read:activeCalories")
             val results = JSArray()
             for (i in 0 until windows.length()) {
                 val w = windows.getJSONObject(i)
-                val res = client.aggregate(
-                    AggregateRequest(
-                        metrics = setOf(HeartRateRecord.BPM_AVG, HeartRateRecord.BPM_MAX),
-                        timeRangeFilter = TimeRangeFilter.between(Instant.parse(w.getString("start")), Instant.parse(w.getString("end")))
-                    )
-                )
-                val avg = res[HeartRateRecord.BPM_AVG]
-                val max = res[HeartRateRecord.BPM_MAX]
-                results.put(JSObject().apply {
-                    put("id", w.getString("id"))
-                    if (avg != null) put("avg", avg)
-                    if (max != null) put("max", max)
-                })
+                val range = TimeRangeFilter.between(Instant.parse(w.getString("start")), Instant.parse(w.getString("end")))
+                val out = JSObject().apply { put("id", w.getString("id")) }
+                if (hr) {
+                    val res = client.aggregate(AggregateRequest(metrics = setOf(HeartRateRecord.BPM_AVG, HeartRateRecord.BPM_MAX), timeRangeFilter = range))
+                    val avg = res[HeartRateRecord.BPM_AVG]
+                    val max = res[HeartRateRecord.BPM_MAX]
+                    if (avg != null) out.put("avg", avg)
+                    if (max != null) out.put("max", max)
+                }
+                if (kcal) {
+                    val res = client.aggregate(AggregateRequest(metrics = setOf(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL), timeRangeFilter = range))
+                    val energy = res[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]
+                    if (energy != null) out.put("kcal", energy.inKilocalories)
+                }
+                results.put(out)
             }
             call.resolve(JSObject().apply { put("results", results) })
+        }
+    }
+
+    /** Workouts other apps or a watch recorded (runs, rides, swims…), not this app's own */
+    @PluginMethod
+    fun readWorkouts(call: PluginCall) {
+        val since = call.getString("since")?.let { try { Instant.parse(it) } catch (e: Exception) { null } }
+            ?: Instant.now().minusSeconds(30L * 86400)
+        call.work { client ->
+            val mine = context.packageName
+            val out = JSArray()
+            readAll(client, ExerciseSessionRecord::class, since, Instant.now()) { s ->
+                if (s.metadata.dataOrigin.packageName != mine) out.put(JSObject().apply {
+                    put("id", s.metadata.id)
+                    put("start", s.startTime.toString())
+                    put("end", s.endTime.toString())
+                    put("type", exerciseName(s.exerciseType))
+                    put("title", s.title ?: "")
+                    put("source", s.metadata.dataOrigin.packageName)
+                })
+            }
+            call.resolve(JSObject().apply { put("workouts", out) })
+        }
+    }
+
+    private fun exerciseName(type: Int): String = when (type) {
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING -> "running"
+        ExerciseSessionRecord.EXERCISE_TYPE_RUNNING_TREADMILL -> "treadmill"
+        ExerciseSessionRecord.EXERCISE_TYPE_WALKING -> "walking"
+        ExerciseSessionRecord.EXERCISE_TYPE_HIKING -> "hiking"
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING -> "biking"
+        ExerciseSessionRecord.EXERCISE_TYPE_BIKING_STATIONARY -> "bike"
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_POOL -> "swimming"
+        ExerciseSessionRecord.EXERCISE_TYPE_SWIMMING_OPEN_WATER -> "swimming"
+        ExerciseSessionRecord.EXERCISE_TYPE_ROWING_MACHINE -> "rower"
+        ExerciseSessionRecord.EXERCISE_TYPE_STRENGTH_TRAINING -> "strength"
+        ExerciseSessionRecord.EXERCISE_TYPE_WEIGHTLIFTING -> "strength"
+        ExerciseSessionRecord.EXERCISE_TYPE_HIGH_INTENSITY_INTERVAL_TRAINING -> "hiit"
+        ExerciseSessionRecord.EXERCISE_TYPE_ROCK_CLIMBING -> "climbing"
+        ExerciseSessionRecord.EXERCISE_TYPE_YOGA -> "yoga"
+        ExerciseSessionRecord.EXERCISE_TYPE_BASKETBALL -> "basketball"
+        ExerciseSessionRecord.EXERCISE_TYPE_SOCCER -> "football"
+        ExerciseSessionRecord.EXERCISE_TYPE_TENNIS -> "tennis"
+        ExerciseSessionRecord.EXERCISE_TYPE_SQUASH -> "squash"
+        ExerciseSessionRecord.EXERCISE_TYPE_BADMINTON -> "badminton"
+        ExerciseSessionRecord.EXERCISE_TYPE_ELLIPTICAL -> "elliptical"
+        ExerciseSessionRecord.EXERCISE_TYPE_STAIR_CLIMBING_MACHINE -> "stairs"
+        ExerciseSessionRecord.EXERCISE_TYPE_PILATES -> "pilates"
+        ExerciseSessionRecord.EXERCISE_TYPE_BOXING -> "boxing"
+        ExerciseSessionRecord.EXERCISE_TYPE_MARTIAL_ARTS -> "martialArts"
+        ExerciseSessionRecord.EXERCISE_TYPE_DANCING -> "dancing"
+        else -> "other"
+    }
+
+    /** Sleep sessions since a moment (the app adds them up per night) */
+    @PluginMethod
+    fun sleep(call: PluginCall) {
+        val since = call.getString("since")?.let { try { Instant.parse(it) } catch (e: Exception) { null } }
+            ?: Instant.now().minusSeconds(8L * 86400)
+        call.work { client ->
+            val out = JSArray()
+            readAll(client, SleepSessionRecord::class, since, Instant.now()) { s ->
+                out.put(JSObject().apply {
+                    put("id", s.metadata.id); put("start", s.startTime.toString()); put("end", s.endTime.toString())
+                    put("source", s.metadata.dataOrigin.packageName)
+                })
+            }
+            call.resolve(JSObject().apply { put("sessions", out) })
+        }
+    }
+
+    /** Resting heart rate and VO2 max readings since a moment */
+    @PluginMethod
+    fun vitals(call: PluginCall) {
+        val since = call.getString("since")?.let { try { Instant.parse(it) } catch (e: Exception) { null } }
+            ?: Instant.now().minusSeconds(30L * 86400)
+        call.work { client ->
+            val granted = client.permissionController.getGrantedPermissions()
+            val resting = JSArray()
+            val vo2 = JSArray()
+            if (allows(granted, "read:restingHeartRate")) {
+                readAll(client, RestingHeartRateRecord::class, since, Instant.now()) { r ->
+                    resting.put(JSObject().apply { put("time", r.time.toString()); put("bpm", r.beatsPerMinute) })
+                }
+            }
+            if (allows(granted, "read:vo2max")) {
+                readAll(client, Vo2MaxRecord::class, since, Instant.now()) { r ->
+                    vo2.put(JSObject().apply { put("time", r.time.toString()); put("value", r.vo2MillilitersPerMinuteKilogram) })
+                }
+            }
+            call.resolve(JSObject().apply { put("resting", resting); put("vo2", vo2) })
         }
     }
 

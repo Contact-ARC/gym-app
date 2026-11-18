@@ -89,3 +89,27 @@ test('health: weigh-ins from other apps become body entries once', () => {
   assert.equal(sourceName('com.garmin.android.apps.connectmobile'), 'Garmin Connect')
   assert.equal(sourceName('org.example.scale'), 'scale')
 })
+
+test('health: other workouts leave out a watch recording the same gym session', async () => {
+  const { otherWorkouts, sleepNights, dailyLatest } = await import('../src/lib/healthRecords.js')
+  const day = (iso) => iso.slice(0, 10)
+  const sessions = [{ id: 's1', startedAt: '2026-11-17T17:00:00Z', finishedAt: '2026-11-17T18:00:00Z' }]
+  const list = otherWorkouts([
+    { id: 'g1', start: '2026-11-17T17:02:00Z', end: '2026-11-17T17:58:00Z', type: 'strength', source: 'com.garmin.android.apps.connectmobile' },
+    { id: 'r1', start: '2026-11-16T07:00:00Z', end: '2026-11-16T07:32:00Z', type: 'running', title: 'Morning run', source: 'com.garmin.android.apps.connectmobile' },
+    { id: 'w1', start: '2026-11-17T18:00:00Z', end: '2026-11-17T18:40:00Z', type: 'walking' } // after the gym, not during
+  ], sessions, { day })
+  assert.deepEqual(list.map(w => [w.id, w.minutes, w.date]), [['w1', 40, '2026-11-17'], ['r1', 32, '2026-11-16']])
+
+  // Two apps recording the same night: the longer one, not the sum
+  const nights = sleepNights([
+    { start: '2026-11-16T23:10:00Z', end: '2026-11-17T06:40:00Z', source: 'watch' },
+    { start: '2026-11-16T23:30:00Z', end: '2026-11-17T06:30:00Z', source: 'phone' },
+    { start: '2026-11-17T23:00:00Z', end: '2026-11-18T03:00:00Z', source: 'watch' },
+    { start: '2026-11-18T03:20:00Z', end: '2026-11-18T07:00:00Z', source: 'watch' } // woke up in the night: both parts count
+  ], { day })
+  assert.deepEqual(nights, [{ date: '2026-11-17', minutes: 450 }, { date: '2026-11-18', minutes: 460 }])
+
+  assert.deepEqual(dailyLatest([{ time: '2026-11-17T08:00:00Z', bpm: 58 }, { time: '2026-11-17T20:00:00Z', bpm: 56 }, { time: '2026-11-16T08:00:00Z', bpm: 60 }], 'bpm', { day }),
+    [{ date: '2026-11-16', value: 60 }, { date: '2026-11-17', value: 56 }])
+})

@@ -33,10 +33,13 @@
     </div>
 
     <!-- 0.13: heart rate from a watch, through Health Connect -->
-    <div v-if="session.hr" class="row hr t-small">
+    <div v-if="session.hr || session.kcal" class="row hr t-small">
       <Icon name="heart" :size="20" class="hr-i" />
-      <span class="grow">{{ t('Heart rate: {avg} average, {max} highest', { avg: session.hr.avg, max: session.hr.max }) }}</span>
-      <span class="t-tiny t-muted">{{ t('bpm') }}</span>
+      <span class="grow">
+        <template v-if="session.hr">{{ t('Heart rate: {avg} average, {max} highest', { avg: session.hr.avg, max: session.hr.max }) }} <span class="t-tiny t-muted">{{ t('bpm') }}</span></template>
+        <template v-if="session.hr && session.kcal"> · </template>
+        <template v-if="session.kcal">{{ t('{n} active kcal', { n: session.kcal }) }}</template>
+      </span>
     </div>
 
     <div v-if="justFinished && (streak.weeks || streak.thisWeek)" class="row streak t-small" :class="{ safe: streak.safe }">
