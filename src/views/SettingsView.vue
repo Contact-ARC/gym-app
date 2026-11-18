@@ -8,11 +8,6 @@
     <h2 id="account" class="section-h">{{ t('Account') }}</h2>
     <AccountCard />
 
-    <template v-if="healthSupported">
-      <h2 id="health" class="section-h">{{ t('Health') }}</h2>
-      <HealthCard />
-    </template>
-
     <h2 class="section-h">{{ t('You') }}</h2>
     <div class="group">
       <div class="group-row">
@@ -55,9 +50,25 @@
           <Stepper v-model="s.volumeTarget[1]" :step="1" :min="s.volumeTarget[0] + 1" :max="40" size="md" class="mini xs" :label="t('Highest')" @update:model-value="persist" />
         </div>
       </div>
+      <button class="group-row" @click="remindersOpen = true">
+        <Icon name="bell" />
+        <div class="grow">
+          <div>{{ t('Reminders') }}</div>
+          <div class="t-tiny t-muted">{{ remindersLine }}</div>
+        </div>
+        <Icon name="chevronRight" class="chev" />
+      </button>
+      <button class="group-row" @click="restOpen = true">
+        <Icon name="timer" />
+        <div class="grow">
+          <div>{{ t('Rest timer alerts') }}</div>
+          <div class="t-tiny t-muted">{{ restLine }}</div>
+        </div>
+        <Icon name="chevronRight" class="chev" />
+      </button>
     </div>
 
-    <h2 class="section-h">{{ t('Gyms') }}</h2>
+    <h2 id="gyms" class="section-h">{{ t('Gyms') }}</h2>
     <div class="group">
       <div v-for="g in gymList" :key="g.id" class="group-row gym-row">
         <button class="grow gym-main" @click="openGym(g.id)">
@@ -74,49 +85,115 @@
       </div>
       <button class="group-row gym-row add" @click="openGym(null)"><Icon name="plus" />{{ t('Add a gym') }}</button>
     </div>
-    <p class="t-tiny t-muted foot">{{ gymList.length > 1 ? t('The equipment, bar, plates and machine settings below are for the gym you\'re at. Machines keep their own history at each gym, since they differ; free weights count everywhere.') : t('Train somewhere else too? Add it, and each gym keeps its own equipment, plates and machine settings.') }}</p>
+    <div class="group mt-card">
+      <button class="group-row" @click="equipOpen = true">
+        <Icon name="dumbbell" />
+        <div class="grow">
+          <div>{{ gymList.length > 1 ? t('Equipment at {gym}', { gym: hereName }) : t('Equipment') }}</div>
+          <div class="t-tiny t-muted">{{ equipLine }}</div>
+        </div>
+        <Icon name="chevronRight" class="chev" />
+      </button>
+      <button class="group-row" @click="weightsOpen = true">
+        <Icon name="plate" />
+        <div class="grow">
+          <div>{{ t('Bar and weight jumps') }}</div>
+          <div class="t-tiny t-muted">{{ weightsLine }}</div>
+        </div>
+        <Icon name="chevronRight" class="chev" />
+      </button>
+    </div>
+    <p class="t-tiny t-muted foot">{{ gymList.length > 1 ? t('Equipment, bar, plates and machine settings are for the gym you\'re at. Machines keep their own history at each gym, since they differ; free weights count everywhere.') : t('Train somewhere else too? Add it, and each gym keeps its own equipment, plates and machine settings.') }}</p>
     <GymSheet v-model="gymOpen" :gym-id="gymEditId" />
 
-    <h2 class="section-h">{{ gymList.length > 1 ? t('Equipment at {gym}', { gym: hereName }) : t('Your gym') }}</h2>
-    <div class="group">
-      <div v-for="(label, tag) in EQUIPMENT" :key="tag" class="group-row">
-        <span class="grow">{{ t(label) }}</span>
-        <Toggle :model-value="s.equipment[tag] !== false" @update:model-value="(v) => setEquip(tag, v)" />
-      </div>
-    </div>
-    <p class="t-tiny t-muted foot">{{ t('Exercise lists and swaps only show what your gym has. Routines still show everything.') }}</p>
-
-    <h2 class="section-h">{{ gymList.length > 1 ? t('Smallest weight jumps at {gym}, in {unit}', { gym: hereName, unit: p.unit }) : t('Smallest weight jumps at your gym, in {unit}', { unit: p.unit }) }}</h2>
-    <div class="group">
-      <div v-for="row in incRows" :key="row.key" class="group-row">
-        <div class="grow">
-          <div>{{ row.label }}</div>
-          <div class="t-tiny t-muted">{{ row.help }}</div>
-        </div>
-        <Stepper
-          v-model="p.increments[row.key]" :step="row.step" :min="row.step" :max="row.max"
-          :decimals="row.key !== 'pin'" size="md" class="mini"
-          @update:model-value="persist"
-        />
-      </div>
-      <div class="group-row">
-        <div class="grow">
-          <div>{{ t('Barbell weight') }}</div>
-          <div class="t-tiny t-muted">{{ t('Used by the plate and warm-up tools, and for barbell weight suggestions') }}</div>
-        </div>
-        <Stepper v-model="p.bar" :step="5" :min="0" :max="50" size="md" class="mini" @update:model-value="persist" />
-      </div>
-      <div class="group-row">
-        <div class="grow">
-          <div>{{ t('Log machines by pin number') }}</div>
-          <div class="t-tiny t-muted">{{ p.machineUnit === 'pin' ? t('Turn this off to log the weight on the stack instead. Pins differ from machine to machine.') : t('Machines are logged by the weight on the stack, in {unit}. Set each machine\'s plate in its Machine settings.', { unit: p.unit }) }}</div>
-        </div>
-        <Toggle :model-value="p.machineUnit === 'pin'" @update:model-value="(v) => { p.machineUnit = v ? 'pin' : 'weight'; persist() }" />
-      </div>
+    <h2 id="connections" class="section-h">{{ t('Connections') }}</h2>
+    <HealthCard v-if="healthSupported" />
+    <div class="group" :class="{ 'mt-card': healthSupported }">
+      <RouterLink to="/crew" class="group-row">
+        <Icon name="crew" />
+        <span class="grow">{{ inCrew ? t('Crew {code}', { code: state.data.crew.code }) : t('Not in a crew') }}</span>
+        <Icon name="chevronRight" class="chev" />
+      </RouterLink>
     </div>
 
-    <h2 class="section-h">{{ t('Reminders') }}</h2>
+    <h2 id="backup" class="section-h">{{ t('Your data') }}</h2>
+    <p v-if="signedIn" class="note note-ok t-small row data-note"><Icon name="cloudCheck" :size="20" /><span>{{ t('Signed in: everything is also saved to your account. Backups are an extra copy you control.') }}</span></p>
     <div class="card card-pad">
+      <div class="row ab-head">
+        <Icon name="shield" :class="autoOk ? 't-ok' : 't-muted'" />
+        <div class="grow">
+          <div class="t-h3">{{ t('Automatic backups') }}</div>
+          <div class="t-tiny" :class="state.data.autoBackup.lastError ? 't-err' : 't-muted'">{{ autoLine }}</div>
+        </div>
+      </div>
+      <Segmented
+        v-model="s.autoBackup" class="ab-seg" :label="t('Automatic backups')"
+        :options="[{ label: t('Off'), value: 'off' }, { label: t('Weekly'), value: 'weekly' }, { label: t('Every workout'), value: 'workout' }]"
+        @update:model-value="persist"
+      />
+      <p class="t-tiny t-muted ab-note">{{ t('Saved to Documents/GymCrew on this phone (the last 6 are kept). They survive uninstalling the app, but not losing the phone, so export one off the phone now and then too.') }}</p>
+      <div class="row btns">
+        <button class="btn btn-soft grow" :disabled="backingUp" @click="backupNow"><Icon name="shield" />{{ t('Back up now') }}</button>
+        <button class="btn btn-soft grow" @click="openRestore"><Icon name="history" />{{ t('Restore') }}</button>
+      </div>
+    </div>
+
+    <div class="card card-pad mt-card">
+      <div class="t-h3">{{ t('Off this phone') }}</div>
+      <p class="t-small t-muted">{{ t('Send a backup to Drive, email or a chat. Use Import on a new phone.') }}</p>
+      <p class="t-small t-muted last">{{ t('Last export: {when}', { when: state.data.lastBackupAt ? relativeDay(state.data.lastBackupAt) : t('never') }) }}</p>
+      <div class="row btns">
+        <button class="btn btn-primary grow" :disabled="exporting" @click="doExport"><Icon name="exportIcon" />{{ t('Export') }}</button>
+        <button class="btn btn-soft grow" @click="fileInput.click()"><Icon name="importIcon" />{{ t('Import') }}</button>
+      </div>
+      <button class="btn btn-ghost btn-block csv" :disabled="!finishedSessions.length" @click="doCSV"><Icon name="csv" />{{ t('Export as a spreadsheet (CSV)') }}</button>
+      <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFile">
+    </div>
+
+    <h2 class="section-h">{{ t('About') }}</h2>
+    <div class="group">
+      <div class="group-row">
+        <span class="grow">{{ t('Version') }}</span>
+        <span class="t-muted t-num">{{ APP_VERSION }}</span>
+      </div>
+      <button v-if="updateAvailable" class="group-row" @click="openUrl(updateAvailable.downloadUrl)">
+        <Icon name="download" />
+        <span class="grow">{{ t('Download version {v}', { v: updateAvailable.version }) }}</span>
+        <Icon name="chevronRight" class="chev" />
+      </button>
+      <button class="group-row" @click="copyDebug">
+        <Icon name="copy" />
+        <div class="grow">
+          <div>{{ t('Copy details for a bug report') }}</div>
+          <div class="t-tiny t-muted">{{ t('Paste them into the group chat') }}</div>
+        </div>
+      </button>
+      <button class="group-row" :disabled="state.routineStatus.loading" @click="checkRoutine">
+        <Icon name="month" />
+        <div class="grow">
+          <div>{{ t('Routine updates') }}</div>
+          <div class="t-tiny" :class="state.routineStatus.error ? 't-err' : 't-muted'">
+            {{ routine ? tx(routine, 'title') : t('No routine loaded') }} · {{ t('Updated {when}', { when: state.data.cache.fetchedAt ? relativeDay(state.data.cache.fetchedAt) : t('never') }) }}<template v-if="state.routineStatus.error">{{ ' · ' + t('last check failed: {e}', { e: state.routineStatus.error }) }}</template>
+          </div>
+        </div>
+        <span class="t-small t-muted">{{ state.routineStatus.loading ? t('Checking') : t('Check now') }}</span>
+      </button>
+      <button class="group-row" @click="openSource">
+        <span class="grow">{{ t('Routine source') }}</span>
+        <span class="t-small t-muted">{{ state.data.settings.routinesUrl ? t('Custom') : t('Default') }}</span>
+        <Icon name="chevronRight" class="chev" />
+      </button>
+      <button class="group-row" @click="openCrewServer">
+        <div class="grow">
+          <div>{{ t('Crew server') }}</div>
+          <div class="t-tiny t-muted">{{ crewServerLine }}</div>
+        </div>
+        <Icon name="chevronRight" class="chev" />
+      </button>
+    </div>
+
+    <!-- Sheets for the longer settings -->
+    <Sheet v-model="remindersOpen" :title="t('Reminders')">
       <div class="label">{{ t('Remind me on') }}</div>
       <div class="days" role="group" :aria-label="t('Reminder days')">
         <button
@@ -129,10 +206,13 @@
         <input id="rem-time" v-model="s.reminders.time" class="field time" type="time" @change="persist">
       </div>
       <p class="t-tiny t-muted rem-note">{{ reminderNote }}</p>
-    </div>
+      <template #actions>
+        <button class="btn btn-primary btn-lg" @click="remindersOpen = false">{{ t('Done') }}</button>
+      </template>
+    </Sheet>
 
-    <h2 class="section-h">{{ t('Rest timer') }}</h2>
-    <div class="group">
+    <Sheet v-model="restOpen" :title="t('Rest timer alerts')">
+      <div class="group sheet-group">
       <div class="group-row">
         <span class="grow">{{ t('Vibrate when rest is over') }}</span>
         <Toggle v-model="s.restVibrate" @update:model-value="persist" />
@@ -179,94 +259,62 @@
         </div>
         <button class="btn btn-sm" :class="notif.liveUpdates ? 'btn-soft' : 'btn-primary'" @click="openNotificationSettings(notif.liveUpdates ? '' : 'liveUpdates')">{{ notif.liveUpdates ? t('Settings') : t('Turn on') }}</button>
       </div>
-    </div>
-
-    <h2 id="backup" class="section-h">{{ t('Backups') }}</h2>
-    <div class="card card-pad">
-      <div class="row ab-head">
-        <Icon name="shield" :class="autoOk ? 't-ok' : 't-muted'" />
-        <div class="grow">
-          <div class="t-h3">{{ t('Automatic backups') }}</div>
-          <div class="t-tiny" :class="state.data.autoBackup.lastError ? 't-err' : 't-muted'">{{ autoLine }}</div>
-        </div>
       </div>
-      <Segmented
-        v-model="s.autoBackup" class="ab-seg" :label="t('Automatic backups')"
-        :options="[{ label: t('Off'), value: 'off' }, { label: t('Weekly'), value: 'weekly' }, { label: t('Every workout'), value: 'workout' }]"
-        @update:model-value="persist"
-      />
-      <p class="t-tiny t-muted ab-note">{{ t('Saved to Documents/GymCrew on this phone (the last 6 are kept). They survive uninstalling the app, but not losing the phone, so export one off the phone now and then too.') }}</p>
-      <div class="row btns">
-        <button class="btn btn-soft grow" :disabled="backingUp" @click="backupNow"><Icon name="shield" />{{ t('Back up now') }}</button>
-        <button class="btn btn-soft grow" @click="openRestore"><Icon name="history" />{{ t('Restore') }}</button>
+      <template #actions>
+        <button class="btn btn-primary btn-lg" @click="restOpen = false">{{ t('Done') }}</button>
+      </template>
+    </Sheet>
+
+    <Sheet v-model="equipOpen" :title="gymList.length > 1 ? t('Equipment at {gym}', { gym: hereName }) : t('Equipment')">
+      <p class="t-small t-muted">{{ t('Exercise lists and swaps only show what your gym has. Routines still show everything.') }}</p>
+      <div class="row eq-all">
+        <button class="btn btn-sm btn-soft" @click="setAllEquip(true)">{{ t('All on') }}</button>
+        <button class="btn btn-sm btn-soft" @click="setAllEquip(false)">{{ t('All off') }}</button>
       </div>
-    </div>
-
-    <div class="card card-pad mt-card">
-      <div class="t-h3">{{ t('Off this phone') }}</div>
-      <p class="t-small t-muted">{{ t('Send a backup to Drive, email or a chat. Use Import on a new phone.') }}</p>
-      <p class="t-small t-muted last">{{ t('Last export: {when}', { when: state.data.lastBackupAt ? relativeDay(state.data.lastBackupAt) : t('never') }) }}</p>
-      <div class="row btns">
-        <button class="btn btn-primary grow" :disabled="exporting" @click="doExport"><Icon name="exportIcon" />{{ t('Export') }}</button>
-        <button class="btn btn-soft grow" @click="fileInput.click()"><Icon name="importIcon" />{{ t('Import') }}</button>
+      <div class="group sheet-group">
+      <div v-for="(label, tag) in EQUIPMENT" :key="tag" class="group-row">
+        <span class="grow">{{ t(label) }}</span>
+        <Toggle :model-value="s.equipment[tag] !== false" @update:model-value="(v) => setEquip(tag, v)" />
       </div>
-      <button class="btn btn-ghost btn-block csv" :disabled="!finishedSessions.length" @click="doCSV"><Icon name="csv" />{{ t('Export as a spreadsheet (CSV)') }}</button>
-      <input ref="fileInput" type="file" accept="application/json,.json" hidden @change="onFile">
-    </div>
+      </div>
+      <template #actions>
+        <button class="btn btn-primary btn-lg" @click="equipOpen = false">{{ t('Done') }}</button>
+      </template>
+    </Sheet>
 
-    <h2 id="crew" class="section-h">{{ t('Crew') }}</h2>
-    <div class="group">
-      <RouterLink to="/crew" class="group-row">
-        <Icon name="crew" />
-        <span class="grow">{{ inCrew ? t('Crew {code}', { code: state.data.crew.code }) : t('Not in a crew') }}</span>
-        <Icon name="chevronRight" class="chev" />
-      </RouterLink>
-      <button class="group-row" @click="openCrewServer">
+    <Sheet v-model="weightsOpen" :title="t('Bar and weight jumps')">
+      <p class="t-small t-muted">{{ gymList.length > 1 ? t('At {gym}. The smallest jumps in {unit} decide the weights the app suggests.', { gym: hereName, unit: p.unit }) : t('The smallest jumps in {unit} decide the weights the app suggests.', { unit: p.unit }) }}</p>
+      <div class="group sheet-group">
+      <div v-for="row in incRows" :key="row.key" class="group-row">
         <div class="grow">
-          <div>{{ t('Crew server') }}</div>
-          <div class="t-tiny t-muted">{{ crewServerLine }}</div>
+          <div>{{ row.label }}</div>
+          <div class="t-tiny t-muted">{{ row.help }}</div>
         </div>
-        <Icon name="chevronRight" class="chev" />
-      </button>
-    </div>
-
-    <h2 class="section-h">{{ t('Routine') }}</h2>
-    <div class="group">
-      <button class="group-row" :disabled="state.routineStatus.loading" @click="checkRoutine">
-        <div class="grow">
-          <div>{{ routine ? tx(routine, 'title') : t('No routine loaded') }}</div>
-          <div class="t-tiny" :class="state.routineStatus.error ? 't-err' : 't-muted'">
-            {{ t('Updated {when}', { when: state.data.cache.fetchedAt ? relativeDay(state.data.cache.fetchedAt) : t('never') }) }}<template v-if="state.routineStatus.error">{{ ' · ' + t('last check failed: {e}', { e: state.routineStatus.error }) }}</template>
-          </div>
-        </div>
-        <span class="t-small t-muted">{{ state.routineStatus.loading ? t('Checking') : t('Check now') }}</span>
-      </button>
-      <button class="group-row" @click="openSource">
-        <span class="grow">{{ t('Routine source') }}</span>
-        <span class="t-small t-muted">{{ state.data.settings.routinesUrl ? t('Custom') : t('Default') }}</span>
-        <Icon name="chevronRight" class="chev" />
-      </button>
-    </div>
-
-    <h2 class="section-h">{{ t('About') }}</h2>
-    <div class="group">
+        <Stepper
+          v-model="p.increments[row.key]" :step="row.step" :min="row.step" :max="row.max"
+          :decimals="row.key !== 'pin'" size="md" class="mini"
+          @update:model-value="persist"
+        />
+      </div>
       <div class="group-row">
-        <span class="grow">{{ t('Version') }}</span>
-        <span class="t-muted t-num">{{ APP_VERSION }}</span>
-      </div>
-      <button v-if="updateAvailable" class="group-row" @click="openUrl(updateAvailable.downloadUrl)">
-        <Icon name="download" />
-        <span class="grow">{{ t('Download version {v}', { v: updateAvailable.version }) }}</span>
-        <Icon name="chevronRight" class="chev" />
-      </button>
-      <button class="group-row" @click="copyDebug">
-        <Icon name="copy" />
         <div class="grow">
-          <div>{{ t('Copy details for a bug report') }}</div>
-          <div class="t-tiny t-muted">{{ t('Paste them into the group chat') }}</div>
+          <div>{{ t('Barbell weight') }}</div>
+          <div class="t-tiny t-muted">{{ t('Used by the plate and warm-up tools, and for barbell weight suggestions') }}</div>
         </div>
-      </button>
-    </div>
+        <Stepper v-model="p.bar" :step="5" :min="0" :max="50" size="md" class="mini" @update:model-value="persist" />
+      </div>
+      <div class="group-row">
+        <div class="grow">
+          <div>{{ t('Log machines by pin number') }}</div>
+          <div class="t-tiny t-muted">{{ p.machineUnit === 'pin' ? t('Turn this off to log the weight on the stack instead. Pins differ from machine to machine.') : t('Machines are logged by the weight on the stack, in {unit}. Set each machine\'s plate in its Machine settings.', { unit: p.unit }) }}</div>
+        </div>
+        <Toggle :model-value="p.machineUnit === 'pin'" @update:model-value="(v) => { p.machineUnit = v ? 'pin' : 'weight'; persist() }" />
+      </div>
+      </div>
+      <template #actions>
+        <button class="btn btn-primary btn-lg" @click="weightsOpen = false">{{ t('Done') }}</button>
+      </template>
+    </Sheet>
 
     <!-- Import confirm -->
     <Sheet v-model="importOpen" :title="t('Replace this phone\'s data?')">
@@ -312,7 +360,7 @@
 
     <!-- Crew server -->
     <Sheet v-model="crewServerOpen" :title="t('Crew server')">
-      <p class="t-small t-muted">{{ t('Normally this comes from the routines repo (latest.json), so you can leave it empty. Fill it in only to try a different Supabase project.') }}</p>
+      <p class="t-small t-muted">{{ t('Normally this comes with the routine updates, so you can leave it empty. Fill it in only to try a different Supabase project.') }}</p>
       <label class="label src-label" for="cs-url">{{ t('Project URL') }}</label>
       <input id="cs-url" v-model="crewUrl" class="field" type="url" placeholder="https://xxxx.supabase.co" autocapitalize="off" autocorrect="off" spellcheck="false">
       <label class="label src-label" for="cs-key">{{ t('Public (anon or publishable) key') }}</label>
@@ -353,7 +401,7 @@ import {
   armRestCountdown
 } from '../lib/native.js'
 import { notifyText } from '../lib/notifyText.js'
-import { relativeDay, fmtDate } from '../lib/format.js'
+import { relativeDay, fmtDate, fmtNum } from '../lib/format.js'
 import { parseBackup } from '../lib/storage.js'
 import { runAutoBackup, listAutoBackups, readBackup, shareBackupEntry, backupDate, exportCSV } from '../lib/backup.js'
 import { inCrew, crewConfig } from '../lib/crew.js'
@@ -394,6 +442,8 @@ function back () {
 }
 onMounted(async () => {
   if (!route.hash) return
+  // Straight to a sheet (the crew screen's "Crew server settings")
+  if (route.hash === '#crew-server') { openCrewServer(); return }
   await nextTick()
   setTimeout(() => document.querySelector(route.hash)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 350)
 })
@@ -443,6 +493,40 @@ function setEquip (tag, on) {
   else state.data.settings.equipment[tag] = false
   persist()
 }
+function setAllEquip (on) {
+  for (const tag of Object.keys(EQUIPMENT)) {
+    if (on) delete state.data.settings.equipment[tag]
+    else state.data.settings.equipment[tag] = false
+  }
+  persist()
+}
+
+// ── The one-line summaries on the rows that open a sheet ──
+const remindersOpen = ref(false)
+const restOpen = ref(false)
+const equipOpen = ref(false)
+const weightsOpen = ref(false)
+const remindersLine = computed(() => {
+  const r = state.data.settings.reminders
+  if (!r.days.length) return t('Off')
+  const days = weekDays.value.filter(d => r.days.includes(d.n)).map(d => d.long.slice(0, 3))
+  return `${days.join(', ')} · ${r.time}`
+})
+const restLine = computed(() => {
+  const x = state.data.settings
+  const on = [x.restVibrate && t('Vibrate'), x.restSound && t('Sound'), x.restNotify && t('Notifications')].filter(Boolean)
+  return on.length ? on.join(' · ') : t('Off')
+})
+const equipLine = computed(() => {
+  const tags = Object.keys(EQUIPMENT)
+  const on = tags.filter(tag => state.data.settings.equipment[tag] !== false).length
+  return on === tags.length ? t('All {n}', { n: tags.length }) : t('{n} of {total}', { n: on, total: tags.length })
+})
+const weightsLine = computed(() => {
+  const pr = p.value
+  const inc = pr.increments || {}
+  return t('Bar {bar} {unit} · jumps {a} / {b} {unit}', { bar: fmtNum(pr.bar, 1), unit: pr.unit, a: fmtNum(inc.upper, 1), b: fmtNum(inc.lower, 1) })
+})
 
 const weekDays = computed(() => [1, 2, 3, 4, 5, 6, 7].map(n => {
   const d = new Date(2024, 0, n) // 1 Jan 2024 was a Monday
@@ -564,7 +648,7 @@ const crewUrl = ref('')
 const crewKey = ref('')
 const crewServerLine = computed(() => {
   if (state.data.crew.url) return t('Custom: {url}', { url: state.data.crew.url.replace(/^https?:\/\//, '') })
-  if (manifest.value?.crew?.url) return t('From the routines repo')
+  if (manifest.value?.crew?.url) return t('From the routine updates')
   return t('Not set up yet')
 })
 function openCrewServer () {
@@ -652,6 +736,9 @@ async function copyDebug () {
 .ab-seg { margin-top: 14px; }
 .ab-note { margin-top: 10px; }
 .mt-card { margin-top: 10px; }
+.sheet-group { margin-top: 12px; }
+.eq-all { gap: 8px; margin-top: 4px; }
+.data-note { gap: 8px; align-items: flex-start; margin: 0 0 10px; }
 .mt-card p { margin-top: 4px; }
 .csv { margin-top: 8px; }
 .gym-row { text-align: left; gap: 10px; }

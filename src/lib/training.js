@@ -1,6 +1,6 @@
 // Pure training math — no Capacitor. Covered by test/training.test.js.
 // Text goes through t() so the suggestions follow the app language (English is the key).
-import { t } from '../i18n/index.js'
+import { t, locale } from '../i18n/index.js'
 import { climbsIn, climbRecords, CLIMB_SET_WEIGHT } from './climbing.js'
 import { cardioRecords, CARDIO_SET_WEIGHT } from './cardio.js'
 
@@ -333,7 +333,8 @@ export function nextSetAdjust ({ load, reps, rir = null, repRange, targetRir = 2
 export function fmtLoad (load, unit) {
   if (load == null) return '—'
   if (unit === 'pin') return t('pin {n}', { n: load })
-  return `${round2(load)} ${unit}`
+  // In the app's language: 102,5 kg in Spanish (no thousands separator: 1000 kg stays short)
+  return `${Number(round2(load)).toLocaleString(locale(), { maximumFractionDigits: 2, useGrouping: false })} ${unit}`
 }
 
 const PLATE_SCALE = 1000

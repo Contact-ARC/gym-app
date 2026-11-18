@@ -101,7 +101,7 @@
     <template v-else>
       <ExerciseDetails :ex="ex" />
 
-      <section>
+      <section v-if="bound || machine.length">
         <h2 class="section-h">{{ t('Your machine settings') }}</h2>
         <button class="group group-row settings-btn" @click="msOpen = true">
           <div class="grow">
@@ -211,10 +211,11 @@ const gymChoices = computed(() => {
 const history = computed(() => (ex.value ? historyFor(ex.value.id, null, bound.value ? viewGym.value : null) : []))
 const workSetsOf = (h) => h.sets.filter(isWorkSet)
 
-// How to do it first; Progress links straight to the progress tab with ?tab=progress
-const tab = ref(route.query.tab === 'progress' ? 'progress' : 'how')
+// Your progress first once you've done it, How to do it until then (?tab=progress / ?tab=how to choose)
+const firstTab = () => (route.query.tab === 'progress' || route.query.tab === 'how' ? route.query.tab : (history.value.length ? 'progress' : 'how'))
+const tab = ref(firstTab())
 watch(() => route.params.id, () => {
-  tab.value = route.query.tab === 'progress' ? 'progress' : 'how'
+  tab.value = firstTab()
   showAllRecords.value = false
   showAllSessions.value = false
 })

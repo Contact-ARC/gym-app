@@ -3,7 +3,7 @@
 import { BADGE_BY_ID, levelsOf, FEAT_RULES } from '../lib/badges.js'
 import { convertLoad, fmtLoad } from '../lib/training.js'
 import { fmtDistance } from '../lib/cardio.js'
-import { t } from '../i18n/index.js'
+import { t, locale } from '../i18n/index.js'
 
 /** Each group's colours: the seal's fill (light → dark) and its edge when it has no tiers */
 export const GROUP_TONE = {
@@ -18,7 +18,7 @@ export const GROUP_TONE = {
 /** Bronze, silver, gold, platinum, diamond */
 export const TIER_COLOR = ['#C9814A', '#B8C2CE', '#E8B931', '#6FD0D6', '#B79CFF']
 
-const num = (v, d = 0) => Number(v).toLocaleString(undefined, { maximumFractionDigits: d })
+const num = (v, d = 0) => Number(v).toLocaleString(locale(), { maximumFractionDigits: d })
 const tonnes = (kg, unit) => (unit === 'lb' ? `${num(convertLoad(kg, 'kg', 'lb'))} lb` : `${num(kg / 1000, kg < 10000 ? 1 : 0)} t`)
 const list = (items, tr) => (items.length > 1 ? tr('{a} and {b}', { a: items.slice(0, -1).join(', '), b: items.at(-1) }) : items.join(''))
 

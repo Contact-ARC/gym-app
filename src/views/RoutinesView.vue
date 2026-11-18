@@ -4,7 +4,7 @@
       <button class="icon-btn" :aria-label="t('Back')" @click="router.back()"><Icon name="back" /></button>
     </div>
     <h1 class="t-title">{{ t('My routines') }}</h1>
-    <p class="t-small t-muted sub">{{ t("Your own days and saved copies. Use them alongside this month's days, instead of them, or keep them for later. The routines repo never changes them.") }}</p>
+    <p class="t-small t-muted sub">{{ t("Your own days and saved copies. Use them alongside this month's days, instead of them, or keep them for later. Monthly routine updates never change them.") }}</p>
 
     <div v-if="routineReplaced" class="note note-info row replaced">
       <Icon name="mine" />

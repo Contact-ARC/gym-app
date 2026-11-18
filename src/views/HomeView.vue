@@ -119,6 +119,11 @@
       </div>
     </section>
 
+    <div v-if="!activeSession" class="row free">
+      <button class="btn btn-soft grow" @click="startFree"><Icon name="plus" />{{ t('Free session') }}</button>
+      <button class="btn btn-soft grow" @click="climbOpen = true"><Icon name="climb" />{{ t('Climbing') }}</button>
+    </div>
+
     <ChallengeCard :compact="challengeStarted" />
     <GoalCard />
 
@@ -162,7 +167,7 @@
             <div class="t-h3 truncate">{{ dayTitle(tx(d, 'name'), d.id) }}</div>
             <div class="tags-row day-sub">
               <span v-if="d.source === 'mine'" class="tag tag-mine">{{ t('Yours') }}</span>
-              <span v-else class="tag">{{ t('tag|Routine') }}</span>
+              <span v-else-if="mixedDays" class="tag">{{ t('tag|Routine') }}</span>
               <span v-if="d.edited" class="tag tag-edit">{{ t('Edited') }}</span>
               <span v-if="d.pendingChange" class="tag tag-edit">{{ t('Changed') }}</span>
               <span v-if="gymGaps[d.key]" class="tag tag-lack">{{ t('Needs a swap') }}</span>
@@ -198,10 +203,6 @@
       </RouterLink>
     </section>
 
-    <div v-if="!activeSession" class="row free">
-      <button class="btn btn-soft grow" @click="startFree"><Icon name="plus" />{{ t('Free session') }}</button>
-      <button class="btn btn-soft grow" @click="climbOpen = true"><Icon name="climb" />{{ t('Climbing') }}</button>
-    </div>
 
     <Sheet v-model="climbOpen" :title="t('Climbing session')">
       <p class="t-small t-muted">{{ t('Log each climb as you go: grade, wall, flash or not, tries and time. You can add the other kind, or any exercise, during the session.') }}</p>
@@ -232,6 +233,8 @@
 </template>
 
 <script setup>
+import { signedIn } from '../lib/account.js'
+import { syncState } from '../lib/sync.js'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import Icon from '../ui/Icon.vue'
@@ -321,8 +324,12 @@ const week = computed(() => {
 const weekCount = computed(() => week.value.filter(d => d.on).length)
 
 // Exports off the phone: every 2 weeks, or every 5 weeks while automatic backups are working
+// Only label days "Routine" when some of them are yours, so the tag tells them apart
+const mixedDays = computed(() => days.value.some(d => d.source === 'mine'))
 const needsBackup = computed(() => {
   if (finishedSessions.value.length < 3) return false
+  // Signed in and saving: your data is already off the phone (account sync, 0.12)
+  if (signedIn.value && !syncState.error) return false
   const autoOk = state.data.settings.autoBackup !== 'off' && state.data.autoBackup.where === 'documents' && !state.data.autoBackup.lastError
   const limit = autoOk ? 35 : 14
   return daysSinceBackup.value == null ? !autoOk || finishedSessions.value.length >= 12 : daysSinceBackup.value >= limit
@@ -407,7 +414,7 @@ function startFree () {
 .streak .t-small { color: var(--ink); }
 .streak.safe { background: var(--ok-soft); color: var(--ok); }
 .report-note { background: var(--card); }
-.free { margin-top: 20px; gap: 10px; }
+.free { margin-top: 10px; gap: 10px; }
 .climb-kinds { margin-top: 12px; background: var(--card-2); }
 .gym-pick { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
 .gym-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border-radius: 20px; background: var(--card-2); color: var(--ink-2); font-weight: 600; font-size: 15px; }

@@ -12,7 +12,7 @@
       <p class="t-h3">{{ t('Train together') }}</p>
       <p class="t-small t-muted">{{ t('A shared board for your group: who trained this week, streaks, records and the monthly challenge.') }}</p>
       <p class="t-small t-muted">{{ t("It needs a one-time setup by whoever looks after the routines. Until then everything else works as normal.") }}</p>
-      <RouterLink to="/settings#crew" class="btn btn-soft btn-block mt">{{ t('Crew server settings') }}</RouterLink>
+      <RouterLink to="/settings#crew-server" class="btn btn-soft btn-block mt">{{ t('Crew server settings') }}</RouterLink>
     </div>
 
     <!-- Join or start a crew -->
@@ -82,8 +82,11 @@
         </button>
         <button v-if="!myTogether" class="row tg-row code-row" @click="codeOpen = true">
           <Icon name="team" class="t-muted" />
-          <span class="grow t-small">{{ t('Train together: start from a workout (⋯), or join with a code') }}</span>
-          <span class="btn btn-sm btn-soft">{{ t('Join with a code') }}</span>
+          <span class="grow min0">
+            <span class="t-small tg-h">{{ t('Train together') }}</span>
+            <span class="t-tiny t-muted tg-sub">{{ t('Start from a workout (⋯), or join with a code') }}</span>
+          </span>
+          <span class="btn btn-sm btn-soft nowrap">{{ t('Join') }}</span>
         </button>
       </div>
       <Sheet v-model="codeOpen" :title="t('Join with a code')">
@@ -700,6 +703,10 @@ function pinnedOf (id) {
 .tg-card { padding: 4px 14px; }
 .tg-row { width: 100%; gap: 10px; min-height: 52px; text-align: left; }
 .tg-row + .tg-row { border-top: 1px solid var(--line); }
+.tg-h { display: block; font-weight: 600; }
+.tg-sub { display: block; }
+.nowrap { white-space: nowrap; flex: 0 0 auto; }
+.min0 { min-width: 0; }
 .code-in { font-size: 34px; letter-spacing: 0.3em; text-align: center; margin-top: 10px; }
 .pins { display: inline-flex; gap: 1px; margin-left: 6px; vertical-align: -4px; }
 .head { margin-top: 8px; gap: 4px; }

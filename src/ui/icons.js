@@ -114,5 +114,8 @@ export {
   mdiLogout as logout,
   mdiAccountCircleOutline as account,
   // 0.13: Health Connect
-  mdiHeartPulse as heart
+  mdiHeartPulse as heart,
+  // 0.14
+  mdiDumbbell as dumbbell,
+  mdiWeightKilogram as plate
 } from '@mdi/js'

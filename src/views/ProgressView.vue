@@ -279,7 +279,7 @@ const trainedDays = computed(() => heat.value.flat().filter(c => c.on).length)
 const perWeek = computed(() => {
   const first = finishedSessions.value[finishedSessions.value.length - 1]
   const weeks = first ? Math.min(12, Math.max(1, Math.ceil((Date.now() - new Date(first.startedAt)) / (7 * 86400000)))) : 12
-  return (trainedDays.value / weeks).toFixed(1)
+  return fmtNum(trainedDays.value / weeks, 1)
 })
 
 // ── Your exercises ──
