@@ -175,7 +175,7 @@ export function importedEntries ({ weights = [], fats = [] }, { unit = 'kg', kno
 }
 
 // ── More from Health Connect (0.13): other workouts, sleep, resting heart rate, VO2 max ──
-const localDay = (iso) => {
+export const localDay = (iso) => {
   const d = new Date(iso)
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
@@ -227,4 +227,24 @@ export function dailyLatest (readings = [], key, { day = localDay } = {}) {
     byDay.set(day(r.time), r[key])
   }
   return [...byDay.entries()].map(([date, value]) => ({ date, value })).sort((x, y) => x.date.localeCompare(y.date))
+}
+
+/**
+ * A month from the Health Connect logs (0.14, for the monthly report): average steps a day, average sleep a
+ * night and workouts other apps recorded. null when there's nothing for that month.
+ * @param {{ stepLog, sleepLog, otherLog }} h  @param {string} month 'YYYY-MM'
+ */
+export function monthHealth (h, month) {
+  if (!h) return null
+  const inMonth = (date) => String(date).slice(0, 7) === month
+  const steps = Object.entries(h.stepLog || {}).filter(([d, n]) => inMonth(d) && n > 0).map(([, n]) => n)
+  const sleep = Object.entries(h.sleepLog || {}).filter(([d, m]) => inMonth(d) && m > 0).map(([, m]) => m)
+  const others = Object.values(h.otherLog || {}).filter(o => inMonth(o?.date))
+  if (!steps.length && !sleep.length && !others.length) return null
+  const avg = (xs) => (xs.length ? xs.reduce((a, x) => a + x, 0) / xs.length : null)
+  return {
+    steps: steps.length ? { avg: Math.round(avg(steps)), best: Math.max(...steps), days: steps.length } : null,
+    sleep: sleep.length ? { avg: Math.round(avg(sleep)), nights: sleep.length } : null,
+    others: { count: others.length, minutes: others.reduce((a, o) => a + (o.minutes || 0), 0) }
+  }
 }

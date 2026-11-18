@@ -34,7 +34,7 @@
           </span>
           <span class="t-num t-muted">{{ Math.round(p.pct * 100) }}%</span>
         </div>
-        <p v-if="goal.type === 'weekly'" class="t-tiny t-muted extra">{{ tn(streak.weeks, 'Streak: {n} week in a row', 'Streak: {n} weeks in a row') }}</p>
+        <p v-if="goal.type === 'weekly' && goalRun" class="t-tiny t-muted extra">{{ goalRun.weeks ? tn(goalRun.weeks, 'Hit {n} week in a row', 'Hit {n} weeks in a row') : t('Hit it this week to start a run') }}<template v-if="goalRun.best > goalRun.weeks"> · {{ t('best {n}', { n: goalRun.best }) }}</template></p>
         <p v-if="paceText(goal, p)" class="t-tiny extra" :class="paceWarn(goal) ? 't-warn' : 't-muted'">{{ paceText(goal, p) }}</p>
         <p v-if="goal.by && goal.type !== 'weekly'" class="t-tiny t-muted extra">{{ byText(goal) }}</p>
       </div>
@@ -138,11 +138,12 @@ import Segmented from '../ui/Segmented.vue'
 import Toggle from '../ui/Toggle.vue'
 import ExercisePicker from '../ui/ExercisePicker.vue'
 import { toast } from '../ui/toast.js'
-import { state, persist, goalsWithProgress, goalCtx, saveGoal, deleteGoal, exercisesById, finishedSessions, streak } from '../store.js'
+import { state, persist, goalsWithProgress, goalCtx, saveGoal, deleteGoal, exercisesById, finishedSessions, weeklyMin } from '../store.js'
+import { weekStreak } from '../lib/stats.js'
 import { currentValue, suggestTargets, displayUnit, weeksToGo, EXERCISE_GOALS } from '../lib/goals.js'
 import { weightRate } from '../lib/body.js'
 import { goalTitle, goalValue, goalLabel } from '../lib/goalText.js'
-import { relativeDay, shortDay } from '../lib/format.js'
+import { relativeDay, shortDay, fmtNum } from '../lib/format.js'
 import { daysBetween } from '../lib/routines.js'
 import { t, tn, tx } from '../i18n/index.js'
 
@@ -167,8 +168,15 @@ const TYPE_HELP = {
   bodyFat: 'Entered or estimated from measurements',
   waist: 'From your measurements',
   leanMass: 'Weight without fat: build muscle',
-  weekly: 'Also sets what keeps your streak going'
+  weekly: 'Your own target. Your streak only needs 2 a week'
 }
+
+// Weeks in a row you've hit your weekly goal (the streak itself only needs 2 a week)
+const goalRun = computed(() => {
+  if (!state.data.goals.some(g => g.type === 'weekly' && !g.archived)) return null
+  const [y, m, d] = state.today.split('-').map(Number)
+  return weekStreak(state.data.sessions, new Date(y, m - 1, d, 12), weeklyMin.value)
+})
 
 // ── Pace and dates for body goals ──
 const unit = computed(() => state.data.profile.unit)
@@ -178,7 +186,7 @@ function paceText (goal, p) {
   const r = rate.value
   if (!r) return t('Weigh in a few times a week to see your pace.')
   const w = weeksToGo(p.current, p.target, r.perWeek)
-  const pace = t('{v} a week', { v: `${r.perWeek > 0 ? '+' : ''}${r.perWeek} ${unit.value}` })
+  const pace = t('{v} a week', { v: `${r.perWeek > 0 ? '+' : ''}${fmtNum(r.perWeek, 2)} ${unit.value}` })
   if (w == null) return t("Lately: {pace}, so you're not heading there yet.", { pace })
   return tn(w, 'Lately: {pace}. At this rate: about {n} week.', 'Lately: {pace}. At this rate: about {n} weeks.', { pace })
 }

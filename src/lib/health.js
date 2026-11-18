@@ -10,8 +10,11 @@ import { registerPlugin } from '@capacitor/core'
 import { App as CapApp } from '@capacitor/app'
 import { state, persist, plain, onPersist, onDataReplaced, onSessionFinished, exercisesById, saveBodyEntry } from '../store.js'
 import { isNative } from './native.js'
-import { healthRecords, healthChanges, recordHash, importedEntries, otherWorkouts, sleepNights, dailyLatest } from './healthRecords.js'
+import { healthRecords, healthChanges, recordHash, importedEntries, otherWorkouts, sleepNights, dailyLatest, localDay } from './healthRecords.js'
 import { t } from '../i18n/index.js'
+import { backgroundBadges } from './myBadges.js'
+import { badgeTitle } from '../ui/badgeUi.js'
+import { toast, toastState } from '../ui/toast.js'
 
 const Native = registerPlugin('HealthBridge')
 function bridge () {
@@ -36,7 +39,12 @@ function settings () {
   if (!state.data.health) {
     state.data.health = { on: false, workouts: true, body: true, read: true, written: {}, imported: [], ignored: [], hrTries: {}, steps: [], others: [], sleep: [], resting: [], vo2: [], lastBodyRead: null }
   }
-  return state.data.health
+  // 0.14: day-by-day history kept for the activity badges (the lists above are just the recent ones shown)
+  const h = state.data.health
+  if (!h.stepLog) h.stepLog = {}
+  if (!h.sleepLog) h.sleepLog = {}
+  if (!h.otherLog) h.otherLog = {}
+  return h
 }
 export const healthSettings = computed(() => settings())
 export const healthOn = computed(() => !!state.data.health?.on)
@@ -121,10 +129,21 @@ async function doRun () {
   } catch (e) {
     health.error = String(e?.message || e)
   } finally {
-    if (JSON.stringify(h) !== before || touched) await persist()
+    const fresh = backgroundBadges()
+    if (JSON.stringify(h) !== before || touched || fresh.length) await persist()
     touched = false
     inRun = false
+    if (fresh.length) announce(fresh)
   }
+}
+
+/** "New badge: Daily steps · Silver" (or "+2 more"), with a way to see them */
+function announce (list) {
+  const first = badgeTitle(list[0].id, list[0].level, 1, t, state.data.profile.unit)
+  const text = list.length === 1 ? t('New badge: {b}', { b: first }) : t('New badges: {b} and {n} more', { b: first, n: list.length - 1 })
+  const show = () => toast(text, { actionLabel: t('See'), action: () => import('../router.js').then(m => m.default.push('/badges')), ms: 6000 })
+  // After any message already on screen (like "Connected to Health Connect", shown when the first run ends)
+  setTimeout(() => (toastState.text ? setTimeout(show, 3600) : show()), 300)
 }
 let touched = false // a workout got its heart rate
 
@@ -159,7 +178,16 @@ async function writeChanges (b, h) {
   }
 }
 
+/** Keep a date- or id-keyed log to its newest `max` entries */
+function trimLog (log, max) {
+  const keys = Object.keys(log)
+  if (keys.length <= max) return
+  const order = keys.sort((a, b) => String(log[a]?.date || a).localeCompare(String(log[b]?.date || b)))
+  for (const k of order.slice(0, keys.length - max)) delete log[k]
+}
+
 async function readOthers (b, h) {
+  settings() // the 0.14 logs on a phone connected before them
   // Heart rate and active calories during recent workouts (a watch may sync a while after the workout)
   const wantHr = has('read:heartRate')
   const wantKcal = has('read:activeCalories')
@@ -186,12 +214,23 @@ async function readOthers (b, h) {
   }
   // Workouts other apps or a watch recorded (shown in History)
   if (has('read:exercise')) {
-    const res = await b.readWorkouts({ since: new Date(Date.now() - 30 * 86400000).toISOString() })
-    h.others = otherWorkouts(res.workouts || [], state.data.sessions).slice(0, 60)
+    const since = new Date(Date.now() - 30 * 86400000)
+    const res = await b.readWorkouts({ since: since.toISOString() })
+    const list = otherWorkouts(res.workouts || [], state.data.sessions)
+    h.others = list.slice(0, 60)
+    // The log: what the last 30 days say now (deleted or merged ones drop out), older ones kept
+    const from = localDay(since.toISOString())
+    for (const [id, o] of Object.entries(h.otherLog)) if (o.date >= from) delete h.otherLog[id]
+    for (const o of list) h.otherLog[o.id] = { date: o.date, minutes: o.minutes, type: o.type }
+    trimLog(h.otherLog, 3000)
   } else h.others = []
   if (has('read:sleep')) {
-    const res = await b.sleep({ since: new Date(Date.now() - 8 * 86400000).toISOString() })
-    h.sleep = sleepNights(res.sessions || []).slice(-7)
+    const days = Object.keys(h.sleepLog).length ? 8 : 30
+    const res = await b.sleep({ since: new Date(Date.now() - days * 86400000).toISOString() })
+    const nights = sleepNights(res.sessions || [])
+    h.sleep = nights.slice(-7)
+    for (const n of nights) h.sleepLog[n.date] = n.minutes
+    trimLog(h.sleepLog, 800)
   } else h.sleep = []
   if (has('read:restingHeartRate') || has('read:vo2max')) {
     const res = await b.vitals({ since: new Date(Date.now() - 30 * 86400000).toISOString() })
@@ -199,8 +238,12 @@ async function readOthers (b, h) {
     h.vo2 = dailyLatest(res.vo2 || [], 'value').map(v => ({ ...v, value: Math.round(v.value * 10) / 10 }))
   } else { h.resting = []; h.vo2 = [] }
   if (has('read:steps')) {
-    const res = await b.steps({ days: 7 })
-    h.steps = (res.days || []).map(d => ({ date: d.date, count: Math.round(d.count) }))
+    // The first time, the 30 days Health Connect lets an app see back; then the last week
+    const res = await b.steps({ days: Object.keys(h.stepLog).length ? 7 : 30 })
+    const list = (res.days || []).map(d => ({ date: d.date, count: Math.round(d.count) }))
+    h.steps = list.slice(-7)
+    for (const d of list) h.stepLog[d.date] = d.count
+    trimLog(h.stepLog, 800)
   }
   if (has('read:weight') || has('read:bodyFat')) {
     const entries = state.data.body.entries

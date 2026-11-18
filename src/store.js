@@ -3,7 +3,7 @@ import { reactive, computed, toRaw } from 'vue'
 import { loadData, saveData, emptyData, parseBackup, onSaveError } from './lib/storage.js'
 import { DEFAULT_ROUTINES_URL, SUPPORTED_ROUTINE_SCHEMA, APP_VERSION } from './config.js'
 import { pickActiveRoutine, compareVersions, dateKey, suggestNext, detectPRs, sessionVolume, resolvePlan, plannedSetsFor, applyTrack, canDoAtGym, gymBound, fmtLoad, DEFAULT_BAR, DEFAULT_INCREMENTS } from './lib/training.js'
-import { challengeProgress, weekStreak, weekKey, STREAK_MIN } from './lib/stats.js'
+import { challengeProgress, weekStreak, STREAK_MIN } from './lib/stats.js'
 import {
   buildDays, planDayView, parseKey, planActive, planExpired, makeUse, snapshotDay, reconcileEdit, applyEdits, withRefs,
   editedOldDay, planFromDays, sessionChanges, changesToOps, applyChangesToPlanDay, dayFromSession, opSwap, uid as rid
@@ -185,15 +185,10 @@ export function bumpChallenge (delta) {
   persist()
 }
 
-/** Workouts a week that keep the streak going: your "workouts per week" goal from the week you set it, otherwise 2. */
+/** Your "workouts per week" goal, or 2 without one (perfect weeks, the goal card). */
 export const weeklyMin = computed(() => weeklyTarget(state.data.goals) || STREAK_MIN)
-/** The streak rule as a number or a function of the week (also used by the streak badge). */
-export const streakRule = computed(() => {
-  const g = state.data.goals.find(x => x.type === 'weekly' && !x.archived)
-  const from = g?.createdAt ? weekKey(g.createdAt) : null
-  const min = weeklyMin.value
-  return g ? (wk) => (!from || wk >= from ? min : STREAK_MIN) : STREAK_MIN
-})
+/** The streak always needs 2 workouts a week (0.14: a weekly goal no longer raises it; it has its own run). */
+export const streakRule = computed(() => STREAK_MIN)
 export const streak = computed(() => {
   const [y, m, d] = state.today.split('-').map(Number)
   return weekStreak(state.data.sessions, new Date(y, m - 1, d, 12), streakRule.value)

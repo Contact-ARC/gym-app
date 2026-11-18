@@ -145,8 +145,21 @@
             <template v-else>{{ tn(streak.min - streak.thisWeek, '{n} more workout this week keeps it going.', '{n} more workouts this week keep it going.') }}</template>
           </span>
         </div>
+        <!-- 0.14: today from Health Connect -->
+        <RouterLink v-if="todayHealth" to="/body" class="row hc-today t-small">
+          <Icon name="walk" :size="18" />
+          <span class="grow">
+            <template v-if="todayHealth.steps != null">{{ t('{n} steps today', { n: fmtNum(todayHealth.steps, 0) }) }}</template>
+            <template v-if="todayHealth.steps != null && todayHealth.sleep != null"> · </template>
+            <template v-if="todayHealth.sleep != null">{{ t('{t} sleep', { t: fmtHm(todayHealth.sleep) }) }}</template>
+          </span>
+          <Icon name="chevronRight" :size="18" class="t-muted" />
+        </RouterLink>
         <div class="t-small t-muted week-sum">
-          {{ weekCount === 0 ? t('No workouts yet this week.') : tn(weekCount, '{n} workout this week.', '{n} workouts this week.') }}
+          <span>
+            <template v-if="weekGoal">{{ weekGoalDone ? t('{a} of {b} workouts this week: weekly goal done.', { a: streak.thisWeek, b: weekGoal }) : t('{a} of {b} workouts this week.', { a: streak.thisWeek, b: weekGoal }) }}</template>
+            <template v-else>{{ weekCount === 0 ? t('No workouts yet this week.') : tn(weekCount, '{n} workout this week.', '{n} workouts this week.') }}</template>
+          </span>
           <RouterLink to="/history" class="link">{{ t('History') }}</RouterLink>
         </div>
       </div>
@@ -251,7 +264,8 @@ import {
   trackItem, streak, routineWarning, nextDay, nextDayIndex, routineReplaced, restoreRoutine, isPlanActive, dismissEditNotice, gymGaps
 } from '../store.js'
 import { openUrl } from '../lib/native.js'
-import { prescription, relativeDay, dayTitle, weekdayDate, monthName, sessionTitle, planStatus } from '../lib/format.js'
+import { prescription, relativeDay, dayTitle, weekdayDate, monthName, sessionTitle, planStatus, fmtNum, fmtHm } from '../lib/format.js'
+import { weeklyTarget } from '../lib/goals.js'
 import { daysBetween } from '../lib/routines.js'
 import { dateKey, plannedSetsFor } from '../lib/training.js'
 import { monthKey, shiftMonth, sessionsInMonth } from '../lib/stats.js'
@@ -322,6 +336,17 @@ const week = computed(() => {
   })
 })
 const weekCount = computed(() => week.value.filter(d => d.on).length)
+// 0.14: your "workouts per week" goal, shown here now that the streak only needs 2
+const weekGoal = computed(() => weeklyTarget(state.data.goals))
+const weekGoalDone = computed(() => weekGoal.value && streak.value.thisWeek >= weekGoal.value)
+// Today's steps and last night's sleep, when Health Connect gives them
+const todayHealth = computed(() => {
+  const h = state.data.health
+  if (!h?.on || !h.read) return null
+  const steps = (h.steps || []).find(d => d.date === state.today)?.count ?? null
+  const sleep = (h.sleep || []).find(d => d.date === state.today)?.minutes ?? null
+  return steps == null && sleep == null ? null : { steps, sleep }
+})
 
 // Exports off the phone: every 2 weeks, or every 5 weeks while automatic backups are working
 // Only label days "Routine" when some of them are yours, so the tag tells them apart
@@ -411,6 +436,7 @@ function startFree () {
 .link { font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 3px; display: inline-block; padding: 12px 4px; margin: -12px -4px; }
 
 .streak { gap: 10px; margin-top: 14px; padding: 10px 12px; border-radius: var(--r-ctl); background: var(--warn-soft); color: var(--warn); }
+.hc-today { gap: 10px; margin-top: 10px; padding: 10px 12px; border-radius: var(--r-ctl); background: var(--card-2); color: inherit; text-decoration: none; }
 .streak .t-small { color: var(--ink); }
 .streak.safe { background: var(--ok-soft); color: var(--ok); }
 .report-note { background: var(--card); }

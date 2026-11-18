@@ -115,6 +115,13 @@ export {
   mdiAccountCircleOutline as account,
   // 0.13: Health Connect
   mdiHeartPulse as heart,
+  // 0.14: activity badges
+  mdiWalk as walk,
+  mdiFootPrint as footsteps,
+  mdiSleep as sleep,
+  mdiWatchVariant as watch,
+  mdiCalendarWeek as calWeek,
+  mdiFireCircle as burn,
   // 0.14
   mdiDumbbell as dumbbell,
   mdiWeightKilogram as plate

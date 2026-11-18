@@ -252,7 +252,7 @@ import { toast } from '../ui/toast.js'
 import { state, persist, saveBodyEntry, deleteBodyEntry, addPhotoRecord, removePhotoRecord, MEASUREMENTS, newId, goalsWithProgress } from '../store.js'
 import { latestBodyFat, bodyFatSeries, avgWeight, leanMass, ffmi, bmi, CM_PER_IN } from '../lib/body.js'
 import { goalTitle } from '../lib/goalText.js'
-import { fmtNum, relativeDay, fmtDate } from '../lib/format.js'
+import { fmtNum, relativeDay, fmtDate, fmtHm } from '../lib/format.js'
 import { convertLoad } from '../lib/training.js'
 import { savePhoto, photoUrl, deletePhotoFiles } from '../lib/photos.js'
 import { useChartTheme } from '../lib/chartTheme.js'
@@ -461,7 +461,7 @@ const steps = computed(() => (reading.value ? healthSettings.value.steps || [] :
 const sleep = computed(() => (reading.value ? healthSettings.value.sleep || [] : []))
 const sleepMax = computed(() => Math.max(60, ...sleep.value.map(d => d.minutes)))
 const sleepAvg = computed(() => (sleep.value.length ? sleep.value.reduce((a, d) => a + d.minutes, 0) / sleep.value.length : 0))
-const hm = (min) => { const m = Math.round(min); return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` }
+const hm = fmtHm
 const resting = computed(() => {
   const r = reading.value ? healthSettings.value.resting || [] : []
   if (!r.length) return null

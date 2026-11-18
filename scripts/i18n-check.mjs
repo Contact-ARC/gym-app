@@ -47,7 +47,7 @@ const EXTRA = [
   'Waist', 'Lean mass', 'Workouts per week', 'Strength', 'Body', 'Habit', 'Squat', 'Bench press', 'Deadlift', 'measure|Neck', 'filter|Yours',
   'Bench 100 kg, squat 140 kg for 5…', '10 pull-ups, 30 push-ups…', 'A 2-minute plank, a longer carry…', 'Squat twice your bodyweight…',
   'Squat + bench + deadlift', 'Compares lifters of different bodyweights', 'Gain or lose, with a 7-day average', 'Entered or estimated from measurements',
-  'From your measurements', 'Weight without fat: build muscle', 'Also sets what keeps your streak going',
+  'From your measurements', 'Weight without fat: build muscle', 'Your own target. Your streak only needs 2 a week',
   'Crew codes are 6 letters or numbers.', 'Pick a name between 1 and 30 characters.', "This phone isn't in that crew any more.", 'That was too much data to send.',
   // 0.6: crew errors, notification kinds, leaderboard metrics and reactions shown through a variable
   "Only the crew's owner can do that.", 'You already nudged them this week.', 'They already trained this week.',

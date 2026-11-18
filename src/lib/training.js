@@ -18,6 +18,12 @@ export const DEFAULT_PLATES = {
 }
 
 export const DEFAULT_BAR = { kg: 20, lb: 45 }
+/** Bars to pick from, down to 0 (an EZ bar or handle you don't count), plus a saved one that's something else */
+export function barChoices (unit = 'kg', saved = null) {
+  const list = unit === 'lb' ? [45, 35, 25, 15, 0] : [20, 15, 10, 5, 0]
+  if (saved > 0 && !list.includes(saved)) list.push(saved)
+  return list.sort((a, b) => b - a)
+}
 
 const round2 = (x) => Math.round(x * 100) / 100
 

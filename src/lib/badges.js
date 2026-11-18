@@ -5,16 +5,17 @@
 //  - level: one badge that goes up through the tiers (Bronze → Diamond) as you pass its thresholds
 //           (workouts, streak, plates on a lift…). Badges with a single threshold have no tiers.
 //  - feat:  earned again and again (record day, early bird…), shown as ×N.
-// Secret badges are shown as "???" until earned. Climbing ones only show once you've climbed.
+// Secret badges are shown as "???" until earned. Climbing ones only show once you've climbed, and
+// activity ones (0.14: steps, sleep, other workouts, calories) once Health Connect has given you something.
 //
 // evaluateBadges() walks your workouts oldest first, so each level and each feat gets the date it
 // was really earned, which is why your history fills the wall on day one.
-import { finished, weekKey, STREAK_MIN } from './stats.js'
-import { sessionVolume, isWorkSet, convertLoad } from './training.js'
+import { finished, weekKey, addDays, STREAK_MIN } from './stats.js'
+import { sessionVolume, isWorkSet, convertLoad, dateKey } from './training.js'
 import { recordsBySession, PLATE_STEPS, TOTAL_CLUBS_KG } from './crewStats.js'
 
 export const TIERS = ['bronze', 'silver', 'gold', 'platinum', 'diamond']
-export const GROUPS = ['milestones', 'strength', 'habits', 'crew', 'cardio', 'climbing', 'secret']
+export const GROUPS = ['milestones', 'strength', 'habits', 'crew', 'cardio', 'activity', 'climbing', 'secret']
 /** Lifts that count for the plates, total and bodyweight badges */
 const LIFTS = ['squat', 'bench', 'deadlift']
 const PULL_UPS = ['pull-up', 'chin-up']
@@ -52,10 +53,18 @@ export const BADGES = [
   feat('deloadWeek', 'habits', 'deload'),
   feat('challenge', 'habits', 'challenge'),
   feat('goal', 'habits', 'goal'),
+  lvl('weighIns', 'habits', 'scale', [10, 25, 50, 100, 250]), // 0.14: weigh-ins in Body (a smart scale's count)
   feat('together', 'crew', 'team'), // 0.11: a workout trained together
   lvl('togetherStreak', 'crew', 'crew', [2, 4, 8, 16, 26]), // weeks in a row with one
   lvl('distance', 'cardio', 'run', [10, 50, 100, 250, 500]),
   feat('fiveK', 'cardio', 'shoe'),
+  // 0.14: from Health Connect
+  lvl('steps', 'activity', 'walk', [10000, 15000, 20000, 25000, 30000], { needs: 'health' }), // best day
+  lvl('stepsTotal', 'activity', 'footsteps', [100000, 500000, 1000000, 2500000, 5000000], { needs: 'health' }),
+  feat('stepWeek', 'activity', 'calWeek', { needs: 'health' }),
+  lvl('outside', 'activity', 'watch', [5, 25, 50, 100, 250], { needs: 'health' }), // workouts other apps recorded
+  lvl('kcal', 'activity', 'burn', [5000, 25000, 50000, 100000, 250000], { needs: 'health' }), // active kcal in workouts
+  feat('wellRested', 'activity', 'sleep', { needs: 'health' }),
   lvl('climbs', 'climbing', 'climb', [10, 50, 100, 250, 500], { needs: 'climb' }),
   feat('flashDay', 'climbing', 'flash', { needs: 'climb' }),
   feat('newYear', 'secret', 'party', { secret: true }),
@@ -75,7 +84,10 @@ export const FEAT_RULES = {
   heavyKg: 10000, // lifted in one workout
   fiveKm: 5,
   twoHoursMin: 120,
-  twoHoursMax: 300 // longer than that is a workout left running, not a two-hour session
+  twoHoursMax: 300, // longer than that is a workout left running, not a two-hour session
+  stepWeek: 70000, // steps in one Monday–Sunday week (10,000 a day)
+  restedHours: 7, // a night of at least this much sleep
+  restedNights: 7 // that many in a row
 }
 
 const r2 = (x) => Math.round(x * 100) / 100
@@ -93,12 +105,16 @@ const minutesOf = (s) => (s.finishedAt ? (new Date(s.finishedAt) - new Date(s.st
  * @param {Array} p.challengeDates dates you completed the monthly challenge
  * @param {Array} p.goalDates dates you reached a goal
  * @param {number|Function} p.streakMin workouts a week that keep a streak (or a function of the week key), as on Progress
+ * @param {Array} p.steps [{ date, count }] daily steps from Health Connect (any order)
+ * @param {Array} p.sleep [{ date, minutes }] sleep per night, by the day you woke up
+ * @param {Array} p.others [{ date }] workouts other apps or a watch recorded
+ * @param {boolean} p.healthUsed Health Connect is (or was) connected: shows the activity badges
  * @returns {{ [id]: { level, count, value, next, first, last, dates } }}
  *   level: tiers reached (level badges); count: times earned (feats; for level badges = level)
  *   value: where you are now (workouts done, best streak, heaviest bench in your unit, best ratio…)
  *   next: the next threshold (null at the top); dates: when each level was reached, or each feat earned
  */
-export function evaluateBadges ({ sessions, unit = 'kg', lifts = {}, bodyweights = [], weekTarget = 3, challengeDates = [], goalDates = [], streakMin = STREAK_MIN }) {
+export function evaluateBadges ({ sessions, unit = 'kg', lifts = {}, bodyweights = [], weekTarget = 3, challengeDates = [], goalDates = [], streakMin = STREAK_MIN, steps = [], sleep = [], others = [], healthUsed = false }) {
   const list = finished(sessions)
   const records = recordsBySession(sessions, unit)
   const bws = [...bodyweights].filter(b => b?.kg > 0 && b.date).sort((a, b) => a.date.localeCompare(b.date))
@@ -125,6 +141,7 @@ export function evaluateBadges ({ sessions, unit = 'kg', lifts = {}, bodyweights
   let tonnage = 0
   let km = 0
   let climbs = 0
+  let kcal = 0
   const seen = new Set()
   const best = {} // heaviest actually lifted per lift, in kg
   const weekCount = {}
@@ -237,6 +254,39 @@ export function evaluateBadges ({ sessions, unit = 'kg', lifts = {}, bodyweights
     climbs += sClimbs.length
     bump('climbs', climbs, date)
     if (sClimbs.some(x => x.climb.result === 'flash')) featDates.flashDay.push(date)
+
+    // Active calories your watch saw during the workout
+    if (s.kcal > 0) { kcal += s.kcal; bump('kcal', kcal, date) }
+  }
+
+  // Weigh-ins (not the bodyweight from your profile, which has no date)
+  bws.filter(b => b.date !== '1970-01-01').forEach((b, i) => bump('weighIns', i + 1, b.date))
+
+  // Steps: best day, all of them, and 70,000 in a week
+  let stepSum = 0
+  const weekSteps = {}
+  for (const d of [...steps].filter(x => x?.date && x.count > 0).sort((a, b) => a.date.localeCompare(b.date))) {
+    bump('steps', d.count, d.date)
+    stepSum += d.count
+    bump('stepsTotal', stepSum, d.date)
+    const wk = weekKey(d.date + 'T12:00:00')
+    const before = weekSteps[wk] || 0
+    weekSteps[wk] = before + d.count
+    if (before < FEAT_RULES.stepWeek && weekSteps[wk] >= FEAT_RULES.stepWeek) featDates.stepWeek.push(d.date)
+  }
+
+  // Workouts other apps recorded
+  ;[...others].filter(o => o?.date).sort((a, b) => a.date.localeCompare(b.date)).forEach((o, i) => bump('outside', i + 1, o.date))
+
+  // Seven nights in a row of 7 hours or more (then the count starts again)
+  let nights = 0
+  let lastNight = null
+  for (const n of [...sleep].filter(x => x?.date).sort((a, b) => a.date.localeCompare(b.date))) {
+    const follows = lastNight && dateKey(addDays(new Date(lastNight + 'T12:00:00'), 1)) === n.date
+    lastNight = n.date
+    if (!(n.minutes >= FEAT_RULES.restedHours * 60)) { nights = 0; continue }
+    nights = follows ? nights + 1 : 1
+    if (nights >= FEAT_RULES.restedNights) { featDates.wellRested.push(n.date); nights = 0 }
   }
   featDates.challenge = [...challengeDates].filter(Boolean).map(dayOf).sort()
   featDates.goal = [...goalDates].filter(Boolean).map(dayOf).sort()
@@ -256,6 +306,8 @@ export function evaluateBadges ({ sessions, unit = 'kg', lifts = {}, bodyweights
   if (!bws.length) for (const k of LIFTS) out[k + 'Bw'].value = null
   out.climbs.used = climbs > 0
   out.flashDay.used = climbs > 0
+  const hc = !!healthUsed || kcal > 0 || steps.length > 0 || sleep.length > 0 || others.length > 0
+  for (const b of BADGES) if (b.needs === 'health') out[b.id].used = hc
   return out
 }
 
@@ -271,7 +323,7 @@ export function badgeWall (state) {
   for (const g of GROUPS) {
     const items = BADGES.filter(b => b.group === g)
       .map(b => ({ badge: b, st: state?.[b.id] || { level: 0, count: 0, value: 0 } }))
-      .filter(({ badge, st }) => badge.needs !== 'climb' || st.used || isEarned(st))
+      .filter(({ badge, st }) => !['climb', 'health'].includes(badge.needs) || st.used || isEarned(st))
     if (items.length) out.push({ group: g, items })
   }
   return out
@@ -324,7 +376,7 @@ export function unpackBadges (packed, unit = 'kg') {
     const th = levelsOf(b, unit)
     if (!p) { out[b.id] = { level: 0, count: 0, value: 0, next: b.kind === 'level' ? th[0] : null, first: null, last: null, dates: [] }; continue }
     const [level, count, value, first, last] = p
-    out[b.id] = { level, count, value, next: b.kind === 'level' ? (th[level] ?? null) : null, first, last, dates: [], ...(b.needs === 'climb' ? { used: true } : {}) }
+    out[b.id] = { level, count, value, next: b.kind === 'level' ? (th[level] ?? null) : null, first, last, dates: [], ...(['climb', 'health'].includes(b.needs) ? { used: true } : {}) }
   }
   return out
 }

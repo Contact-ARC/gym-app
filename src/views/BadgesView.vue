@@ -32,10 +32,12 @@
           <button v-for="c in close" :key="c.id" class="group-row near" @click="open(c.id)">
             <BadgeSeal :id="c.id" :level="st[c.id].level" :count="st[c.id].count" :size="40" />
             <span class="grow">
-              <span class="t-h3 truncate">{{ badgeName(c.id) }}<span class="t-muted"> · {{ tierLabel(c.id, st[c.id].level + 1) }}</span></span>
-              <span class="bar sm"><span :style="{ width: Math.round(c.pct * 100) + '%' }" /></span>
+              <span class="t-h3">{{ badgeName(c.id) }}<span class="t-muted"> · {{ tierLabel(c.id, st[c.id].level + 1) }}</span></span>
+              <span class="near-line">
+                <span class="bar sm"><span :style="{ width: Math.round(c.pct * 100) + '%' }" /></span>
+                <span class="t-small t-num t-muted">{{ c.text }}</span>
+              </span>
             </span>
-            <span class="t-small t-num t-muted">{{ c.text }}</span>
           </button>
         </div>
       </template>
@@ -127,6 +129,9 @@ function back () {
 .show-hint { flex: 1; min-width: 0; }
 .near { gap: 12px; text-align: left; min-height: 64px; }
 .near .grow { display: grid; min-width: 0; }
+.near-line { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+.near-line .bar { flex: 1; margin-top: 0; }
+.near-line .t-small { white-space: nowrap; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
 .tile { display: grid; justify-items: center; align-content: start; gap: 4px; padding: 12px 4px 10px; border-radius: 16px; text-align: center; min-height: 140px; }
 .tile:active { background: var(--press); }

@@ -25,7 +25,20 @@ function inputs (sessions = state.data.sessions) {
     weekTarget: weekly ? weeklyMin.value : Math.min(6, Math.max(2, days.value.length || 3)),
     challengeDates: Object.values(state.data.challenges || {}).map(c => c?.doneAt).filter(Boolean),
     goalDates: (state.data.goals || []).map(g => g.doneAt).filter(Boolean),
-    streakMin: streakRule.value
+    streakMin: streakRule.value,
+    // 0.14: activity badges from what Health Connect gave this phone
+    ...healthInputs()
+  }
+}
+
+function healthInputs () {
+  const h = state.data.health
+  if (!h) return { steps: [], sleep: [], others: [], healthUsed: false }
+  return {
+    steps: Object.entries(h.stepLog || {}).map(([date, count]) => ({ date, count })),
+    sleep: Object.entries(h.sleepLog || {}).map(([date, minutes]) => ({ date, minutes })),
+    others: Object.values(h.otherLog || {}),
+    healthUsed: !!h.on
   }
 }
 
@@ -33,15 +46,18 @@ function inputs (sessions = state.data.sessions) {
 function signature (inp) {
   let sets = 0
   let last = ''
+  let kcal = 0
   for (const s of inp.sessions) {
     if (!s.finishedAt) continue
     sets += (s.sets || []).length
+    kcal += s.kcal || 0
     if (s.finishedAt > last) last = s.finishedAt
   }
+  const steps = inp.steps.reduce((a, d) => a + (d.count || 0), 0)
   return [
     inp.sessions.length, sets, last, inp.unit, JSON.stringify(inp.lifts), inp.bodyweights.length, inp.bodyweights.at(-1)?.kg,
-    inp.weekTarget, inp.challengeDates.length, inp.goalDates.length, typeof inp.streakMin === 'function' ? 'goal' + weeklyMin.value : inp.streakMin,
-    state.data.settings.climbing?.legacyGymId
+    inp.weekTarget, inp.challengeDates.length, inp.goalDates.length, inp.streakMin,
+    state.data.settings.climbing?.legacyGymId, kcal, steps, inp.steps.length, inp.sleep.length, inp.sleep.reduce((a, n) => a + (n.minutes || 0), 0), inp.others.length, inp.healthUsed
   ].join('|')
 }
 
@@ -72,6 +88,19 @@ export function newBadgesFor (sessionId) {
   const now = myBadges()
   if (!state.data.badgeSeen) state.data.badgeSeen = snapshot(badgesWithout(sessionId))
   const changes = badgeChanges(fromSnapshot(state.data.badgeSeen), now).filter(c => BADGE_BY_ID[c.id])
+  if (changes.length) state.data.badgeSeen = { ...state.data.badgeSeen, ...snapshot(Object.fromEntries(changes.map(c => [c.id, now[c.id]]))) }
+  return changes
+}
+
+/**
+ * Badges earned away from a workout (0.14: steps, sleep, other workouts from Health Connect, weigh-ins), for a
+ * toast. Only once there's a baseline (your first finished workout sets it), so nothing floods in on day one.
+ */
+export function backgroundBadges () {
+  if (!state.data.badgeSeen) return []
+  const now = myBadges()
+  const changes = badgeChanges(fromSnapshot(state.data.badgeSeen), now)
+    .filter(c => (BADGE_BY_ID[c.id]?.group === 'activity' || c.id === 'weighIns') && c.kind !== 'again')
   if (changes.length) state.data.badgeSeen = { ...state.data.badgeSeen, ...snapshot(Object.fromEntries(changes.map(c => [c.id, now[c.id]]))) }
   return changes
 }

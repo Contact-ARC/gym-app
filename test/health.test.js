@@ -113,3 +113,20 @@ test('health: other workouts leave out a watch recording the same gym session', 
   assert.deepEqual(dailyLatest([{ time: '2026-11-17T08:00:00Z', bpm: 58 }, { time: '2026-11-17T20:00:00Z', bpm: 56 }, { time: '2026-11-16T08:00:00Z', bpm: 60 }], 'bpm', { day }),
     [{ date: '2026-11-16', value: 60 }, { date: '2026-11-17', value: 56 }])
 })
+
+test('monthHealth (0.14): a month of steps, sleep and other workouts', async () => {
+  const { monthHealth } = await import('../src/lib/healthRecords.js')
+  const h = {
+    stepLog: { '2026-10-31': 20000, '2026-11-01': 8000, '2026-11-02': 12000, '2026-11-03': 0 },
+    sleepLog: { '2026-11-01': 420, '2026-11-02': 450 },
+    otherLog: { a: { date: '2026-11-02', minutes: 30 }, b: { date: '2026-11-05', minutes: 45 }, c: { date: '2026-10-20', minutes: 60 } }
+  }
+  assert.deepEqual(monthHealth(h, '2026-11'), {
+    steps: { avg: 10000, best: 12000, days: 2 },
+    sleep: { avg: 435, nights: 2 },
+    others: { count: 2, minutes: 75 }
+  })
+  assert.equal(monthHealth(h, '2026-09'), null)
+  assert.equal(monthHealth(null, '2026-11'), null)
+  assert.equal(monthHealth({ sleepLog: { '2026-11-01': 400 } }, '2026-11').steps, null)
+})

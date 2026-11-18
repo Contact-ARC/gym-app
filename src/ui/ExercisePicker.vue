@@ -9,7 +9,7 @@
       <span>{{ t('Only what my gym has') }}</span>
     </label>
     <template v-if="!q && suggested.length">
-      <div class="section-h">{{ suggestedLabel || t('Suggested') }}</div>
+      <div class="section-h">{{ suggestedLabel || t('list|Suggested') }}</div>
       <div class="group">
         <button v-for="ex in suggested" :key="'s' + ex.id" class="group-row" @click="pick(ex.id)">
           <div class="grow">

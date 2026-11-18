@@ -12,6 +12,7 @@ export const GROUP_TONE = {
   habits: { light: '#3DBB75', dark: '#1D7D47', edge: '#145B33' },
   crew: { light: '#2FB4BE', dark: '#13757D', edge: '#0D555B' },
   cardio: { light: '#F07BB4', dark: '#C23C7E', edge: '#8F2A5C' },
+  activity: { light: '#F2A23C', dark: '#C0660C', edge: '#8C4A08' },
   climbing: { light: '#B07A55', dark: '#7A4E31', edge: '#5A3822' },
   secret: { light: '#A779E0', dark: '#6B3BB0', edge: '#4D2885' }
 }
@@ -23,7 +24,7 @@ const tonnes = (kg, unit) => (unit === 'lb' ? `${num(convertLoad(kg, 'kg', 'lb')
 const list = (items, tr) => (items.length > 1 ? tr('{a} and {b}', { a: items.slice(0, -1).join(', '), b: items.at(-1) }) : items.join(''))
 
 export function groupName (g, tr = t) {
-  return ({ milestones: tr('Milestones'), strength: tr('Strength'), habits: tr('Habits'), crew: tr('Crew'), cardio: tr('Cardio'), climbing: tr('Climbing'), secret: tr('Secret') })[g] || g
+  return ({ milestones: tr('Milestones'), strength: tr('Strength'), habits: tr('Habits'), crew: tr('Crew'), cardio: tr('Cardio'), activity: tr('Activity'), climbing: tr('Climbing'), secret: tr('Secret') })[g] || g
 }
 export function tierName (level, tr = t) {
   return [tr('Bronze'), tr('Silver'), tr('Gold'), tr('Platinum'), tr('Diamond')][level - 1] || ''
@@ -41,7 +42,9 @@ export function badgeName (id, tr = t, secretHidden = false) {
     deloadWeek: tr('Smart recovery'), challenge: tr('Challenge done'), goal: tr('Goal getter'),
     together: tr('Trained together'), togetherStreak: tr('Partner streak'), distance: tr('Distance'), fiveK: tr('5K'),
     climbs: tr('Climber'), flashDay: tr('Flash'), newYear: tr('New Year, same me'), christmas: tr('Christmas gains'),
-    witching: tr('Witching hour'), twoHours: tr('Long haul')
+    witching: tr('Witching hour'), twoHours: tr('Long haul'),
+    weighIns: tr('Weigh-ins'), steps: tr('Daily steps'), stepsTotal: tr('Step collector'), stepWeek: tr('10K week'),
+    outside: tr('Outside the gym'), kcal: tr('Calorie burner'), wellRested: tr('Well rested')
   }
   return names[id] || id
 }
@@ -55,6 +58,7 @@ export function badgeValue (id, v, unit = 'kg', tr = t) {
   if (id === 'tonnage') return tonnes(v, unit)
   if (b?.unit === 'x') return tr('{n}× bodyweight', { n: num(v, 2) })
   if (id === 'distance') return fmtDistance(v, unit)
+  if (id === 'kcal') return `${num(v)} kcal`
   return num(v)
 }
 
@@ -86,7 +90,7 @@ export function badgeHow (id, tr = t, unit = 'kg', { weekTarget = 3, secretHidde
   switch (id) {
     case 'first': return tr('Finish your first workout.')
     case 'workouts': return tr('Finish workouts. Levels at {steps} workouts.', { steps })
-    case 'streak': return tr('Train every week without a gap: 2 workouts a week, or your weekly goal if you set one. Levels at {steps} weeks in a row.', { steps })
+    case 'streak': return tr('Train every week without a gap: 2 workouts a week keeps it going. Levels at {steps} weeks in a row.', { steps })
     case 'records': return tr('Beat your best on an exercise: heavier, more reps or longer. Levels at {steps} records.', { steps })
     case 'tonnage': return tr('Every kilo you have lifted, added up. Levels at {steps}.', { steps })
     case 'variety': return tr('Train different exercises. Levels at {steps} exercises.', { steps })
@@ -117,6 +121,13 @@ export function badgeHow (id, tr = t, unit = 'kg', { weekTarget = 3, secretHidde
     case 'christmas': return tr('Train on Christmas Day.')
     case 'witching': return tr('Start a workout between midnight and 4:00.')
     case 'twoHours': return tr('A workout of two hours or more.')
+    case 'weighIns': return tr('Log your weight in Body (a smart scale through Health Connect counts too). Levels at {steps} weigh-ins.', { steps })
+    case 'steps': return tr('Steps in one day, from Health Connect. Levels at {steps} steps.', { steps })
+    case 'stepsTotal': return tr('Every step Health Connect has given the app, added up. Levels at {steps} steps.', { steps })
+    case 'stepWeek': return tr('Walk {n} steps in one week, Monday to Sunday: 10,000 a day.', { n: num(FEAT_RULES.stepWeek) })
+    case 'outside': return tr('Runs, rides, walks and other workouts your watch or other apps recorded. Levels at {steps} workouts.', { steps })
+    case 'kcal': return tr('Active calories your watch counted during your workouts, added up. Levels at {steps}.', { steps })
+    case 'wellRested': return tr('Sleep {h} hours or more for {n} nights in a row.', { h: FEAT_RULES.restedHours, n: FEAT_RULES.restedNights })
   }
   return ''
 }

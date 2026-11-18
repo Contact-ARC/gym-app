@@ -80,7 +80,7 @@
             <div class="sleeve-end" />
           </div>
           <div class="t-small t-muted">{{ t('On each side') }}</div>
-          <div class="t-h2 t-num per-side">{{ plates.perSide.length ? perSideText : t('Nothing, just the bar') }}</div>
+          <div class="t-h2 t-num per-side">{{ plates.perSide.length ? perSideText : bar ? t('Nothing, just the bar') : t('Nothing to load') }}</div>
           <div v-if="Math.abs(plates.remainder) > 0.001" class="note note-warn t-small">
             {{ plates.remainder > 0
               ? t('The closest you can load is {a}, which is {b} short.', { a: fmtLoad(plates.achieved, unit), b: fmtLoad(plates.remainder, unit) })
@@ -139,7 +139,7 @@ import { state, persist } from '../store.js'
 import { t } from '../i18n/index.js'
 import { plateChangeText } from '../lib/format.js'
 import {
-  estimate1RM, loadForReps, roundToIncrement, fmtLoad, platesPerSide, warmupSets, platesFor, DEFAULT_PLATES, DEFAULT_BAR,
+  estimate1RM, loadForReps, roundToIncrement, fmtLoad, platesPerSide, warmupSets, platesFor, DEFAULT_PLATES, DEFAULT_BAR, barChoices,
   plateWarmups, warmStepFor
 } from '../lib/training.js'
 
@@ -168,14 +168,8 @@ const nextLoad = computed(() => roundToIncrement(loadForReps(oneRM.value, target
 // Plates
 const plateTarget = ref(null)
 const bar = ref(state.data.profile.bar ?? DEFAULT_BAR[unit.value])
-// Common bars, plus the one saved in Settings → Barbell weight if it's something else
-const barOptions = computed(() => {
-  const u = unit.value
-  const list = u === 'kg' ? [25, 20, 15, 10] : [55, 45, 35, 25]
-  const saved = state.data.profile.bar
-  if (saved > 0 && !list.includes(saved)) list.push(saved)
-  return list.sort((a, b) => b - a).map(v => ({ label: `${v} ${u}`, value: v }))
-})
+// Common bars down to 0 (an EZ bar or a handle whose weight you don't know or don't count)
+const barOptions = computed(() => barChoices(unit.value, state.data.profile.bar).map(v => ({ label: `${v} ${unit.value}`, value: v })))
 const allPlates = computed(() => DEFAULT_PLATES[unit.value])
 // Your plates are saved (profile.plates) and used for barbell suggestions in workouts too
 const platesOn = computed(() => platesFor(state.data.profile))

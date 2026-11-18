@@ -285,6 +285,13 @@
     <Sheet v-model="weightsOpen" :title="t('Bar and weight jumps')">
       <p class="t-small t-muted">{{ gymList.length > 1 ? t('At {gym}. The smallest jumps in {unit} decide the weights the app suggests.', { gym: hereName, unit: p.unit }) : t('The smallest jumps in {unit} decide the weights the app suggests.', { unit: p.unit }) }}</p>
       <div class="group sheet-group">
+      <div class="group-row col">
+        <div>
+          <div>{{ t('Barbell weight') }}</div>
+          <div class="t-tiny t-muted">{{ t('Used by the plate and warm-up tools, and for barbell weight suggestions. 0 for an EZ bar or handle you don\'t count.') }}</div>
+        </div>
+        <Segmented :model-value="p.bar" :options="barChoices(p.unit, p.bar).map(v => ({ label: `${v} ${p.unit}`, value: v }))" :label="t('Barbell weight')" @update:model-value="v => { p.bar = v; persist() }" />
+      </div>
       <div v-for="row in incRows" :key="row.key" class="group-row">
         <div class="grow">
           <div>{{ row.label }}</div>
@@ -295,13 +302,6 @@
           :decimals="row.key !== 'pin'" size="md" class="mini"
           @update:model-value="persist"
         />
-      </div>
-      <div class="group-row">
-        <div class="grow">
-          <div>{{ t('Barbell weight') }}</div>
-          <div class="t-tiny t-muted">{{ t('Used by the plate and warm-up tools, and for barbell weight suggestions') }}</div>
-        </div>
-        <Stepper v-model="p.bar" :step="5" :min="0" :max="50" size="md" class="mini" @update:model-value="persist" />
       </div>
       <div class="group-row">
         <div class="grow">
@@ -388,7 +388,7 @@ import {
   finishedSessions, hasBeginnerTrack, manifest, switchGym, resetGymUnits
 } from '../store.js'
 import { APP_VERSION, DEFAULT_ROUTINES_URL } from '../config.js'
-import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT } from '../lib/training.js'
+import { DEFAULT_INCREMENTS, DEFAULT_BAR, convertLoad, EQUIPMENT, barChoices } from '../lib/training.js'
 import { activeGyms, currentGymId, gymName, gymColours, swatch } from '../lib/climbing.js'
 import GymSheet from '../ui/GymSheet.vue'
 import AccountCard from '../ui/AccountCard.vue'

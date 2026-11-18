@@ -98,3 +98,45 @@ test('badges: trained together and weeks in a row of it', () => {
   assert.equal(st.togetherStreak.value, 2) // two weeks in a row, then a gap
   assert.equal(st.togetherStreak.level, 1)
 })
+
+test('badges (0.14): steps, a 10K week, sleep, other workouts, calories, weigh-ins', () => {
+  const day = (i) => `2026-03-${String(i).padStart(2, '0')}`
+  // 2–8 March 2026 is Monday to Sunday
+  const steps = [2, 3, 4, 5, 6, 7, 8].map(i => ({ date: day(i), count: i === 4 ? 16000 : 9000 }))
+  const sleep = [
+    ...[1, 2, 3].map(i => ({ date: day(i), minutes: 480 })),
+    { date: day(4), minutes: 300 }, // a short night breaks the run
+    ...[5, 6, 7, 8, 9, 10, 11].map(i => ({ date: day(i), minutes: 430 }))
+  ]
+  const others = Array.from({ length: 6 }, (_, i) => ({ date: day(i + 1), minutes: 30, type: 'run' }))
+  const sessions = [at('2026-03-02T18:00:00', [set('bp', 60, 8)], { kcal: 3000 }), at('2026-03-05T18:00:00', [set('bp', 60, 8)], { kcal: 2500 })]
+  const bodyweights = Array.from({ length: 10 }, (_, i) => ({ date: day(i + 1), kg: 90 - i * 0.1 }))
+  const st = evaluateBadges({ sessions, unit: 'kg', lifts, steps, sleep, others, bodyweights, healthUsed: true })
+  assert.equal(st.steps.level, 2) // 16,000 in a day: 10k and 15k
+  assert.equal(st.steps.dates[0], day(4))
+  assert.equal(st.stepsTotal.value, 16000 + 6 * 9000)
+  assert.equal(st.stepWeek.count, 1) // 16,000 + 6 × 9,000 = 70,000 exactly
+  assert.equal(st.wellRested.count, 1)
+  assert.equal(st.wellRested.first, day(11))
+  assert.equal(st.outside.level, 1)
+  assert.equal(st.outside.first, day(5))
+  assert.equal(st.kcal.level, 1)
+  assert.equal(st.kcal.first, '2026-03-05')
+  assert.equal(st.weighIns.level, 1)
+  assert.equal(st.weighIns.first, day(10))
+  // Shown once Health Connect is used, hidden before
+  assert.ok(badgeWall(st).some(g => g.group === 'activity'))
+  const none = evaluateBadges({ sessions: [at('2026-03-02T18:00:00', [set('bp', 60, 8)])], unit: 'kg', lifts })
+  assert.ok(!badgeWall(none).some(g => g.group === 'activity'))
+  // A crewmate's packed activity badges show on their wall
+  assert.ok(badgeWall(unpackBadges(packBadges(st), 'kg')).some(g => g.group === 'activity'))
+})
+
+test('badges (0.14): a 10K week counts once, on the day it crosses 70,000', () => {
+  const steps = [2, 3, 4, 5, 6, 7, 8].map(i => ({ date: `2026-03-0${i}`, count: 11000 })) // 77,000
+  const st = evaluateBadges({ sessions: [], unit: 'kg', lifts, steps })
+  assert.equal(st.stepWeek.count, 1)
+  assert.equal(st.stepWeek.first, '2026-03-08')
+  const short = evaluateBadges({ sessions: [], unit: 'kg', lifts, steps: steps.map(s => ({ ...s, count: 9000 })) })
+  assert.equal(short.stepWeek.count, 0)
+})

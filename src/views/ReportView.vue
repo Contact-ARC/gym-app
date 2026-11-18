@@ -112,6 +112,18 @@
           </div>
         </section>
 
+        <!-- 0.14: the month from Health Connect -->
+        <section v-if="hc">
+          <h2 class="section-h">{{ t('Outside the gym') }}</h2>
+          <div class="grid hc-grid">
+            <div v-if="hc.steps" class="cell"><div class="t-num v">{{ fmtNum(hc.steps.avg, 0) }}</div><div class="t-tiny t-muted">{{ t('steps a day') }}</div></div>
+            <div v-if="hc.sleep" class="cell"><div class="t-num v">{{ fmtHm(hc.sleep.avg) }}</div><div class="t-tiny t-muted">{{ t('sleep a night') }}</div></div>
+            <div v-if="hc.others.count" class="cell"><div class="t-num v">{{ hc.others.count }}</div><div class="t-tiny t-muted">{{ tn(hc.others.count, 'workout from other apps', 'workouts from other apps') }}</div></div>
+            <div v-if="hc.steps" class="cell"><div class="t-num v">{{ fmtNum(hc.steps.best, 0) }}</div><div class="t-tiny t-muted">{{ t('most steps in a day') }}</div></div>
+          </div>
+          <p class="t-tiny t-muted mfoot">{{ t('From Health Connect on this phone.') }}</p>
+        </section>
+
         <button class="btn btn-primary btn-lg btn-block share" :disabled="sharing" @click="shareImage"><Icon name="share" />{{ t('Share image') }}</button>
       </template>
     </template>
@@ -126,7 +138,8 @@ import { dayPlate } from '../ui/plates.js'
 import { toast } from '../ui/toast.js'
 import { state, exercisesById, routine, prOptions } from '../store.js'
 import { fmtLoad, unitFor } from '../lib/training.js'
-import { monthName, fmtNum, muscleLabel, prText, PR_ORDER } from '../lib/format.js'
+import { monthName, fmtNum, fmtHm, muscleLabel, prText, PR_ORDER } from '../lib/format.js'
+import { monthHealth } from '../lib/healthRecords.js'
 import { monthReport, monthsWithWorkouts, calendarMonth, weekStart, addDays, challengeProgress, sessionsInMonth } from '../lib/stats.js'
 import { drawCard, shareCanvas } from '../lib/shareCard.js'
 import { t, tn, tx, locale } from '../i18n/index.js'
@@ -143,6 +156,7 @@ const nextMonth = computed(() => (idx.value > 0 ? months.value[idx.value - 1] : 
 const go = (m) => m && router.replace(`/report/${m}`)
 
 const unit = computed(() => state.data.profile.unit)
+const hc = computed(() => (state.data.health?.read !== false ? monthHealth(state.data.health, month.value) : null))
 const r = computed(() => monthReport(state.data.sessions, month.value, { unit: unit.value, exercisesById: exercisesById.value, gymOf: prOptions().gymOf }))
 const exName = (id) => tx(exercisesById.value[id], 'name') || id
 const unitOf = (id) => unitFor(exercisesById.value[id], state.data.profile)

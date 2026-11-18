@@ -103,6 +103,13 @@ export function fmtMins (m) {
   return m < 1 ? '<1' : String(Math.round(m))
 }
 
+/** Sleep or other long durations in minutes: "7h 05m" */
+export function fmtHm (min) {
+  if (min == null || !isFinite(min)) return '–'
+  const m = Math.round(min)
+  return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`
+}
+
 export function fmtNum (n, dp = 1) {
   if (n == null || !isFinite(n)) return '—'
   return Number(n.toFixed(dp)).toLocaleString(locale())

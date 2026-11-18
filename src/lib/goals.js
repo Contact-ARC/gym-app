@@ -11,7 +11,7 @@
 //   bodyFat     body fat %
 //   waist       waist measurement
 //   leanMass    weight without fat
-//   weekly      workouts per week (ongoing, also sets what keeps your streak going)
+//   weekly      workouts per week (ongoing; perfect weeks and its own run, the streak stays at 2)
 import { bestE1RM, convertLoad, isWorkSet, bestSeconds, roundToIncrement, loadForReps } from './training.js'
 import { finished, weekStart, addDays, sessionsBetween } from './stats.js'
 import { avgWeight, latestBodyFat, latestMeasure, leanMass, dots, fromCm, toCm } from './body.js'
@@ -161,7 +161,7 @@ export function goalProgress (goal, ctx) {
   return { current, start, target, unit, pct, done, direction: dir, ongoing }
 }
 
-/** Weekly workouts target from an active "workouts per week" goal (it also decides the streak). */
+/** Weekly workouts target from an active "workouts per week" goal (perfect weeks; the streak stays at 2 a week). */
 export function weeklyTarget (goals) {
   const g = (goals || []).find(x => x.type === 'weekly' && !x.archived)
   return g ? Math.max(1, Math.round(g.target)) : null
