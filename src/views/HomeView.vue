@@ -45,6 +45,13 @@
           : t("Couldn't check for a new routine. Using the one saved {when}. Details in Settings.", { when: relativeDay(routineWarning.fetchedAt) }) }}</span>
       </div>
 
+      <!-- 0.16: a crewmate is training together right now -->
+      <RouterLink v-for="o in joinable" :key="o.id" :to="`/crew/together/${o.id}`" class="note row note-btn tg-note">
+        <Icon name="team" />
+        <div class="grow t-small"><b>{{ hostName(o.host) }}</b> {{ t('is training together') }}<span v-if="o.plan?.name" class="t-muted"> · {{ (i18n.lang === 'es' && o.plan.nameEs) || o.plan.name }}</span></div>
+        <span class="btn btn-sm btn-primary">{{ t('Join') }}</span>
+      </RouterLink>
+
       <RouterLink v-if="needsBackup" to="/settings#backup" class="note note-warn row note-btn">
         <div class="grow t-small">
           {{ daysSinceBackup == null ? t("Your workouts aren't saved off this phone yet.") : t('Last backup off this phone was {n} days ago.', { n: daysSinceBackup }) }}
@@ -115,6 +122,7 @@
       </RouterLink>
       <div class="row hero-actions">
         <RouterLink :to="`/day/${nextDay.key}`" class="btn btn-lg btn-soft">{{ t('Details') }}</RouterLink>
+        <button v-if="inCrew" class="btn btn-lg btn-soft tg-btn" :aria-label="t('Train together')" :title="t('Train together')" @click="start(nextDay.key, true)"><Icon name="team" /></button>
         <button class="btn btn-lg btn-plate grow" @click="start(nextDay.key)"><Icon name="play" />{{ startLabel(nextDay) }}</button>
       </div>
     </section>
@@ -247,6 +255,8 @@
 
 <script setup>
 import { signedIn } from '../lib/account.js'
+import { inCrew, board, refreshBoard } from '../lib/crew.js'
+import { inTogether, openTogether, refreshOpenTogether } from '../lib/together.js'
 import { syncState } from '../lib/sync.js'
 import { computed, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
@@ -373,10 +383,15 @@ async function refresh () {
   if (!state.routineStatus.error) toast(t('Routine is up to date'))
   else toast(state.routineStatus.errorKind === 'offline' ? t("No connection. Try again when you're online.") : t("Couldn't check: {e}", { e: state.routineStatus.error }))
 }
-function start (key) {
+// together: start it and open "Train together" in the workout straight away
+function start (key, withCrew = false) {
   const id = startSession(key)
-  if (id) router.push(`/workout/${id}`)
+  if (id) router.push(withCrew ? `/workout/${id}?together=1` : `/workout/${id}`)
 }
+// Crewmates training together right now that you could join (not when you're already in one)
+const joinable = computed(() => (inCrew.value && !inTogether.value ? openTogether.value.slice(0, 2) : []))
+const hostName = (id) => board.members.find(m => m.id === id)?.name || t('Someone')
+if (inCrew.value) refreshOpenTogether().then(() => { if (openTogether.value.length && !board.fetchedAt) refreshBoard() })
 const climbOpen = ref(false)
 const climbGymList = computed(() => activeGyms(state.data.settings))
 const climbGym = ref(currentGymId(state.data.settings))
@@ -413,6 +428,8 @@ function startFree () {
 .hero-actions { margin-top: 14px; gap: 10px; }
 .hero-actions .btn-soft { flex: 0 0 auto; padding-left: 18px; padding-right: 18px; }
 .hero-actions .btn-plate { white-space: nowrap; min-width: 0; }
+.hero-actions .tg-btn { padding-left: 14px; padding-right: 14px; }
+.tg-note { background: var(--card); gap: 10px; }
 .ex-list .t-num { white-space: nowrap; }
 .ex-list li.lack { color: var(--warn); gap: 8px; }
 .lack-ic { flex: 0 0 auto; }

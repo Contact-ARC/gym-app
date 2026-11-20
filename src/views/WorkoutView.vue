@@ -284,12 +284,6 @@
           </div>
         </div>
       </Transition>
-      <!-- Training together: always in sight, whoever's turn it is (and your plates when it's yours) -->
-      <button v-if="isTogether && together.state?.turn" class="turn-line t-small" :class="{ mine: together.state.turn === me }" @click="togetherOpen = true">
-        <Icon name="team" :size="16" />
-        <template v-if="together.state.turn === me"><b>{{ t("You're up") }}</b><template v-if="myBarChangeText"> · {{ myBarChangeText }}</template></template>
-        <template v-else>{{ t("{name}'s up", { name: together.members.find(m => m.id === together.state.turn)?.name || '' }) }}</template>
-      </button>
       <div v-if="editingFinished || !allDone || !isComplete(current)" class="row log-row">
         <button
           v-if="!rest.endsAt && !editingFinished && manualRest" class="btn btn-lg rest-now"
@@ -355,6 +349,12 @@
           <button class="icon-btn cnt-btn" :disabled="!canRemoveRound" :aria-label="t('Remove a round')" @click="removeRound"><Icon name="minus" /></button>
           <button class="icon-btn cnt-btn" :aria-label="t('Add a round')" @click="addRound"><Icon name="plus" /></button>
         </div>
+      </div>
+      <!-- Skip it for this workout only (undo in the toast); with sets already logged, just drop the rest -->
+      <div v-if="canRemoveExercise" class="group ex-sets">
+        <button class="group-row danger-row" @click="removeExercise">
+          <Icon name="close" /><span class="grow">{{ logged(current).length ? t('Skip the remaining sets') : t('Remove from this workout') }}</span>
+        </button>
       </div>
     </Sheet>
 
@@ -508,7 +508,8 @@ const name = (id) => tx(exercisesById.value[id], 'name') || id || ''
 const plateVars = computed(() => plateStyle(session.value?.dayIndex ?? -1))
 
 // ── Current exercise ───────────────────────────────────────
-const current = ref(Math.min(session.value?.currentIndex ?? firstIncomplete(), Math.max(0, items.value.length - 1)))
+const startAt = session.value?.currentIndex != null && !session.value.items[session.value.currentIndex]?.skipped ? session.value.currentIndex : firstIncomplete()
+const current = ref(Math.min(startAt, Math.max(0, items.value.length - 1)))
 const item = computed(() => items.value[current.value])
 const ex = computed(() => exercisesById.value[item.value?.exerciseId])
 // Climbing: open-ended (no planned sets), logged with its own panel
@@ -531,10 +532,13 @@ watch(current, (i) => {
 // ── Strip entries: a superset is one entry ─────────────────
 const entries = computed(() => {
   const out = []
+  let prev = -1 // the last exercise still in the workout (removed ones don't split a superset)
   items.value.forEach((it, i) => {
+    if (hidden(i)) return
     const last = out[out.length - 1]
-    if (it.group && last?.group === it.group && last.indices[last.indices.length - 1] === i - 1) last.indices.push(i)
+    if (it.group && last?.group === it.group && last.indices[last.indices.length - 1] === prev) last.indices.push(i)
     else out.push({ group: it.group || null, indices: [i] })
+    prev = i
   })
   return out
 })
@@ -585,11 +589,13 @@ const planLogged = (i) => logged(i).filter(fillsPlannedSet)
 const rowCount = (i) => {
   const it = items.value[i]
   if (!it) return 0
-  if (isOpen(i)) return planLogged(i).length
+  if (it.skipped || isOpen(i)) return planLogged(i).length
   const planned = Math.max(1, (it.sets || 1) + (it.extraSets || 0) - (it.removedSets || 0))
   return Math.max(planned, planLogged(i).length)
 }
-function isComplete (i) { return !isOpen(i) && planLogged(i).length >= rowCount(i) }
+function isComplete (i) { return !!items.value[i]?.skipped || (!isOpen(i) && planLogged(i).length >= rowCount(i)) }
+// Removed from this workout before logging anything: gone from the strip, the counts and the round order
+const hidden = (i) => !!items.value[i]?.skipped && !logged(i).length
 const plannedSets = computed(() => items.value.reduce((t, _, i) => t + rowCount(i), 0))
 const doneSets = computed(() => (session.value?.sets || []).filter(fillsPlannedSet).length)
 const progressPct = computed(() => (plannedSets.value ? Math.min(100, (doneSets.value / plannedSets.value) * 100) : 0))
@@ -600,6 +606,7 @@ function firstIncomplete () {
   const s = getSession(route.params.id)
   if (!s) return 0
   const idx = s.items.findIndex((it, i) => {
+    if (it.skipped) return false
     const n = s.sets.filter(x => x.itemIndex === i && x.exerciseId === it.exerciseId && fillsPlannedSet(x)).length
     return n < (it.sets || 1) + (it.extraSets || 0) - (it.removedSets || 0)
   })
@@ -670,7 +677,8 @@ const othersLoads = computed(() => (tgItem.value == null ? {} : loadsOn(together
 // One bar for everyone on it: built from your weight now and what the others logged or are about to lift
 const sharedPlan = computed(() => {
   const b = barSetup.value
-  if (tgItem.value == null || !b) return null
+  // Sharing a bar only makes sense when you take turns on it (0.16: turns can be off)
+  if (tgItem.value == null || !b || together.value.state?.turns === false) return null
   const lifters = together.value.members.map(m => ({ id: m.id, load: m.id === me.value ? draft.value.load : othersLoads.value[m.id]?.load }))
   return sharedBar(lifters, b.bar, platesFor(profile.value), { stepRef: warmStepFor(unit.value) })
 })
@@ -680,10 +688,6 @@ const myBarChange = computed(() => {
   if (!sp || together.value.state?.turn !== me.value) return null
   const prev = currentSets(together.value.log).filter(x => x.item === tgItem.value && x.member !== me.value).sort((a, b) => (b.rev ?? 1e15) - (a.rev ?? 1e15))[0]
   return prev ? barChange(sp, prev.member, me.value) : null
-})
-const myBarChangeText = computed(() => {
-  const c = myBarChange.value ? plateChangeText(myBarChange.value) : ''
-  return c ? t('{change} a side', { change: c }) : ''
 })
 // Machines: the others' settings and weight on it
 const othersHere = computed(() => {
@@ -1203,6 +1207,29 @@ function toggleHold () {
 }
 watch(current, () => { if (hold.running) { clearInterval(holdTimer); hold.running = false } })
 
+// ── Remove an exercise from this workout (tired, no treadmill free…) ──
+// Only this session: the routine keeps it. Logged sets stay; Undo in the toast brings it straight back.
+const canRemoveExercise = computed(() => !!item.value && !editingFinished.value && !isTogether.value &&
+  (logged(current.value).length > 0 || entries.value.length > 1 || (group.value?.indices.length || 0) > 1))
+function removeExercise () {
+  const i = current.value
+  const it = items.value[i]
+  if (!it) return
+  const hadSets = logged(i).length > 0
+  it.skipped = true
+  persist()
+  exMenuOpen.value = false
+  tap()
+  // Move on to what's left: the next unfinished exercise, else any, else the nearest one still shown
+  const open = items.value.findIndex((_, j) => j > i && !isComplete(j))
+  const any = items.value.findIndex((_, j) => !isComplete(j))
+  const shown = entries.value.flatMap(e => e.indices)
+  const to = open >= 0 ? open : any >= 0 ? any : (hidden(i) ? (shown.filter(j => j < i).pop() ?? shown[0]) : i)
+  if (to != null && to !== i) go(to, 'slide-next')
+  const msg = hadSets ? t('{name}: remaining sets skipped', { name: name(it.exerciseId) }) : t('{name} removed from this workout', { name: name(it.exerciseId) })
+  toast(msg, { actionLabel: t('Undo'), action: () => { delete it.skipped; persist(); nextTick(() => go(i, 'slide-prev')) }, ms: 6000 })
+}
+
 // ── Swipe between exercises ────────────────────────────────
 let sx = 0; let sy = 0; let st = 0
 function swipeStart (e) {
@@ -1274,6 +1301,11 @@ onMounted(() => {
   clock = setInterval(() => { now.value = Date.now() }, 1000)
   if (!editingFinished.value) keepAwake(true)
   nextTick(() => chips[entryOf(current.value)]?.scrollIntoView({ inline: 'center', block: 'nearest' }))
+  // Started from Home's "Train together": open the sheet straight away
+  if (route.query.together && inCrew.value && !isTogether.value && !editingFinished.value) {
+    togetherOpen.value = true
+    router.replace({ query: {} })
+  }
 })
 onBeforeUnmount(() => { clearInterval(clock); clearInterval(holdTimer); keepAwake(false) })
 const elapsed = computed(() => {
@@ -1341,8 +1373,6 @@ watch(() => (tgItem.value == null ? null : [tgItem.value, draft.value?.load, mac
   background: var(--paper);
 }
 .gym-at { display: inline-flex; align-items: center; gap: 3px; color: var(--ink-2); font-weight: 600; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
-.turn-line { display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%; min-height: 32px; margin-bottom: 8px; border-radius: 12px; background: var(--card); color: var(--ink-2); }
-.turn-line.mine { background: var(--ok-soft); color: var(--ok); }
 .others { margin-top: 10px; display: grid; gap: 4px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); }
 .other { gap: 8px; }
 .from-gym { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: 12px; background: var(--card-2); }
@@ -1402,6 +1432,7 @@ watch(() => (tgItem.value == null ? null : [tgItem.value, draft.value?.load, mac
 .cnt-row { gap: 6px; }
 .cnt-btn { background: var(--card-2); width: 40px; height: 40px; }
 .cnt-btn:disabled { opacity: 0.35; }
+.danger-row { color: var(--err); }
 .ss-card { margin-top: 10px; padding: 12px; border-radius: 16px; background: var(--card); border: 2px solid var(--plate-bg); }
 .ss-head { display: flex; gap: 8px; align-items: flex-start; color: var(--ink-2); padding: 0 4px; }
 .ss-head b { color: var(--ink); }

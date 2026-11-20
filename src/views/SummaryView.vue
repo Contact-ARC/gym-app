@@ -275,7 +275,7 @@ const reachedGoals = computed(() => {
 const RING_LEN = 2 * Math.PI * 54
 const ring = computed(() => {
   const s = session.value
-  const planned = (s?.items || []).reduce((n, it) => n + (Number(it.sets) || 0), 0)
+  const planned = (s?.items || []).reduce((n, it) => n + (it.skipped ? 0 : Number(it.sets) || 0), 0) // removed exercises don't count
   if (!planned) return null
   const done = s.sets.filter(isWorkSet).length
   return { done, planned, pct: Math.min(1, done / planned) }

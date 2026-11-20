@@ -11,6 +11,10 @@
 //     with crew_together_get (only what's new since the last one, by rev).
 //   - Every few seconds the phone also checks by itself, in case the channel is down.
 //   - With the screen off, "You're up" and "Spot me" come as notifications.
+//
+// 0.16: taking turns is a switch in the shared state (state.turns, on unless set to false). On: one at a time on
+// the exercise everyone's on, with the plates planned when you share a bar. Off: everyone at their own pace on
+// their own machines; there's no turn (state.turn is null, so nobody gets a "You're up").
 import { computed, watch } from 'vue'
 import {
   state, persist, getSession, activeSession, exercisesById, startFreeSession, discardSession,
@@ -228,7 +232,7 @@ export async function startTogether () {
   state.data.together = { id: v.id, sessionId: s.id, rev: 0, log: [], outbox: [], status: 'open' }
   apply(v)
   // First turn: you
-  queue({ kind: 'state', clientId: 'state-start', state: { item: 0, turn: me.value, next: nextText(plan, { item: 0, turn: me.value }, false), nextEs: nextText(plan, { item: 0, turn: me.value }, true) } })
+  queue({ kind: 'state', clientId: 'state-start', state: { item: 0, turn: me.value, turns: true, next: nextText(plan, { item: 0, turn: me.value }, false), nextEs: nextText(plan, { item: 0, turn: me.value }, true) } })
   startLink()
   return v
 }
@@ -292,7 +296,7 @@ export function spotMe () {
 /** Pass your turn (you're on something else, or need longer): it goes to the next person. */
 export function passTurn () {
   const g = tg()
-  if (!g?.state) return
+  if (!g?.state || !turnsOn(g)) return
   const st = nextTurn({ members: g.members.map(m => m.id), plan: g.plan, log: g.log, from: me.value, item: g.state.item ?? 0 })
   // Passing isn't a set: go round once without you
   const order = g.members.map(m => m.id)
@@ -309,10 +313,22 @@ export function goToItem (item) {
   const turn = order.find(m => (done[m]?.[item] || 0) < (g.plan.items[item]?.sets || 1)) || order[0]
   sendState({ item, turn })
 }
-function sendState ({ item, turn }) {
+function sendState ({ item, turn, turns = turnsOn(tg()) }) {
   const g = tg()
-  const st = { item, turn, next: nextText(g.plan, { item, turn }, false), nextEs: nextText(g.plan, { item, turn }, true) }
+  const st = { item, turn: turns ? turn : null, turns, next: nextText(g.plan, { item, turn }, false), nextEs: nextText(g.plan, { item, turn }, true) }
   queue({ kind: 'state', clientId: 'state-' + Date.now(), state: st })
+}
+const turnsOn = (g) => g?.state?.turns !== false
+/** Taking turns on or off, for everyone. Turning it on picks up where the shared exercise is. */
+export function setTurns (on) {
+  const g = tg()
+  if (!g?.state || turnsOn(g) === on) return
+  if (!on) { sendState({ item: g.state.item ?? 0, turn: null, turns: false }); return }
+  const item = g.state.item ?? 0
+  const done = doneByMember(g.log)
+  const order = g.members.map(m => m.id)
+  const turn = order.find(m => (done[m]?.[item] || 0) < (g.plan.items[item]?.sets || 1)) || order[0]
+  sendState({ item, turn, turns: true })
 }
 
 /** What you're about to lift on an item (and your machine settings), so the bar can be planned. */
@@ -334,7 +350,7 @@ function setPayload (s, row) {
   return {
     item: it.tg, setId: row.id, exerciseId: row.exerciseId, load: row.load ?? null, unit: row.unit || null,
     reps: row.reps ?? null, repsL: row.repsL ?? null, repsR: row.repsR ?? null, seconds: row.seconds ?? null,
-    type: row.type || null, rir: row.rir ?? null, cardio: row.cardio || null
+    type: row.type || null, rir: row.rir ?? null, cardio: row.cardio || null, level: row.level ?? null
   }
 }
 onSetChange(({ op, session: s, set: row }) => {
@@ -350,7 +366,7 @@ onSetChange(({ op, session: s, set: row }) => {
   const clientId = op === 'log' ? 'set-' + row.id : `set-${row.id}-${Date.now()}`
   // A planned set on the exercise everyone's on: the turn moves on
   let st = null
-  if (op === 'log' && fillsPlannedSet(row) && payload.item === (g.state?.item ?? payload.item)) {
+  if (turnsOn(g) && op === 'log' && fillsPlannedSet(row) && payload.item === (g.state?.item ?? payload.item)) {
     const log = [...(g.log || []), { rev: Infinity, member: me.value, kind: 'set', payload }]
     const n = nextTurn({ members: g.members.map(m => m.id), plan: g.plan, log, from: me.value, item: payload.item })
     st = { item: n.item, turn: n.turn, next: nextText(g.plan, n, false), nextEs: nextText(g.plan, n, true) }
@@ -386,11 +402,16 @@ export const togetherView = computed(() => {
   if (!g) return null
   const done = doneByMember(g.log || [])
   const sets = currentSets(g.log || [])
+  const newest = [...sets].sort((a, b) => (b.rev ?? 1e15) - (a.rev ?? 1e15))
+  const latest = {}
+  for (const x of newest) if (!latest[x.member]) latest[x.member] = x
   return {
     ...g,
     done,
-    // The latest sets from the others, newest first
-    recent: sets.filter(x => x.member !== me.value).sort((a, b) => (b.rev ?? 1e15) - (a.rev ?? 1e15)).slice(0, 3),
+    turns: g.state?.turns !== false,
+    // Each person's latest set, and the others' newest first
+    latest,
+    recent: newest.filter(x => x.member !== me.value).slice(0, 3),
     myTurn: g.state?.turn === me.value,
     turnName: g.members?.find(m => m.id === g.state?.turn)?.name || '',
     sending: (g.outbox || []).length

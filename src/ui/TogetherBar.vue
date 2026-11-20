@@ -1,48 +1,35 @@
 <template>
-  <section v-if="v" class="tbar" :class="{ mine: v.myTurn, over: v.status === 'done' }" aria-live="polite">
-    <div class="row top">
-      <div class="people" :class="'n' + v.members.length">
-        <span
-          v-for="m in v.members" :key="m.id" class="person" :class="{ turn: v.state?.turn === m.id }"
-          :title="m.name"
-        >
-          <span class="av" :style="avatarStyle(m.id)">{{ initial(m.id) }}</span>
-          <span class="nm truncate">{{ m.id === me ? t('You') : m.name }}</span>
-          <span class="cnt t-num">{{ doneOn(m.id) }}/{{ setsOn }}</span>
-        </span>
-      </div>
-      <button class="icon-btn sm" :aria-label="t('Training together: options')" @click="emit('open')"><Icon name="more" :size="20" /></button>
-    </div>
-
-    <div class="row status">
-      <span class="dot" :class="live ? 'live' : (v.sending ? 'wait' : 'poll')" :title="live ? t('Connected') : t('Checking every few seconds')" />
-      <span class="grow t-small">
-        <template v-if="v.status === 'done'">{{ t('Training together has ended. Your workout carries on.') }}</template>
-        <template v-else-if="!v.state?.turn">{{ t('Everyone has done the planned sets.') }}</template>
-        <template v-else-if="v.myTurn"><b>{{ t("You're up") }}</b> · {{ itemName(v.state.item) }}<template v-if="change"> · <b class="chg">{{ change }}</b></template></template>
-        <template v-else><b>{{ t("{name}'s up", { name: v.turnName }) }}</b> · {{ itemName(v.state.item) }}</template>
-      </span>
-      <button v-if="v.status !== 'done'" class="btn btn-sm btn-soft spot" @click="spot"><Icon name="clap" :size="18" />{{ t('Spot me') }}</button>
-    </div>
-
-    <!-- What the others just did -->
-    <div v-if="v.recent.length" class="recent t-tiny t-muted t-num">
-      <span v-for="r in v.recent" :key="r.setId" class="rec">
-        <b>{{ nameOf(r.member) }}</b> {{ exName(r.exerciseId) }} {{ setLine(r) }}
-      </span>
-    </div>
-  </section>
+  <!-- 0.16: one slim line. Faces (a ring on whoever's up) and what's happening; tap for everything else -->
+  <button v-if="v" class="tbar" :class="{ mine: v.turns && v.myTurn, over: v.status === 'done' }" aria-live="polite" @click="emit('open')">
+    <span class="faces" :aria-label="t('Training together: options')">
+      <span
+        v-for="m in v.members" :key="m.id" class="av" :class="{ turn: v.turns && v.state?.turn === m.id }"
+        :style="avatarStyle(m.id)" :title="m.id === me ? t('You') : m.name"
+      >{{ initial(m.id, m.name) }}</span>
+    </span>
+    <span class="grow t-small status">
+      <template v-if="v.status === 'done'">{{ t('Training together has ended. Your workout carries on.') }}</template>
+      <template v-else-if="v.members.length < 2">{{ t('Waiting for your crew') }} · <span class="t-num">{{ t('code {code}', { code: v.code }) }}</span></template>
+      <template v-else-if="v.turns && !v.state?.turn">{{ t('Everyone has done the planned sets.') }}</template>
+      <template v-else-if="v.turns && v.myTurn"><b>{{ t("You're up") }}</b> · <b v-if="change" class="chg">{{ change }}</b><template v-else>{{ itemName(v.state.item) }}</template></template>
+      <template v-else-if="v.turns"><b>{{ t("{name}'s up", { name: v.turnName }) }}</b> · {{ itemName(v.state.item) }}</template>
+      <template v-else-if="lastOther"><b>{{ nameOf(lastOther.member) }}</b> · {{ exName(lastOther.exerciseId) }} {{ setLine(lastOther) }}</template>
+      <template v-else>{{ t('Training with {names}', { names: othersNames }) }}</template>
+    </span>
+    <span v-if="v.sending && !live" class="sending t-tiny">{{ t('Sending…') }}</span>
+    <Icon name="chevronRight" :size="18" class="chev" />
+  </button>
 </template>
 
 <script setup>
-// The strip at the top of a workout you're doing together: who's in, whose turn it is (and the plates to
-// change when it's yours), the others' latest sets, and "Spot me".
+// The line at the top of a workout you're doing together (0.16): who's in, whose turn it is (and the plates to
+// change when it's yours) or, without turns, what the others just did. Tapping it opens the together sheet,
+// which has the rest (invites, the code, turns on or off, Spot me, leaving).
 import { computed } from 'vue'
 import Icon from './Icon.vue'
-import { toast } from './toast.js'
 import { exercisesById } from '../store.js'
 import { me } from '../lib/crew.js'
-import { togetherView, connection, spotMe } from '../lib/together.js'
+import { togetherView, connection } from '../lib/together.js'
 import { fmtLoad } from '../lib/training.js'
 import { plateChangeText, fmtSecs } from '../lib/format.js'
 import { avatarStyle, initial } from './crewUi.js'
@@ -54,11 +41,11 @@ const props = defineProps({
 const emit = defineEmits(['open'])
 const v = togetherView
 const live = computed(() => connection.value === 'live')
-const setsOn = computed(() => v.value?.plan?.items?.[v.value.state?.item ?? 0]?.sets || 0)
-const doneOn = (id) => v.value?.done?.[id]?.[v.value.state?.item ?? 0] || 0
 const exName = (id) => tx(exercisesById.value[id], 'name') || id
 const itemName = (i) => exName(v.value?.plan?.items?.[i]?.exerciseId)
 const nameOf = (id) => (id === me.value ? t('You') : v.value?.members?.find(m => m.id === id)?.name || v.value?.names?.[id] || '?')
+const othersNames = computed(() => (v.value?.members || []).filter(m => m.id !== me.value).map(m => m.name).join(', '))
+const lastOther = computed(() => v.value?.recent?.[0] || null)
 const change = computed(() => {
   const c = props.barChange ? plateChangeText(props.barChange) : ''
   return c ? t('{change} a side', { change: c }) : ''
@@ -69,32 +56,18 @@ function setLine (r) {
   if (r.seconds) return fmtSecs(r.seconds) + (r.level != null ? ' · ' + t('level {n}', { n: r.level }) : '')
   return ''
 }
-function spot () {
-  spotMe()
-  toast(t("Asked for a spot"))
-}
 </script>
 
 <style scoped>
-.tbar { margin: 8px 12px 0; padding: 10px 12px; border-radius: 16px; background: var(--card); display: grid; gap: 8px; border: 2px solid transparent; transition: border-color 200ms ease, background-color 200ms ease; }
+.tbar { display: flex; align-items: center; gap: 10px; width: calc(100% - 24px); margin: 8px 12px 0; padding: 8px 10px 8px 8px; min-height: 48px; border-radius: 14px; background: var(--card); border: 2px solid transparent; text-align: left; color: inherit; font: inherit; transition: border-color 200ms ease, background-color 200ms ease; }
 .tbar.mine { border-color: var(--ok); background: var(--ok-soft); }
 .tbar.over { opacity: 0.8; }
-.top { gap: 8px; align-items: center; }
-.people { flex: 1; min-width: 0; display: grid; gap: 6px; grid-template-columns: repeat(var(--cols, 2), minmax(0, 1fr)); }
-.people.n2 { --cols: 2; } .people.n3 { --cols: 3; } .people.n4 { --cols: 4; }
-.person { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 6px; align-items: center; padding: 4px 6px; border-radius: 12px; min-width: 0; }
-.person.turn { background: var(--paper); box-shadow: 0 0 0 2px var(--ink); }
-.av { grid-row: 1 / 3; width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
-.nm { font-size: 13px; font-weight: 600; min-width: 0; }
-.cnt { font-size: 11px; color: var(--ink-3); }
-.people.n4 .av { width: 24px; height: 24px; font-size: 12px; }
-.people.n4 .nm { font-size: 12px; }
-.status { gap: 8px; align-items: center; }
-.dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: var(--ink-3); }
-.dot.live { background: var(--ok); }
-.dot.wait { background: var(--warn); }
+.faces { display: flex; flex: 0 0 auto; padding-left: 4px; }
+.av { width: 28px; height: 28px; margin-left: -6px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 13px; box-shadow: 0 0 0 2px var(--card); }
+.tbar.mine .av { box-shadow: 0 0 0 2px var(--ok-soft); }
+.av.turn { box-shadow: 0 0 0 2px var(--card), 0 0 0 4px var(--ink); z-index: 1; }
+.status { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .chg { color: var(--ok); }
-.spot { flex: 0 0 auto; }
-.recent { display: flex; flex-wrap: wrap; gap: 4px 12px; }
-.rec b { color: var(--ink-2); }
+.sending { color: var(--warn); flex: 0 0 auto; }
+.chev { color: var(--ink-3); flex: 0 0 auto; }
 </style>

@@ -26,7 +26,8 @@ export function avatarStyle (id) {
 }
 
 /** Their emoji, or the first letter of their name. */
-export const initial = (id) => avatarOf(id).emoji || (memberById.value[id]?.name || (id === me.value ? state.data.crew.name : '') || '?').trim().charAt(0).toUpperCase()
+// name: a fallback when the crew board doesn't know them yet (someone who joined the crew a minute ago)
+export const initial = (id, name = '') => avatarOf(id).emoji || (memberById.value[id]?.name || (id === me.value ? state.data.crew.name : '') || name || '?').trim().charAt(0).toUpperCase()
 
 export function plateIndex (dayId) {
   const i = days.value.findIndex(d => d.id === dayId)
