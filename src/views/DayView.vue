@@ -49,7 +49,12 @@
       <span class="grow">{{ tn(gaps.length, '{n} exercise here needs equipment your gym doesn\'t have. Swap it below.', '{n} exercises here need equipment your gym doesn\'t have. Swap them below.') }}</span>
     </div>
 
-    <ol class="group list">
+    <!-- 0.16.1: start this day with your crew (Train together opens straight away) -->
+    <button v-if="inCrew && !activeSession && items.length" class="btn btn-soft btn-block crew-start" @click="start(true)">
+      <Icon name="team" />{{ t('Start with your crew') }}
+    </button>
+
+    <ol class="group list" :class="{ 'after-crew': inCrew && !activeSession && items.length }">
       <li v-for="(it, i) in items" :key="it.ref || i" class="ex-li">
         <RouterLink :to="`/exercise/${it.exerciseId}`" class="group-row ex-link">
           <span class="num t-num">{{ i + 1 }}</span>
@@ -127,7 +132,7 @@
     </template>
 
     <div class="dock">
-      <button v-if="!activeSession" class="btn btn-lg btn-block btn-plate" :disabled="!items.length" @click="start">
+      <button v-if="!activeSession" class="btn btn-lg btn-block btn-plate" :disabled="!items.length" @click="start()">
         <Icon name="play" />{{ day.source === 'mine' ? t('Start workout') : t('Start day {id}', { id: day.id }) }}
       </button>
       <RouterLink v-else :to="`/workout/${activeSession.id}`" class="btn btn-lg btn-block btn-primary">
@@ -177,6 +182,7 @@ import {
   routineEdit, undoRoutineEdit, resetRoutineDay, saveDayAsMine, planById, gymGaps, clearOneTimeSwap, swapInDay
 } from '../store.js'
 import { t, tn, tx } from '../i18n/index.js'
+import { inCrew } from '../lib/crew.js'
 import { plannedSetsFor } from '../lib/training.js'
 import { prescription, restLabel, dayTitle, planStatus, monthName } from '../lib/format.js'
 import { effectiveRest, inSuperset } from '../lib/supersets.js'
@@ -218,9 +224,9 @@ function doSwap ({ id, how }) {
   toast(how === 'once' ? t('Next time: {b} instead of {a}', { a: from, b: exName(id) }) : t('{b} instead of {a} from now on', { a: from, b: exName(id) }))
 }
 
-function start () {
+function start (withCrew = false) {
   const id = startSession(key.value)
-  if (id) router.push(`/workout/${id}`)
+  if (id) router.push(withCrew ? `/workout/${id}?together=1` : `/workout/${id}`)
 }
 
 function undo (i) {
@@ -255,6 +261,8 @@ function saveMine () {
 .day-notes { margin-top: 14px; }
 .plan-note { margin-top: 14px; gap: 10px; }
 .list { list-style: none; margin-top: 20px; }
+.list.after-crew { margin-top: 12px; }
+.crew-start { margin-top: 20px; }
 .list li + li .group-row::before {
   content: ''; position: absolute; top: 0; right: 0; left: 60px; border-top: 1px solid var(--line);
 }

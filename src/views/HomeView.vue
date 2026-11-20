@@ -108,6 +108,8 @@
           <h2 class="t-h2">{{ dayTitle(tx(nextDay, 'name'), nextDay.id) }}</h2>
           <div class="t-small t-muted">{{ tn(nextDay.items.length, '{n} exercise', '{n} exercises') }}<template v-if="nextDay.estMinutes">{{ t(', about {n} min', { n: nextDay.estMinutes }) }}</template></div>
         </div>
+        <!-- 0.16.1: start it with your crew, tucked in the corner -->
+        <button v-if="inCrew" class="icon-btn hero-tg" :aria-label="t('Start with your crew')" :title="t('Start with your crew')" @click="start(nextDay.key, true)"><Icon name="team" /></button>
       </div>
       <ul class="ex-list">
         <li v-for="(it, i) in nextItems" :key="i" class="row" :class="{ lack: nextGaps.has(it.ref) }">
@@ -122,7 +124,6 @@
       </RouterLink>
       <div class="row hero-actions">
         <RouterLink :to="`/day/${nextDay.key}`" class="btn btn-lg btn-soft">{{ t('Details') }}</RouterLink>
-        <button v-if="inCrew" class="btn btn-lg btn-soft tg-btn" :aria-label="t('Train together')" :title="t('Train together')" @click="start(nextDay.key, true)"><Icon name="team" /></button>
         <button class="btn btn-lg btn-plate grow" @click="start(nextDay.key)"><Icon name="play" />{{ startLabel(nextDay) }}</button>
       </div>
     </section>
@@ -428,7 +429,7 @@ function startFree () {
 .hero-actions { margin-top: 14px; gap: 10px; }
 .hero-actions .btn-soft { flex: 0 0 auto; padding-left: 18px; padding-right: 18px; }
 .hero-actions .btn-plate { white-space: nowrap; min-width: 0; }
-.hero-actions .tg-btn { padding-left: 14px; padding-right: 14px; }
+.hero-tg { align-self: flex-start; flex: 0 0 auto; margin: -4px -6px 0 0; background: var(--card-2); border-radius: 50%; }
 .tg-note { background: var(--card); gap: 10px; }
 .ex-list .t-num { white-space: nowrap; }
 .ex-list li.lack { color: var(--warn); gap: 8px; }

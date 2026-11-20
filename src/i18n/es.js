@@ -1955,6 +1955,7 @@ export default {
   "New badge: {b}": "Nueva insignia: {b}",
   "New badges: {b} and {n} more": "Nuevas insignias: {b} y {n} más",
   "See": "Ver",
+  "Start with your crew": "Empezar con tu crew",
   "If you leave, someone else becomes the host.": "Si te vas, otra persona pasa a ser la anfitriona.",
   "Do this workout with up to 3 people from your crew. You each lift your own weights; the app keeps track of turns and plans the plates when you share a bar.": "Haz este entrenamiento con hasta 3 personas de tu crew. Cada uno levanta sus propios pesos; la app lleva los turnos y planifica los discos cuando compartís barra.",
   "Take turns": "Turnarse",
